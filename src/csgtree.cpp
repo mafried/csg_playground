@@ -269,7 +269,7 @@ lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<Implicit
 	std::cout << "Num shapes: " << shapes.size() << std::endl;
 
 	lmu::CSGTreeGA ga;
-	lmu::CSGTreeGA::Parameters p(100, 2, 0.3, 0.3);
+	lmu::CSGTreeGA::Parameters p(150, 2, 0.3, 0.3);
 	lmu::CSGTreeTournamentSelector s(50);
 	lmu::CSGTreeIterationStopCriterion isc(100);
 
