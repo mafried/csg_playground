@@ -3,8 +3,19 @@
 
 #include "test.h"
 #include "csgtree.h"
+#include "evolution.h"
 
 //TESTS 
+TEST(CSGTreeInvalidTest)
+{
+	lmu::CSGTreeRanker ranker(0.0, {});
+
+	lmu::CSGTree tree; 
+
+	ASSERT_TRUE(ranker.treeIsInvalid(tree));
+
+}
+
 TEST(CSGTreeTest)
 {
 	lmu::CSGTree tree;

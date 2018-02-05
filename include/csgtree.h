@@ -128,7 +128,7 @@ namespace lmu
 	};  
 
 	lmu::CSGTree createCSGTreeTemplateFromCliques(std::vector<lmu::Clique>& cliques);
-	lmu::CSGTree createCSGTreeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes);
+	lmu::CSGTree createCSGTreeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph = lmu::Graph());
 	
 	lmu::CSGTree createCSGTreeFromCliqueGraph(lmu::CliqueGraph& cliqueGraph);
 

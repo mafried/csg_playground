@@ -264,16 +264,21 @@ double lambdaFromPoints(const std::vector<std::shared_ptr<lmu::ImplicitFunction>
 	return std::log(numPoints);
 }
 
-lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes)
+lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph)
 {
+	int i;
 	std::cout << "Num shapes: " << shapes.size() << std::endl;
+	std::cout << "Connection graph: " << connectionGraph.m_vertices.empty() << std::endl;
+	//std::cin >> i;
 
 	lmu::CSGTreeGA ga;
 	lmu::CSGTreeGA::Parameters p(150, 2, 0.3, 0.3);
-	lmu::CSGTreeTournamentSelector s(50);
-	lmu::CSGTreeIterationStopCriterion isc(100);
 
-	lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 3);
+	lmu::CSGTreeTournamentSelector s(10);
+
+	lmu::CSGTreeIterationStopCriterion isc(50);
+
+	lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 3, connectionGraph);
 	
 	double lambda = lambdaFromPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
@@ -281,13 +286,14 @@ lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<Implicit
 	lmu::CSGTreeRanker r(lambda, shapes);
 
 	auto task = ga.runAsync(p, s, c, r, isc);
+		
+	//std::cin >> i; 
 
-	int i;
-	std::cin >> i; 
+	//ga.stop();
 
-	ga.stop();
-
-	return task.get().population[0].creature;
+	auto res = task.get();
+	res.statistics.save("stats.dat"); 
+	return res.population[0].creature;
 }
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, lmu::CSGTree> TreeGraph;
@@ -625,14 +631,17 @@ void lmu::CSGTree::fillUnknownOperations(const std::vector<lmu::Clique>& cliques
 }
 
 void resolveIFReplacementsRec(lmu::CSGTree& tree, std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, lmu::CSGTree>& minusTreeLookup, const lmu::CliqueIFReplacements& iFReplacements)
-{
-	//functions = remainingFunctions;
+{	
 	std::cout << "resolveIFReplacementsRec" << std::endl;
 
 	for (auto& child : tree.childs)
 		resolveIFReplacementsRec(child, minusTreeLookup, iFReplacements);
 
 	std::vector<std::shared_ptr<lmu::ImplicitFunction>> remainingFunctions;
+
+	//Replacement only necessary if operation is union.
+	if (tree.operation != lmu::OperationType::Union)
+		return; 
 	
 	for (auto func : tree.functions)
 	{
@@ -802,7 +811,7 @@ std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::CSGTree::functionsRecur
 		auto childFuncs = child.functionsRecursively();
 		res.insert(res.end(), childFuncs.begin(), childFuncs.end()); 
 	}
-
+	
 	res.insert(res.end(), functions.begin(), functions.end());
 
 	return res;

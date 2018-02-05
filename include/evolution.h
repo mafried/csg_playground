@@ -60,6 +60,14 @@ namespace lmu
 
 				return population[best];
 			}
+
+			std::string info() const
+			{
+				std::stringstream ss;
+				ss << "Tournament Selector (k=" << _k << ")";
+				return ss.str(); 
+			}
+
 	private:
 		int _k;
 		mutable std::default_random_engine _rndEngine;
@@ -80,29 +88,46 @@ namespace lmu
 			return iterationCount >= _maxIterations;
 		}
 
+		std::string info() const
+		{
+			std::stringstream ss;
+			ss << "Iteration Stop Criterion Selector (n=" << _maxIterations << ")";
+			return ss.str(); 
+		}
+
 	private:
 		int _maxIterations;
 	};
 
 	template<
-		typename Creature, typename CreatureCreator, typename CreatureRanker, 
+		typename Creature, typename CreatureCreator, typename CreatureRanker,
 		typename ParentSelector = TournamentSelector<RankedCreature<Creature>>,
 		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature>>
 	>
-	class GeneticAlgorithm
+		class GeneticAlgorithm
 	{
-	public: 
+	public:
 
 		using RankedCreature = RankedCreature<Creature>;
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate) : 
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
 				crossoverRate(crossoverRate)
 			{
+			}
+
+			std::string info() const
+			{
+				std::stringstream ss;
+				ss << "Population Size: " << populationSize << 
+					" Num Best Parents: " << numBestParents << 
+					" Mutation Rate: " << mutationRate << 
+					" Crossover Rate: " << crossoverRate;
+				return ss.str();
 			}
 
 			int populationSize;
@@ -113,7 +138,8 @@ namespace lmu
 
 		struct Statistics
 		{
-			Statistics() : 
+			Statistics(const std::string& info = std::string()) :
+				info(info),
 				numMutations(0),
 				numMutationTries(0),
 				numCrossovers(0),
@@ -121,7 +147,8 @@ namespace lmu
 			{
 			}
 
-			int numMutations; 
+			std::string info;
+			int numMutations;
 			int numMutationTries;
 			int numCrossovers;
 			int numCrossoverTries;
@@ -133,12 +160,11 @@ namespace lmu
 			void update()
 			{
 				int size = bestCandidateScores.size();
-				deltaBestScores = size < 2 ? 
-					0.0 : bestCandidateScores[size-1] - bestCandidateScores[size-2];
+				deltaBestScores = size < 2 ?
+					0.0 : bestCandidateScores[size - 1] - bestCandidateScores[size - 2];
 				size = worstCandidateScores.size();
 				deltaWorstScores = size < 2 ?
 					0.0 : worstCandidateScores[size - 1] - worstCandidateScores[size - 2];
-
 			}
 
 			void print()
@@ -147,6 +173,30 @@ namespace lmu
 				std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
 				std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
 				std::cout << "Score Delta Best: " << deltaBestScores << " Worst: " << deltaWorstScores << std::endl;
+			}
+
+			void save(const std::string& file)
+			{
+				std::cout << "Save statistics to file " << file << "." << std::endl;
+
+				std::ofstream fs(file);
+
+				std::istringstream iss(info);
+				std::string line;
+				while (std::getline(iss, line))
+				{
+					fs << "# " << line << std::endl;
+				}
+
+				fs << "# iteration    best candidate score    worst candidate score" << std::endl;
+
+				for (int i = 0; i < bestCandidateScores.size(); ++i)
+				{
+					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[0] << std::endl;
+				
+				}
+
+				fs.close();
 			}
 		};
 
@@ -185,9 +235,22 @@ namespace lmu
 			});
 		}
 
+		std::string assembleInfoString(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, const StopCriterion& stopCriterion) const
+		{
+			std::stringstream ss; 
+
+			ss << "Parameters: " << params.info() << std::endl;
+			ss << "Parent Selector: " << parentSelector.info() << std::endl;
+			ss << "Creator: " << creator.info() << std::endl;
+			ss << "Ranker: " << ranker.info() << std::endl;
+			ss << "Stop Criterion: " << stopCriterion.info() << std::endl;
+
+			return ss.str();
+		}
+
 		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, const StopCriterion& stopCriterion) const
 		{
-			Statistics stats;
+			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion));
 
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
@@ -228,7 +291,7 @@ namespace lmu
 
 				iterationCount++;
 			}
-
+			
 			return Result(population, stats);
 		}
 
@@ -285,7 +348,7 @@ namespace lmu
 			return std::vector<RankedCreature>(population.begin(), population.begin() + numBestParents);
 		}
 
-		std::vector<RankedCreature> createRandomPopulation(int populationSize, const CreatureCreator& creator) const
+		std::vector<RankedCreature> createRandomPopulation(int populationSize, const CreatureCreator& creator) const 
 		{
 			std::vector<RankedCreature> population;
 			population.reserve(populationSize);
@@ -334,18 +397,20 @@ namespace lmu
 
 	struct CSGTreeCreator
 	{
-		CSGTreeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb = 0.5, double subtreeProb = 0.7, int maxTreeDepth = 10);
+		CSGTreeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb = 0.5, double subtreeProb = 0.7, int maxTreeDepth = 10, const lmu::Graph& connectionGraph = lmu::Graph());
 
 		CSGTree mutate(const CSGTree& tree) const;
 		std::vector<CSGTree> crossover(const CSGTree& tree1, const CSGTree& tree2) const;
 		CSGTree create() const;
 		CSGTree create(int maxDepth) const;
 
+		std::string info() const; 
+
 	private: 
 
 		void create(CSGTree& tree, int maxDepth, int curDepth) const;
 
-		int getRndFuncIndex(const std::vector<int>& usedFuncIndices) const;
+		int getRndFuncIndex(const std::vector<int>& usedFuncIndices, const lmu::CSGTree& tree) const;
 
 		double _createNewRandomProb;
 		double _subtreeProb; 
@@ -353,17 +418,24 @@ namespace lmu
 		std::vector<std::shared_ptr<ImplicitFunction>> _functions;
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
+
+		lmu::Graph _connectionGraph;
 	};
 
 	struct CSGTreeRanker
 	{
-		CSGTreeRanker(double lambda, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions);
+		CSGTreeRanker(double lambda, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
 
 		double rank(const CSGTree& tree) const;
+		std::string info() const;
+
+		bool treeIsInvalid(const lmu::CSGTree& tree) const;
 
 	private:
 		double _lambda;
 		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
+		bool _earlyOutTest;
+		lmu::Graph _connectionGraph;
 	};
 
 	using CSGTreeTournamentSelector = TournamentSelector<RankedCreature<CSGTree>>;

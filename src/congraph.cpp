@@ -15,6 +15,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 	{
 		auto v = boost::add_vertex(graph);
 		graph[v] = impFunc;
+		graph.vertexLookup[impFunc] = v;
 	}
 	
 	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;
@@ -55,6 +56,7 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 	{
 		auto v = boost::add_vertex(graph);
 		graph[v] = std::make_shared<IFNull>("Null_" + std::to_string(i));
+		graph.vertexLookup[graph[v]] = v;
 	}
 
 	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;

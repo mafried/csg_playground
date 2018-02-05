@@ -319,9 +319,11 @@ int main(int argc, char *argv[])
 	 //int i; 
 	 //std::cin >> i;
 	
+
 	 auto tree = lmu::createCSGTreeWithGA(shapes);//lmu::createCSGTreeTemplateFromCliques(cliques);	
 	 std::cout << "Fill unknown operations" << std::endl;
 	 //tree.fillUnknownOperations(cliques);
+
 
 	 tree.write("tree.dot");
 
