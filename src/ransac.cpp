@@ -10,9 +10,18 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
+
+#include <pcl/sample_consensus/msac.h>
 #include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/lmeds.h>
+#include <pcl/sample_consensus/prosac.h>
+#include <pcl/sample_consensus/mlesac.h>
+#include <pcl/sample_consensus/rransac.h>
+#include <pcl/sample_consensus/rmsac.h>
+
 #include <pcl/sample_consensus/sac_model_plane.h>
 #include <pcl/sample_consensus/sac_model_sphere.h>
+#include <pcl/sample_consensus/sac_model_normal_sphere.h>
 #include <pcl/visualization/pcl_visualizer.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
@@ -90,13 +99,13 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 	parameters.probability = 0.01;
 
 	// Detect shapes with at least 500 points.
-	parameters.min_points = 1000;
+	parameters.min_points = 500;
 
 	// Sets maximum Euclidean distance between a point and a shape.
-	parameters.epsilon = 0.02;
+	parameters.epsilon = 0.02; //0.02
 
 	// Sets maximum Euclidean distance between points to be clustered.
-	parameters.cluster_epsilon = 0.1;
+	parameters.cluster_epsilon = 0.1; //0.1
 
 	// Sets maximum normal deviation.
 	// 0.9 < dot(surface_normal, point_normal); 
@@ -159,11 +168,13 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 	return res;
 }
 
+using Point = pcl::PointXYZ;// pcl::PointXYZRGBNormal;
+
 std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithPCL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals)
 {
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>());
+	pcl::PointCloud<Point>::Ptr pc(new pcl::PointCloud<Point>());
 
 	pc->width = points.rows(); 
 	pc->height = 1;
@@ -174,41 +185,55 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithPCL(const Eigen::M
 		pc->points[i].x = points.row(i).x();
 		pc->points[i].y = points.row(i).y();
 		pc->points[i].z = points.row(i).z();
+
+		//pc->points[i].normal[0] = normals.row(i).x();
+		//pc->points[i].normal[1] = normals.row(i).x();
+		//pc->points[i].normal[2] = normals.row(i).x();
 	}
 
-	pcl::SampleConsensusModelSphere<pcl::PointXYZ>::Ptr
-		sphereModel(new pcl::SampleConsensusModelSphere<pcl::PointXYZ>(pc));
+	pcl::SampleConsensusModelSphere<Point>::Ptr
+		sphereModel(new pcl::SampleConsensusModelSphere<Point>(pc, true));
 
+	
 
-	pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(sphereModel);
-	ransac.setDistanceThreshold(.1);
-	ransac.setProbability(1.0);
+	//pcl::MEstimatorSampleConsensus<pcl::PointXYZ> method(sphereModel);
+	 pcl::RandomSampleConsensus<Point> method(sphereModel);
+	//pcl::LeastMedianSquares<Point> method(sphereModel);
+	//pcl::ProgressiveSampleConsensus< pcl::PointXYZ > method(sphereModel);
+	
+	//pcl::MaximumLikelihoodSampleConsensus<pcl::PointXYZ >  method(sphereModel);
+	//pcl::RandomizedMEstimatorSampleConsensus <pcl::PointXYZ >  method(sphereModel);
+	//pcl::RandomizedRandomSampleConsensus <pcl::PointXYZ >  method(sphereModel);
+
+	method.setDistanceThreshold(0.1); //0.1 //1 => alles eins, 0.1 zu viel clutter
+	
+	method.setProbability(0.8); //0.8
+	
 	std::vector<int> inliers;
 
 	int primitiveCounter = 0;
 
-	while(true)
-	{	
+	while(method.computeModel())
+	{		
+		std::cout << "Done Computing Model.";
+
 		inliers.clear();
-		
-		ransac.computeModel();
-		
-		ransac.getInliers(inliers);
+		method.getInliers(inliers);
 
 		if (inliers.empty())
 			break;
 		
-		pcl::PointCloud<pcl::PointXYZ> inlierCloud;
-		pcl::copyPointCloud<pcl::PointXYZ>(*pc, inliers, inlierCloud);
+		pcl::PointCloud<Point> inlierCloud;
+		pcl::copyPointCloud<Point>(*pc, inliers, inlierCloud);
 
 		Eigen::VectorXf coeffs;
-		ransac.getModelCoefficients(coeffs);
+		method.getModelCoefficients(coeffs);
 
 		auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(Eigen::Translation3d(coeffs.x(), coeffs.y(), coeffs.z())), coeffs.w(), "sphere_" + std::to_string(primitiveCounter));
 
 		std::cout << points.rows() << " Inliers: " << inliers.size() << std::endl;
 		std::cout << "Coeffs: " << coeffs << std::endl;
-
+	
 		Eigen::MatrixXd m(inlierCloud.points.size(), 6);
 		int j = 0;
 		for (const auto& point : inlierCloud.points)
@@ -220,21 +245,21 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithPCL(const Eigen::M
 		}
 		func->setPoints(m);
 		res.push_back(func);
-
-		std::cout << "HERE" << std::endl;
-
-		pcl::PointXYZ specialPoint(std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+		
+		Point specialPoint;
+		specialPoint.x = std::numeric_limits<float>::max();
 
 		for (int idx : inliers)
-		{
 			pc->points[idx] = specialPoint;
-		}
+		
 
-		pc->points.erase(remove_if(pc->points.begin(), pc->points.end(), [](pcl::PointXYZ p) { return p.x == std::numeric_limits<float>::max(); }), pc->points.end());
-
-		std::cout << "HERE 2" << std::endl;
+		pc->points.erase(remove_if(pc->points.begin(), pc->points.end(), [](Point p) { return p.x == std::numeric_limits<float>::max(); }), pc->points.end());
 
 		primitiveCounter++;
+
+
+		if (points.rows() == inliers.size())
+			break;
 	} 
 
 	return res;

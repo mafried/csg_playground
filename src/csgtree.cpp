@@ -268,30 +268,32 @@ lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<Implicit
 {
 	int i;
 	std::cout << "Num shapes: " << shapes.size() << std::endl;
-	std::cout << "Connection graph: " << connectionGraph.m_vertices.empty() << std::endl;
-	//std::cin >> i;
+	std::cout << "Connection graph: " << !connectionGraph.m_vertices.empty() << std::endl;
 
 	lmu::CSGTreeGA ga;
 	lmu::CSGTreeGA::Parameters p(150, 2, 0.3, 0.3);
 
-	lmu::CSGTreeTournamentSelector s(10);
+	lmu::CSGTreeTournamentSelector s(2, true);
 
-	lmu::CSGTreeIterationStopCriterion isc(50);
+	//lmu::CSGTreeIterationStopCriterion isc(10); 
+	lmu::CSGTreeNoFitnessIncreaseStopCriterion isc(10, 0.01,100);
 
-	lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 3, connectionGraph);
+
+	lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 7, connectionGraph);
 	
 	double lambda = lambdaFromPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 
-	lmu::CSGTreeRanker r(lambda, shapes);
+	lmu::CSGTreeRanker r(lambda, shapes, connectionGraph);
 
 	auto task = ga.runAsync(p, s, c, r, isc);
 		
-	//std::cin >> i; 
+	std::cin >> i; 
 
-	//ga.stop();
+	ga.stop();
 
 	auto res = task.get();
+
 	res.statistics.save("stats.dat"); 
 	return res.population[0].creature;
 }
@@ -573,14 +575,14 @@ void findAndSetBestOperation(lmu::CSGTree& tree)
 	{ lmu::OperationType::Intersection , lmu::OperationType::Union, 
 		lmu::OperationType::DifferenceLR,  lmu::OperationType::DifferenceRL };
 
-	double maxScore = std::numeric_limits<double>::max();
+	double maxScore = std::numeric_limits<double>::min();
 	lmu::OperationType bestOp;
 	for (auto const& op : ops)
 	{
 		tree.operation = op; 
 		double score = ranker.rank(tree);
 
-		if (score < maxScore)
+		if (score > maxScore)
 		{
 			maxScore = score;
 			bestOp = op;
@@ -597,8 +599,10 @@ void fillUnknownOperationsRec(lmu::CSGTree& tree, const std::vector<lmu::Clique>
 	static lmu::CSGTreeGA ga; 
 
 	static lmu::CSGTreeGA::Parameters p(150,2, 0.3, 0.3);
-	static lmu::CSGTreeTournamentSelector s(10);	
-	static lmu::CSGTreeIterationStopCriterion isc(1000);
+	static lmu::CSGTreeTournamentSelector s(2);	
+	
+	//static lmu::CSGTreeIterationStopCriterion isc(100);
+	static lmu::CSGTreeNoFitnessIncreaseStopCriterion isc(10, 0.01,100);
 
 	if (tree.operation == lmu::OperationType::Unknown)
 	{

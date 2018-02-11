@@ -18,9 +18,14 @@ double lmu::CSGTreeRanker::rank(const lmu::CSGTree& tree) const
 
 	double geometryScore = tree.computeGeometryScore(epsilon, alpha, _functions);
 
-	double score = geometryScore -_lambda * (tree.sizeWithFunctions());
+	bool isInvalid = _earlyOutTest && treeIsInvalid(tree);
 
-	std::cout << "EARLY: " << _earlyOutTest << std::endl;
+	double score = isInvalid ?
+		lmu::worstRank : geometryScore -_lambda * (tree.sizeWithFunctions());
+
+	if (isInvalid)
+		std::cout << "EARLY OUT!" << std::endl;
+	
 
 	//if (_earlyOutTest && treeIsInvalid(tree))
 	//	score = 0.0;
@@ -32,10 +37,10 @@ double lmu::CSGTreeRanker::rank(const lmu::CSGTree& tree) const
 
 	//Important check. If not done, trees with a poor geometry score (lower than size penalty term)
 	//Have a negative score which always outperforms more decent scores.
-	if (score < 0)
-		score = 0;
+	//if (score < 0)
+	//	score = 0;
 	
-	return 1.0 / (1.0 + score);
+	return score;//1.0 / (1.0 + score);
 }
 
 std::string lmu::CSGTreeRanker::info() const
@@ -94,7 +99,8 @@ lmu::CSGTreeCreator::CSGTreeCreator(const std::vector<std::shared_ptr<ImplicitFu
 	_functions(functions),
 	_createNewRandomProb(createNewRandomProb),
 	_subtreeProb(subtreeProb),
-	_maxTreeDepth(maxTreeDepth)
+	_maxTreeDepth(maxTreeDepth),
+	_connectionGraph(connectionGraph)
 {
 	_rndEngine.seed(_rndDevice());
 }
@@ -120,9 +126,11 @@ lmu::CSGTree lmu::CSGTreeCreator::mutate(const lmu::CSGTree& tree) const
 
 	assert(subtree);
 
-	*subtree = create(_maxTreeDepth - newTree.nodeDepth(nodeIdx));
+	int maxSubtreeDepth = _maxTreeDepth;// -newTree.nodeDepth(nodeIdx);
+
+	*subtree = create(maxSubtreeDepth);
 	
-	std::cout << "    old tree depth: " << tree.depth() << " new tree depth: " << newTree.depth() << " subtree depth: " << subtree->depth() << std::endl;
+	std::cout << "    old tree depth: " << tree.depth() << " new tree depth: " << newTree.depth() << " subtree depth: " << subtree->depth() <<  " max subtree depth: " << maxSubtreeDepth << std::endl;
 
 	return newTree;
 }
@@ -155,8 +163,11 @@ std::vector<lmu::CSGTree> lmu::CSGTreeCreator::crossover(const lmu::CSGTree& tre
 
 	return std::vector<lmu::CSGTree> 
 	{
-		newTree1.depth() <= _maxTreeDepth ? newTree1 : tree1,
-		newTree2.depth() <= _maxTreeDepth ? newTree2 : tree2
+		//newTree1.depth() <= _maxTreeDepth ? newTree1 : tree1,
+		//newTree2.depth() <= _maxTreeDepth ? newTree2 : tree2
+
+		newTree1,
+		newTree2
 	};
 }
 
@@ -216,7 +227,7 @@ int lmu::CSGTreeCreator::getRndFuncIndex(const std::vector<int>& usedFuncIndices
 		again = false;
 		funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) });
 		
-		if (funcAlreadyUsed(usedFuncIndices, funcIdx) /* || !funcConnectsToSiblingFuncs(tree, _functions[funcIdx], _connectionGraph)*/)
+		if (funcAlreadyUsed(usedFuncIndices, funcIdx) || !funcConnectsToSiblingFuncs(tree, _functions[funcIdx], _connectionGraph))
 		{
 			again = true;
 			break;

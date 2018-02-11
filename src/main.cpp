@@ -30,6 +30,8 @@
 #include "csgtree.h"
 #include "tests.h"
 
+#include "csgnode_evo.h"
+
 #include "evolution.h"
 
 /*
@@ -214,14 +216,14 @@ int main(int argc, char *argv[])
 	// Initialize
 	update(viewer);
 
-	lmu::CSGTreeGA ga;
+	//lmu::CSGTreeGA ga;
 	
-	Eigen::Affine3d t = Eigen::Affine3d::Identity();
-	t = Eigen::Translation3d(0.5,0,0);
+	//Eigen::Affine3d t = Eigen::Affine3d::Identity();
+	//t = Eigen::Translation3d(0.5,0,0);
 	//rotate(Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ()));
 
-	lmu::Mesh mesh1 = lmu::createSphere(t, 0.5, 100, 100);
-	lmu::Mesh mesh2 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 100, 100);
+	//lmu::Mesh mesh1 = lmu::createSphere(t, 0.5, 100, 100);
+	//lmu::Mesh mesh2 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 100, 100);
 	//lmu::Mesh mesh2 = lmu::createBox(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5, 0.5, 0.5));
 	
 	//igl::copyleft::cgal::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh2.vertices, mesh2.indices },"m" };
@@ -232,13 +234,16 @@ int main(int argc, char *argv[])
 
 	auto csgMesh = lmu::fromOBJFile("mick.obj");
 
-	auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.05, 0.005);
+	auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.1, 0.005);
 	//auto pointCloud = lmu::readPointCloud("pt_001.dat");
 
-	//lmu::writePointCloud("pt_001.dat", pointCloud);
+	lmu::writePointCloud("pt_001.dat", pointCloud);
 
-	auto shapes = lmu::ransacWithPCL(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
+	while (shapes.size() != 5)
+	{
+		shapes = lmu::ransacWithPCL(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	}
 	
 	int rows = 0; 
 	for (const auto& shape : shapes)
@@ -320,17 +325,30 @@ int main(int argc, char *argv[])
 	 //std::cin >> i;
 	
 
-	 auto tree = lmu::createCSGTreeWithGA(shapes);//lmu::createCSGTreeTemplateFromCliques(cliques);	
-	 std::cout << "Fill unknown operations" << std::endl;
-	 //tree.fillUnknownOperations(cliques);
+	 //auto tree = lmu::createCSGTreeWithGA(shapes, graph);
 
+	 //auto tree = lmu::createCSGTreeTemplateFromCliques(cliques);
 
-	 tree.write("tree.dot");
+	 //tree.write("tree.dot");
+
+	 auto cliquesAndNodes = computeNodesForCliques(cliques, graph);
+	 int i = 0;
+	 for (auto& can : cliquesAndNodes)
+	 {
+		 lmu::writeNode(std::get<1>(can), "tree" + std::to_string(i++) + ".dot");
+	 }
+	 //std::cin >> i;
+	 //return 0;
+	
+	 //lmu::CSGNodeCreator creator(shapes);
+	 auto node = lmu::createCSGNodeWithGA(shapes, graph); //creator.create(3);
+
+	 lmu::writeNode(node, "tree.dot");
 
 	 try
 	 {
 		 //tree.childs[0].childs[0].childs[0].write("tree.dot");
-		 auto treeMesh = tree.createMesh();
+		 auto treeMesh = node.mesh();
 		 viewer.data.set_mesh(treeMesh.vertices, treeMesh.indices);
 	 }
 	 catch (const std::exception& ex)
@@ -384,7 +402,7 @@ int main(int argc, char *argv[])
 
 	
 	viewer.core.show_lines = true;
-	viewer.core.point_size = 1.0;
+	viewer.core.point_size = 5.0;
 	viewer.callback_key_down = &key_down;
 	viewer.core.camera_dnear = 3.9;
 	

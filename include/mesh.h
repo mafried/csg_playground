@@ -6,6 +6,7 @@
 #include <igl/per_vertex_normals.h>
 
 #include <iostream>
+#include <memory>
 
 namespace lmu
 {
@@ -91,6 +92,8 @@ namespace lmu
 			return _name;
 		}
 
+		virtual std::shared_ptr<ImplicitFunction> clone() const = 0;
+
 	protected: 
 		Eigen::Affine3d _transform;
 		Eigen::Vector3d _pos;
@@ -136,6 +139,11 @@ namespace lmu
 			return _radius; 
 		}
 
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFSphere>(*this);
+		}
+
 	private: 
 		double _radius;
 	};
@@ -159,6 +167,11 @@ namespace lmu
 			return ImplicitFunctionType::Cylinder;
 		}
 
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFCylinder>(*this);
+		}
+
 	private:
 		double _radius;
 		double _height;
@@ -179,6 +192,11 @@ namespace lmu
 		virtual ImplicitFunctionType type() const override
 		{
 			return ImplicitFunctionType::Null;
+		}
+
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFNull>(*this);
 		}
 
 	private:

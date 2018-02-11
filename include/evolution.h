@@ -9,6 +9,9 @@
 #include <memory>
 #include <atomic>
 #include <future>
+#include <chrono>
+#include <iostream>
+#include <fstream>
 
 #include "csgtree.h"
 
@@ -32,11 +35,14 @@ namespace lmu
 		double rank;
 	};
 
+	const double worstRank = -std::numeric_limits<double>::max();
+
 	template<typename RankedCreature>
 	struct TournamentSelector
 	{
-		TournamentSelector(int k) :
-			_k(k)
+		TournamentSelector(int k, bool dropWorstPossible = false) :
+			_k(k), 
+			_dropWorstPossible(dropWorstPossible)
 			{
 				_rndEngine.seed(_rndDevice());
 			}
@@ -51,8 +57,13 @@ namespace lmu
 				for (int i = 0; i < _k; ++i)
 				{
 					int idx = d(_rndEngine, parm_t{ 0, (int)population.size() - 1 });
-					if (firstRun || population[idx].rank < population[best].rank)
+					while (firstRun && _dropWorstPossible && population[idx].rank == lmu::worstRank)
 					{
+						std::cout << "Dropped from tournament." << std::endl;
+						idx = d(_rndEngine, parm_t{ 0, (int)population.size() - 1 });
+					}
+					if (firstRun || population[idx].rank > population[best].rank)
+					{					
 						firstRun = false;
 						best = idx;
 					}
@@ -70,6 +81,7 @@ namespace lmu
 
 	private:
 		int _k;
+		bool _dropWorstPossible;
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 	};
@@ -97,6 +109,60 @@ namespace lmu
 
 	private:
 		int _maxIterations;
+	};
+
+	template<typename RankedCreature>
+	struct NoFitnessIncreaseStopCriterion
+	{
+		NoFitnessIncreaseStopCriterion(int maxCount, double delta, int maxIterations) :
+			_maxCount(maxCount),
+			_delta(delta),
+			_maxIterations(maxIterations),
+			_currentCount(0),
+			_lastBestRank(0.0)
+		{
+		}
+
+		bool shouldStop(const std::vector<RankedCreature>& population, int iterationCount)
+		{
+			std::cout << "Iteration " << iterationCount << std::endl;
+
+			if (iterationCount >= _maxIterations)
+				return true;
+
+			if (population.empty())
+				return true;
+
+			double currentBestRank = population[0].rank;
+
+			if(currentBestRank - _lastBestRank <= _delta)
+			{
+				//No change
+				_currentCount++;
+			}
+			else
+			{
+				_currentCount = 0;
+			}
+
+			_lastBestRank = currentBestRank;
+
+			return _currentCount >= _maxCount;
+		}
+
+		std::string info() const
+		{
+			std::stringstream ss;
+			ss << "No Change Stop Criterion Selector (maxCount=" << _maxCount << ", delta="<< _delta << ", "<< _maxIterations << ")";
+			return ss.str();
+		}
+
+	private:
+		int _maxCount;
+		int _currentCount;
+		int _maxIterations;
+		double _delta;
+		double _lastBestRank;
 	};
 
 	template<
@@ -143,7 +209,8 @@ namespace lmu
 				numMutations(0),
 				numMutationTries(0),
 				numCrossovers(0),
-				numCrossoverTries(0)
+				numCrossoverTries(0),
+				duration(0)
 			{
 			}
 
@@ -156,6 +223,21 @@ namespace lmu
 			double deltaWorstScores;
 			std::vector<double> bestCandidateScores;
 			std::vector<double> worstCandidateScores;
+
+			long duration;
+			std::chrono::high_resolution_clock::time_point time;
+			void durationTick()
+			{
+				if (time != std::chrono::high_resolution_clock::time_point())
+				{
+					duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time).count();
+					time = std::chrono::high_resolution_clock::time_point();
+				}
+				else
+				{
+					time = std::chrono::high_resolution_clock::now();
+				}
+			}
 
 			void update()
 			{
@@ -173,6 +255,7 @@ namespace lmu
 				std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
 				std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
 				std::cout << "Score Delta Best: " << deltaBestScores << " Worst: " << deltaWorstScores << std::endl;
+				std::cout << "Duration: " << duration << std::endl;
 			}
 
 			void save(const std::string& file)
@@ -187,6 +270,8 @@ namespace lmu
 				{
 					fs << "# " << line << std::endl;
 				}
+
+				fs << "# Duration: " << duration << std::endl;
 
 				fs << "# iteration    best candidate score    worst candidate score" << std::endl;
 
@@ -227,7 +312,7 @@ namespace lmu
 			_stopRequested.store(true);
 		}
 
-		std::future<Result> runAsync(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, const StopCriterion& stopCriterion)
+		std::future<Result> runAsync(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, StopCriterion& stopCriterion)
 		{
 			return std::async(std::launch::async, [&]() 
 			{ 
@@ -248,9 +333,11 @@ namespace lmu
 			return ss.str();
 		}
 
-		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, const StopCriterion& stopCriterion) const
+		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, StopCriterion& stopCriterion) const
 		{
 			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion));
+
+			stats.durationTick();
 
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
@@ -269,7 +356,7 @@ namespace lmu
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
-				population.front().creature.write("tree_tmp.dot");
+				//population.front().creature.write("tree_tmp.dot");
 
 				auto newPopulation = getNBestParents(population, params.numBestParents);
 
@@ -291,6 +378,8 @@ namespace lmu
 
 				iterationCount++;
 			}
+
+			stats.durationTick();
 			
 			return Result(population, stats);
 		}
@@ -364,17 +453,20 @@ namespace lmu
 		std::vector<RankedCreature> rankAndSortPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker) const 
 		{
 			std::cout << "Rank population." << std::endl;
-
-			double rankSum = 0.0;
+						
+			//double minRank = std::numeric_limits<double>::max();
+			//double maxRank = -std::numeric_limits<double>::max();
+			
 			for (auto& c : population)
 			{	
 				c.rank = ranker.rank(c.creature);
-				rankSum += c.rank;
+				//minRank = minRank < c.rank ? minRank : c.rank;
+				//maxRank = maxRank > c.rank ? maxRank : c.rank;
 			}
 
 			//normalize rank
-			for (auto& c : population)			
-				c.rank /= rankSum;
+			//for (auto& c : population)			
+			//	c.rank = (c.rank - minRank) / (maxRank - minRank);
 			
 			std::cout << "Sort population." << std::endl;
 
@@ -382,7 +474,7 @@ namespace lmu
 			std::sort(population.begin(), population.end(),
 				[](const RankedCreature& a, const RankedCreature& b) -> bool
 			{
-				return a.rank < b.rank; 
+				return a.rank > b.rank; 
 			});
 
 			return population;
@@ -441,8 +533,9 @@ namespace lmu
 	using CSGTreeTournamentSelector = TournamentSelector<RankedCreature<CSGTree>>;
 
 	using CSGTreeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGTree>>;
+	using CSGTreeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGTree>>;
 
-	using CSGTreeGA = GeneticAlgorithm<CSGTree, CSGTreeCreator, CSGTreeRanker>;
+	using CSGTreeGA = GeneticAlgorithm<CSGTree, CSGTreeCreator, CSGTreeRanker, CSGTreeTournamentSelector, CSGTreeNoFitnessIncreaseStopCriterion>;
 }
 
 #endif 
