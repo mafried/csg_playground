@@ -3,7 +3,36 @@
 
 #include "test.h"
 #include "csgtree.h"
+#include "csgnode.h"
+#include "csgnode_evo.h"
 #include "evolution.h"
+
+using namespace lmu;
+
+CSGNode geometry(ImplicitFunctionPtr function)
+{
+	return CSGNode(std::make_shared<CSGNodeGeometry>(function));
+}
+CSGNode opUnion(const std::vector<CSGNode>& childs = {})
+{
+	return CSGNode(std::make_shared<UnionOperation>("", childs));
+}
+CSGNode opDiff(const std::vector<CSGNode>& childs = {})
+{
+	return CSGNode(std::make_shared<DifferenceOperation>("", childs));
+}
+CSGNode opInter(const std::vector<CSGNode>& childs = {})
+{
+	return CSGNode(std::make_shared<IntersectionOperation>("", childs));
+}
+std::unordered_map<std::string, ImplicitFunctionPtr> geometries(const std::vector<std::string>& names)
+{
+	std::unordered_map<std::string, ImplicitFunctionPtr> map;
+	for (const auto& name : names)
+		map[name] = std::make_shared<IFNull>(name);
+
+	return map;
+}
 
 //TESTS 
 TEST(CSGTreeInvalidTest)
@@ -65,5 +94,137 @@ TEST(CSGTreeTest)
 	lmu::createCSGTreeTemplateFromCliques(cliques).write("testres.dot");
 }
 
+TEST(CSGNodeTest)
+{
+	using namespace lmu;
+
+	auto g = geometries({ "A", "B", "C", "D", "E" });
+
+	CSGNode n1 =		
+		opUnion(
+		{
+			opUnion(
+			{
+				opDiff(
+				{
+					geometry(g["A"]),
+					geometry(g["B"])					
+				}),
+				opDiff(
+				{
+					geometry(g["B"]),
+					geometry(g["A"])
+				})
+			}),
+			geometry(g["C"])			
+		});
+
+	CSGNode n2 =		
+		opDiff(
+		{
+			opUnion(
+			{
+				opDiff(
+				{
+					geometry(g["A"]),
+					geometry(g["B"])					
+				}),
+				opDiff(
+				{
+					geometry(g["B"]),
+					geometry(g["A"])
+				})
+			}),
+			geometry(g["E"])			
+		});
+
+	CSGNode n3 =		
+		opUnion(
+		{
+			geometry(g["D"]),
+			geometry(g["B"])			
+		});
+
+	CSGNodeClique clique =
+	{
+		std::make_tuple(Clique(), n1),
+		std::make_tuple(Clique(), n2),
+		std::make_tuple(Clique(), n3)
+	};
+
+	auto mergedNode = mergeCSGNodeCliqueSimple(clique);
+	
+	std::stringstream ss;
+	ss << serializeNode(mergedNode);
+	
+	ASSERT_EQ(ss.str(), "((((A)Difference(B))Union(((D)Union(B))Difference(A)))Difference(E))Union(C)");
+
+	n1 =		
+		opUnion(
+		{
+			opDiff(
+			{
+				geometry(g["B"]),
+				geometry(g["D"])
+			}),
+			opInter(
+			{
+				geometry(g["D"]),
+				geometry(g["C"])
+			})
+		});
+
+	n2 =		
+		opUnion(
+		{
+			opDiff(
+			{
+				geometry(g["A"]),
+				geometry(g["C"])
+			}),
+			geometry(g["B"])		
+		});
+
+
+	clique =
+	{
+		std::make_tuple(Clique(), n1),
+		std::make_tuple(Clique(), n2)
+	};
+
+	mergedNode = mergeCSGNodeCliqueSimple(clique);
+
+	n1 =
+		opUnion(
+		{
+			geometry(g["A"]),
+			geometry(g["B"])
+		});
+
+	n2 =
+		opUnion(
+	{
+		geometry(g["C"]),
+		geometry(g["B"])
+	});
+
+	n3 =
+		opDiff(
+	{
+		geometry(g["B"]),
+		geometry(g["D"])
+	});
+
+	clique =
+	{
+		std::make_tuple(Clique(), n1),
+		std::make_tuple(Clique(), n2),
+		std::make_tuple(Clique(), n3)
+	};
+
+	mergedNode = mergeCSGNodeCliqueSimple(clique);
+
+	writeNode(mergedNode, "test.dot");
+}
 
 #endif

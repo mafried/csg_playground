@@ -281,7 +281,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	lmu::CSGNodeTournamentSelector s(2, true);
 
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(500, 0.01,500);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(10, 0.01,500);
 
 
 	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, 10, connectionGraph);
@@ -378,65 +378,43 @@ std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<C
 	return res;
 }
 
-CSGNode lmu::mergeCSGNodeClique(CSGNodeClique& clique)
+CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 {
-	std::vector<CSGNode> candidateList;
-	candidateList.reserve(clique.size());
-	for (const auto& item : clique)
-		candidateList.push_back(std::get<1>(item));
+	if (clique.empty())
+		throw std::runtime_error("Cannot merge empty clique.");
 
-	LargestCommonSubgraph bestLcs(nullptr, nullptr, 0);
-	for (int i = 0; i < clique.size(); ++i)
+	if (clique.size() == 1)
+		return std::get<1>(clique.front());
+
+	//Fill candidate list. 
+	std::list<CSGNode*> candidateList;	
+	for (auto& item : clique)	
+		candidateList.push_back(&std::get<1>(item));	
+
+	while (candidateList.front() != candidateList.back())
 	{
-		for (int j = 0; j < clique.size(); ++j)
-		{
-			if (i >= j)
-				continue;
+		auto n1 = candidateList.front(); 
+		candidateList.pop_front();
 
-			auto n1 = std::get<1>(clique[i]);
-			auto n2 = std::get<1>(clique[j]);
-
-			auto sn1 = serializeNode(n1);
-			auto sn2 = serializeNode(n2);
-
-			auto lcs = findLargestCommonSubgraph(sn1, sn2);
-			if (lcs.isEmptyOrInvalid())
-				continue;
-
-			if (lcs.size > bestLcs.size)
-				bestLcs = lcs;
-		}
-	}
-
-	struct CSGNodeEntry
-	{
-		bool deleted;
-		size_t n1RootIdx; 
-		size_t n2RootIdx;
-		LargestCommonSubgraph lcs;
-	};
-
-	std::vector<CSGNodeEntry> entries;
-
-	while (true)
-	{
-		auto& entry = entries.front();
+		auto n2 = candidateList.front();
+		candidateList.pop_front();
 		
-		auto res = mergeNodes(candidateList[entry.n1RootIdx], candidateList[entry.n2RootIdx], entry.lcs);
-		switch (res)
+		switch (mergeNodes(findLargestCommonSubgraph(*n1, *n2)))
 		{
-			case MergeResult::First:
-				
-				break;
-			case MergeResult::Second:
-
-				break;
+		case MergeResult::First: 
+			candidateList.push_front(n1);
+			break;
+		case MergeResult::Second:
+			candidateList.push_front(n2);
+			break;
+		case MergeResult::None:
+			candidateList.push_back(n1);
+			candidateList.push_back(n2);
+			break;
 		}
-
-
 	}
 
-	return CSGNode(nullptr);
+	return *candidateList.front();
 }
 
 /*

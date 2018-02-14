@@ -144,20 +144,18 @@ break;
 */
 Eigen::Vector4d DifferenceOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
 {
-	Eigen::Vector4d res(0, 0, 0, 0);
+	auto left = _childs[0].signedDistanceAndGradient(p);		
+	auto right = _childs[1].signedDistanceAndGradient(p);
 
-	auto sdGrad1 = _childs[0].signedDistanceAndGradient(p);
-	auto sdGrad2 = (-1.0)*_childs[1].signedDistanceAndGradient(p);
-
-	if (sdGrad2[0] > sdGrad1[0])
-		res = sdGrad2;
-	else
-		res = sdGrad1; 
-
-	//Negate gradient
+	auto res = left; 
 	res[1] = (-1.0)*res[1];
 	res[2] = (-1.0)*res[2];
 	res[3] = (-1.0)*res[3];
+
+	if ((-1.0)*right[0] > res[0])
+	{
+		res = (-1.0) * right;		
+	}
 
 	return res;
 }
@@ -476,13 +474,13 @@ void serializeNodeRec(CSGNode& node, SerializedCSGNode& res)
 	if (node.childsCRef().size() == 2)
 	{		
 		res.push_back(NodePart(NodePartType::LeftBracket, nullptr));
-		serializeNodeRec(node.childsRef[0], res);
+		serializeNodeRec(node.childsRef()[0], res);
 		res.push_back(NodePart(NodePartType::RightBracket, nullptr));
 
 		res.push_back(NodePart(NodePartType::Node, &node));
 
 		res.push_back(NodePart(NodePartType::LeftBracket, nullptr));
-		serializeNodeRec(node.childsRef[1], res);
+		serializeNodeRec(node.childsRef()[1], res);
 		res.push_back(NodePart(NodePartType::RightBracket, nullptr));
 
 	}
@@ -531,7 +529,7 @@ CSGNode* getRoot(const SerializedCSGNode& n, int start, int end)
 }
 
 //Code from https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Longest_common_substring#C++_2
-LargestCommonSubgraph lmu::findLargestCommonSubgraph(const SerializedCSGNode& n1, const SerializedCSGNode& n2)
+/*LargestCommonSubgraph lmu::findLargestCommonSubgraph(const SerializedCSGNode& n1, const SerializedCSGNode& n2)
 {
 	int startN1 = 0;
 	int startN2 = 0;
@@ -560,6 +558,55 @@ LargestCommonSubgraph lmu::findLargestCommonSubgraph(const SerializedCSGNode& n1
 	return LargestCommonSubgraph(
 		getRoot(n1, startN1, startN1 + max),
 		getRoot(n2, startN2, startN2 + max), max);
+}*/
+
+using SubgraphMap = std::unordered_map<std::string, std::vector<CSGNode*>>;
+
+void getSubgraphsRec(CSGNode& node, SubgraphMap& res)
+{
+	std::stringstream ss;
+	ss << serializeNode(node);
+	
+	res[ss.str()].push_back(&node);
+
+	for (auto& child : node.childsRef())
+		getSubgraphsRec(child, res);
+}
+
+void printSubgraphMap(const SubgraphMap& map)
+{
+	std::cout << "SubgraphMap:" << std::endl;
+	for (const auto& item : map)
+	{
+		std::cout << item.first << ": " << item.second.size() << std::endl;
+	}
+}
+
+LargestCommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2)
+{
+	SubgraphMap n1Subgraphs, n2Subgraphs;
+	getSubgraphsRec(n1, n1Subgraphs);
+	getSubgraphsRec(n2, n2Subgraphs);
+
+	printSubgraphMap(n1Subgraphs);
+	printSubgraphMap(n2Subgraphs);
+	
+	LargestCommonSubgraph lgs(&n1, &n2, {}, {}, 0);
+
+	for (auto serN1 : n1Subgraphs)
+	{
+		auto it = n2Subgraphs.find(serN1.first);
+		if (it != n2Subgraphs.end())
+		{			
+			int sgSize = numNodes(*it->second[0]);
+			if (lgs.size < sgSize)
+			{	
+				lgs = LargestCommonSubgraph(&n1, &n2, serN1.second, it->second, sgSize);
+			}			
+		}
+	}
+
+	return lgs;
 }
 
 bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode)
@@ -590,40 +637,51 @@ bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode)
 	return false;
 }
 
+CSGNode* getValidMergeNode(const CSGNode& root, const std::vector<CSGNode*>& candidateNodes)
+{
+	for (const auto& candidateNode : candidateNodes)
+	{
+		if (isValidMergeNode(root, *candidateNode))
+			return candidateNode;
+	}
+
+	return nullptr;
+}
+
 void mergeNode(CSGNode* dest, const CSGNode& source)
 {
 	*dest = source;
 }
 
-MergeResult lmu::mergeNodes(CSGNode& n1Root, CSGNode& n2Root, const LargestCommonSubgraph& lcs)
+MergeResult lmu::mergeNodes(const LargestCommonSubgraph& lcs)
 {
 	if (lcs.isEmptyOrInvalid())
 		return MergeResult::None;
 
-	bool n1IsValid = isValidMergeNode(n1Root, *lcs.n1Pos);
-	bool n2IsValid = isValidMergeNode(n2Root, *lcs.n2Pos);
+	CSGNode* validMergeNodeInN1 = getValidMergeNode(*lcs.n1Root, lcs.n1Appearances);
+	CSGNode* validMergeNodeInN2 = getValidMergeNode(*lcs.n2Root, lcs.n2Appearances);
 
-	if (n1IsValid && n2IsValid)
+	if (validMergeNodeInN1 && validMergeNodeInN2)
 	{
-		if (numNodes(n1Root) >= numNodes(n2Root))
+		if (numNodes(*lcs.n1Root) >= numNodes(*lcs.n2Root))
 		{
-			mergeNode(lcs.n1Pos, n2Root);
+			mergeNode(validMergeNodeInN1, *lcs.n2Root);
 			return MergeResult::First;
 		}
 		else
 		{
-			mergeNode(lcs.n2Pos, n1Root);
+			mergeNode(validMergeNodeInN2, *lcs.n1Root);
 			return MergeResult::Second;
 		}
 	}
-	else if (n1IsValid)
+	else if (validMergeNodeInN1)
 	{
-		mergeNode(lcs.n1Pos, n2Root);
+		mergeNode(validMergeNodeInN1, *lcs.n2Root);
 		return MergeResult::First;
 	}
-	else if (n2IsValid)
+	else if (validMergeNodeInN2)
 	{
-		mergeNode(lcs.n2Pos, n1Root);
+		mergeNode(validMergeNodeInN2, *lcs.n1Root);
 		return MergeResult::Second;
 	}
 	else
@@ -631,4 +689,62 @@ MergeResult lmu::mergeNodes(CSGNode& n1Root, CSGNode& n2Root, const LargestCommo
 		throw MergeResult::None;
 	}
 }
+
+std::ostream& lmu::operator<<(std::ostream& os, const SerializedCSGNode& v)
+{
+	for (const auto& np : v)
+		os << np;
+
+	return os;
+}
+
+bool lmu::operator==(const NodePart& lhs, const NodePart& rhs)
+{
+	if (lhs.type == NodePartType::Node && rhs.type == NodePartType::Node)
+	{
+		if (lhs.node->type() != rhs.node->type())
+			return false;
+
+		if (lhs.node->type() == CSGNodeType::Operation)
+			return lhs.node->operationType() == rhs.node->operationType();
+		else if (lhs.node->type() == CSGNodeType::Geometry)
+			return lhs.node->function() == rhs.node->function();
+
+		return false;
+	}
+
+	return lhs.type == rhs.type;
+}
+
+bool lmu::operator!=(const NodePart& lhs, const NodePart& rhs)
+{
+	return !(lhs == rhs);
+}
+
+std::ostream& lmu::operator<<(std::ostream& os, const NodePart& np)
+{
+	switch (np.type)
+	{
+	case NodePartType::LeftBracket:
+		os << "(";
+		break;
+	case NodePartType::RightBracket:
+		os << ")";
+		break;
+	case NodePartType::Node:
+		switch (np.node->type())
+		{
+		case CSGNodeType::Operation:
+			os << operationTypeToString(np.node->operationType());
+			break;
+		case CSGNodeType::Geometry:
+			os << np.node->function()->name();
+			break;
+		}
+		break;
+	}
+	return os;
+}
+
+
 

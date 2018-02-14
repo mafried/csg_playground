@@ -71,7 +71,8 @@ namespace lmu
 
 	using CSGNodeClique = std::vector<GeometryCliqueWithCSGNode>;
 
-	CSGNode mergeCSGNodeClique(CSGNodeClique& clique);
+	CSGNode mergeCSGNodeCliqueSimple(CSGNodeClique& clique);
+	
 }
 
 #endif

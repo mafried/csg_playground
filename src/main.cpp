@@ -184,9 +184,8 @@ int main(int argc, char *argv[])
 	using namespace Eigen;
 	using namespace std;
 
-	//RUN_TEST(CSGTreeTest);
-	//return 0;
-
+	//RUN_TEST(CSGNodeTest);
+	
 	//igl::readOFF(TUTORIAL_SHARED_PATH "/decimated-knight.off", VB, FB);
 	// Plot the mesh with pseudocolors
 
@@ -218,32 +217,38 @@ int main(int argc, char *argv[])
 
 	//lmu::CSGTreeGA ga;
 	
-	//Eigen::Affine3d t = Eigen::Affine3d::Identity();
-	//t = Eigen::Translation3d(0.5,0,0);
+	Eigen::Affine3d t = Eigen::Affine3d::Identity();
+	t = Eigen::Translation3d(0.5,0,0);
 	//rotate(Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ()));
 
-	//lmu::Mesh mesh1 = lmu::createSphere(t, 0.5, 100, 100);
-	//lmu::Mesh mesh2 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 100, 100);
+	lmu::Mesh mesh1 = lmu::createSphere(t, 0.5, 100, 100);
+	lmu::Mesh mesh2 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 100, 100);
 	//lmu::Mesh mesh2 = lmu::createBox(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5, 0.5, 0.5));
 	
-	//igl::copyleft::cgal::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh2.vertices, mesh2.indices },"m" };
+	igl::copyleft::cgal::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh2.vertices, mesh2.indices },"m" };
 	
-	//lmu::Mesh csgMesh(meshTree.cast_V<MatrixXd>(), meshTree.F());
-	
+	//lmu::Mesh csgMesh(meshTree.cast_V<MatrixXd>(), meshTree.F());	
 	//lmu::Mesh csgMesh(mesh1.vertices, mesh1.indices, mesh1.normals);
 
-	auto csgMesh = lmu::fromOBJFile("mick.obj");
+	auto csgMesh = lmu::Mesh(meshTree.cast_V<MatrixXd>(), meshTree.F());//lmu::fromOBJFile("flower.obj");
 
-	auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.1, 0.005);
+	auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.05, 0.005); //(csgMesh, 0.001, 0.1, 0.005); <= mick
 	//auto pointCloud = lmu::readPointCloud("pt_001.dat");
 
 	lmu::writePointCloud("pt_001.dat", pointCloud);
 
-	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
-	while (shapes.size() != 5)
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes =
 	{
-		shapes = lmu::ransacWithPCL(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	}
+		std::make_shared<IFSphere>(t,0.5, "Sphere_0"),
+		std::make_shared<IFSphere>(Eigen::Affine3d::Identity(),0.5, "Sphere_1")
+	};
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+
+	//std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
+	//while (shapes.size() != 5)
+	//{
+	//	shapes = lmu::ransacWithCGAL(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	//}
 	
 	int rows = 0; 
 	for (const auto& shape : shapes)
@@ -332,16 +337,19 @@ int main(int argc, char *argv[])
 	 //tree.write("tree.dot");
 
 	 auto cliquesAndNodes = computeNodesForCliques(cliques, graph);
-	 int i = 0;
-	 for (auto& can : cliquesAndNodes)
-	 {
-		 lmu::writeNode(std::get<1>(can), "tree" + std::to_string(i++) + ".dot");
-	 }
+	 
+	 //int i = 0;
+	 //for (auto& can : cliquesAndNodes)
+	 //{
+	 //	 lmu::writeNode(std::get<1>(can), "tree" + std::to_string(i++) + ".dot");
+	 //}
 	 //std::cin >> i;
 	 //return 0;
 	
 	 //lmu::CSGNodeCreator creator(shapes);
-	 auto node = lmu::createCSGNodeWithGA(shapes, graph); //creator.create(3);
+	 //auto node = lmu::createCSGNodeWithGA(shapes, graph); //creator.create(3);
+	 
+	 auto node = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 
 	 lmu::writeNode(node, "tree.dot");
 

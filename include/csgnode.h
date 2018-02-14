@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 #include "helper.h"
 
@@ -390,91 +391,42 @@ namespace lmu
 		friend std::ostream& operator<<(std::ostream& os, const NodePart& np);
 	};
 
-	std::ostream& operator<<(std::ostream& os, const NodePart& np)
-	{
-		switch (np.type)
-		{
-		case NodePartType::LeftBracket:
-			os << "(";
-			break;
-		case NodePartType::RightBracket:
-			os << ")";
-			break;
-		case NodePartType::Node:
-			switch (np.node->type())
-			{
-			case CSGNodeType::Operation:
-				os << operationTypeToString(np.node->operationType()) << "  ";
-				break;
-			case CSGNodeType::Geometry:
-				os << np.node->function()->name() << " ";
-				break;
-			}
-			break;
-		}		
-		return os;
-	}
+	std::ostream& operator<<(std::ostream& os, const NodePart& np);
 
 	using SerializedCSGNode = std::vector<NodePart>;
 
-	std::ostream& operator<<(std::ostream& os, const SerializedCSGNode& v)
-	{
-		for (const auto& np : v)
-			os << np;
-
-		return os;
-	}
-
-	bool operator==(const NodePart& lhs, const NodePart& rhs)
-	{
-		if (lhs.type == NodePartType::Node && rhs.type == NodePartType::Node)
-		{
-			if (lhs.node->type() != rhs.node->type())
-				return false;
-
-			if (lhs.node->type() == CSGNodeType::Operation)
-				return lhs.node->operationType() == rhs.node->operationType();
-			else if (lhs.node->type() == CSGNodeType::Geometry)
-				return lhs.node->function() == rhs.node->function();
-			
-			return false;
-		}
-		
-		return lhs.type == rhs.type;		
-	}
-
-	bool operator!=(const NodePart& lhs, const NodePart& rhs)
-	{
-		return !(lhs == rhs);
-	}
+	std::ostream& operator<<(std::ostream& os, const SerializedCSGNode& v);
+	bool operator==(const NodePart& lhs, const NodePart& rhs);
+	bool operator!=(const NodePart& lhs, const NodePart& rhs);
 
 	SerializedCSGNode serializeNode(CSGNode& node);
 
 	struct LargestCommonSubgraph
 	{
-		LargestCommonSubgraph(CSGNode* n1Pos, CSGNode* n2Pos, int size) :
-			n1Pos(n1Pos),
-			n2Pos(n2Pos),
+		LargestCommonSubgraph(CSGNode* n1Root, CSGNode* n2Root, const std::vector<CSGNode*>& n1Appearances, const std::vector<CSGNode*>& n2Appearances, int size) :
+			n1Root(n1Root),
+			n2Root(n2Root),
+			n1Appearances(n1Appearances),
+			n2Appearances(n2Appearances),
 			size(size)
 		{
 		}
 
 		bool isEmptyOrInvalid() const
 		{
-			return size == 0 || !n1Pos || !n2Pos;
+			return size == 0 || n1Appearances.empty() || n2Appearances.empty();
 		}
 
-
-		//TODO
 		CSGNode* n1Root;
 		CSGNode* n2Root;
 
-		CSGNode* n1Pos;
-		CSGNode* n2Pos;
+		std::vector<CSGNode*> n1Appearances;
+		std::vector<CSGNode*> n2Appearances;
+
 		int size;
 	};
 
-	LargestCommonSubgraph findLargestCommonSubgraph(const SerializedCSGNode& n1, const SerializedCSGNode& n2);
+	LargestCommonSubgraph findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2);
 
 	enum class MergeResult
 	{
@@ -483,7 +435,7 @@ namespace lmu
 		None
 	};
 
-	MergeResult mergeNodes(CSGNode& n1Root, CSGNode& n2Root, const LargestCommonSubgraph& lcs);
+	MergeResult mergeNodes(const LargestCommonSubgraph& lcs);
 }
 
 #endif
