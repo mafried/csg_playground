@@ -304,11 +304,11 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	return res.population[0].creature;
 }
 
-std::vector<CliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> cliques, const lmu::Graph& connectionGraph)
+std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> geometryCliques, const lmu::Graph& connectionGraph)
 {
-	std::vector<CliqueWithCSGNode> res;
+	std::vector<GeometryCliqueWithCSGNode> res;
 
-	for (const auto& clique : cliques)
+	for (const auto& clique : geometryCliques)
 	{
 		if (clique.functions.empty())
 		{
@@ -378,13 +378,75 @@ std::vector<CliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> c
 	return res;
 }
 
+CSGNode lmu::mergeCSGNodeClique(CSGNodeClique& clique)
+{
+	std::vector<CSGNode> candidateList;
+	candidateList.reserve(clique.size());
+	for (const auto& item : clique)
+		candidateList.push_back(std::get<1>(item));
+
+	LargestCommonSubgraph bestLcs(nullptr, nullptr, 0);
+	for (int i = 0; i < clique.size(); ++i)
+	{
+		for (int j = 0; j < clique.size(); ++j)
+		{
+			if (i >= j)
+				continue;
+
+			auto n1 = std::get<1>(clique[i]);
+			auto n2 = std::get<1>(clique[j]);
+
+			auto sn1 = serializeNode(n1);
+			auto sn2 = serializeNode(n2);
+
+			auto lcs = findLargestCommonSubgraph(sn1, sn2);
+			if (lcs.isEmptyOrInvalid())
+				continue;
+
+			if (lcs.size > bestLcs.size)
+				bestLcs = lcs;
+		}
+	}
+
+	struct CSGNodeEntry
+	{
+		bool deleted;
+		size_t n1RootIdx; 
+		size_t n2RootIdx;
+		LargestCommonSubgraph lcs;
+	};
+
+	std::vector<CSGNodeEntry> entries;
+
+	while (true)
+	{
+		auto& entry = entries.front();
+		
+		auto res = mergeNodes(candidateList[entry.n1RootIdx], candidateList[entry.n2RootIdx], entry.lcs);
+		switch (res)
+		{
+			case MergeResult::First:
+				
+				break;
+			case MergeResult::Second:
+
+				break;
+		}
+
+
+	}
+
+	return CSGNode(nullptr);
+}
+
+/*
 CSGNode lmu::mergeCliques(const std::vector<CliqueWithCSGNode>& cliques)
 {
 	//Beide merge operanden müssen konnektivitätserhaltend sein (an einer ke position sein)
 
 	//Konnektivitätserhaltend: 
 	// - ke subtree nicht Schnitt mit nicht ke subtree => Schnitt geht nur, wenn beide subtrees ke sind
-	// - ke subtree nicht auf rechter seite bei minus mit nicht ke subtree => Geht nur, wenn beide subtrees ke sind
+	// - ke subtree nicht auf rechter seite bei minus mit nicht ke subtree => Geht nur, wenn beide subtrees ke sind, oder rechts nicht ke subtree, links ke subtree. Regel für beide ke, damit sich ke nicht selbst aufhebt? 
 	// - union zweier ke subtrees ok
 	// - union ein ke, einer nicht ok
 	// - nicht geteiltes Blatt => kein ke subtree
@@ -394,3 +456,4 @@ CSGNode lmu::mergeCliques(const std::vector<CliqueWithCSGNode>& cliques)
 
 	return CSGNode(nullptr);
 }
+*/

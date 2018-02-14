@@ -370,6 +370,120 @@ namespace lmu
 	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
 
 	void writeNode(const CSGNode& node, const std::string& file);
+
+	enum class NodePartType
+	{
+		LeftBracket, 
+		RightBracket,
+		Node
+	};
+
+	struct NodePart
+	{
+		NodePart(NodePartType type, CSGNode* node) :
+			type(type),
+			node(node)
+		{
+		}
+		NodePartType type;
+		CSGNode* node;	
+		friend std::ostream& operator<<(std::ostream& os, const NodePart& np);
+	};
+
+	std::ostream& operator<<(std::ostream& os, const NodePart& np)
+	{
+		switch (np.type)
+		{
+		case NodePartType::LeftBracket:
+			os << "(";
+			break;
+		case NodePartType::RightBracket:
+			os << ")";
+			break;
+		case NodePartType::Node:
+			switch (np.node->type())
+			{
+			case CSGNodeType::Operation:
+				os << operationTypeToString(np.node->operationType()) << "  ";
+				break;
+			case CSGNodeType::Geometry:
+				os << np.node->function()->name() << " ";
+				break;
+			}
+			break;
+		}		
+		return os;
+	}
+
+	using SerializedCSGNode = std::vector<NodePart>;
+
+	std::ostream& operator<<(std::ostream& os, const SerializedCSGNode& v)
+	{
+		for (const auto& np : v)
+			os << np;
+
+		return os;
+	}
+
+	bool operator==(const NodePart& lhs, const NodePart& rhs)
+	{
+		if (lhs.type == NodePartType::Node && rhs.type == NodePartType::Node)
+		{
+			if (lhs.node->type() != rhs.node->type())
+				return false;
+
+			if (lhs.node->type() == CSGNodeType::Operation)
+				return lhs.node->operationType() == rhs.node->operationType();
+			else if (lhs.node->type() == CSGNodeType::Geometry)
+				return lhs.node->function() == rhs.node->function();
+			
+			return false;
+		}
+		
+		return lhs.type == rhs.type;		
+	}
+
+	bool operator!=(const NodePart& lhs, const NodePart& rhs)
+	{
+		return !(lhs == rhs);
+	}
+
+	SerializedCSGNode serializeNode(CSGNode& node);
+
+	struct LargestCommonSubgraph
+	{
+		LargestCommonSubgraph(CSGNode* n1Pos, CSGNode* n2Pos, int size) :
+			n1Pos(n1Pos),
+			n2Pos(n2Pos),
+			size(size)
+		{
+		}
+
+		bool isEmptyOrInvalid() const
+		{
+			return size == 0 || !n1Pos || !n2Pos;
+		}
+
+
+		//TODO
+		CSGNode* n1Root;
+		CSGNode* n2Root;
+
+		CSGNode* n1Pos;
+		CSGNode* n2Pos;
+		int size;
+	};
+
+	LargestCommonSubgraph findLargestCommonSubgraph(const SerializedCSGNode& n1, const SerializedCSGNode& n2);
+
+	enum class MergeResult
+	{
+		First,
+		Second,
+		None
+	};
+
+	MergeResult mergeNodes(CSGNode& n1Root, CSGNode& n2Root, const LargestCommonSubgraph& lcs);
 }
 
 #endif

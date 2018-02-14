@@ -65,11 +65,13 @@ namespace lmu
 
 	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph = Graph());
 
-	using CliqueWithCSGNode = std::tuple<Clique, CSGNode>;
+	using GeometryCliqueWithCSGNode = std::tuple<Clique, CSGNode>;
 
-	std::vector<CliqueWithCSGNode> computeNodesForCliques(std::vector<Clique> cliques, const Graph& connectionGraph);
+	std::vector<GeometryCliqueWithCSGNode> computeNodesForCliques(std::vector<Clique> geometryCliques, const Graph& connectionGraph);
 
-	CSGNode mergeCliques(const std::vector<CliqueWithCSGNode>& cliques);
+	using CSGNodeClique = std::vector<GeometryCliqueWithCSGNode>;
+
+	CSGNode mergeCSGNodeClique(CSGNodeClique& clique);
 }
 
 #endif

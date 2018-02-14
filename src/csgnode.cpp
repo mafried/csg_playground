@@ -461,7 +461,7 @@ private:
 	Name name;
 };
 
-void lmu::writeNode(const CSGNode & node, const std::string & file)
+void lmu::writeNode(const CSGNode& node, const std::string & file)
 {
 	TreeGraph graph;
 	createGraphRec(node, graph, std::numeric_limits<size_t>::max());
@@ -469,5 +469,166 @@ void lmu::writeNode(const CSGNode & node, const std::string & file)
 	std::ofstream f(file);
 	boost::write_graphviz(f, graph, VertexWriter<TreeGraph>(graph));
 	f.close();
+}
+
+void serializeNodeRec(CSGNode& node, SerializedCSGNode& res)
+{
+	if (node.childsCRef().size() == 2)
+	{		
+		res.push_back(NodePart(NodePartType::LeftBracket, nullptr));
+		serializeNodeRec(node.childsRef[0], res);
+		res.push_back(NodePart(NodePartType::RightBracket, nullptr));
+
+		res.push_back(NodePart(NodePartType::Node, &node));
+
+		res.push_back(NodePart(NodePartType::LeftBracket, nullptr));
+		serializeNodeRec(node.childsRef[1], res);
+		res.push_back(NodePart(NodePartType::RightBracket, nullptr));
+
+	}
+	else if (node.childsCRef().size() == 0)
+	{
+		res.push_back(NodePart(NodePartType::Node, &node));
+	}
+}
+
+SerializedCSGNode lmu::serializeNode(CSGNode& node)
+{
+	SerializedCSGNode res;
+	serializeNodeRec(node, res);
+	return res;
+}
+
+CSGNode* getRoot(const SerializedCSGNode& n, int start, int end)
+{
+	//Note: We assume that n is representing a correct serialization of a tree.
+
+	//end index is exclusive
+	int size = end - start;
+
+	if (size == 1)
+		return n[start].node;
+
+	int counter = 0;
+	for (int i = start; i < end; ++i)
+	{
+		NodePart np = n[i];
+
+		if (np.type == NodePartType::LeftBracket)
+		{
+			counter++;
+		}
+		else if (np.type == NodePartType::RightBracket)
+		{
+			counter--;
+		}
+
+		if (counter == 0)
+			return n[i + 1].node;
+	}
+
+	return nullptr; 
+}
+
+//Code from https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Longest_common_substring#C++_2
+LargestCommonSubgraph lmu::findLargestCommonSubgraph(const SerializedCSGNode& n1, const SerializedCSGNode& n2)
+{
+	int startN1 = 0;
+	int startN2 = 0;
+	int max = 0;
+	for (int i = 0; i < n1.size(); i++)
+	{
+		for (int j = 0; j < n2.size(); j++)
+		{
+			int x = 0;
+			while (n1[i + x] == n2[j + x])
+			{
+				x++;
+				if (((i + x) >= n1.size()) || ((j + x) >= n2.size())) break;
+			}
+			if (x > max)
+			{
+				max = x;
+				startN1 = i;
+				startN2 = j;
+			}
+		}
+	}
+
+	//return S1.substring(Start, (Start + Max));
+
+	return LargestCommonSubgraph(
+		getRoot(n1, startN1, startN1 + max),
+		getRoot(n2, startN2, startN2 + max), max);
+}
+
+bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode)
+{
+	if (&node == &searchNode)
+		return true;
+	 
+	if (node.type() == CSGNodeType::Operation)
+	{
+		if (node.operationType() == CSGNodeOperationType::Difference)
+		{
+			return isValidMergeNode(node.childsCRef()[0], searchNode);
+		}
+		else if (node.operationType() == CSGNodeOperationType::Union)
+		{
+			for (const auto& child : node.childsCRef())
+			{
+				if (isValidMergeNode(child, searchNode))
+					return true;
+			}
+		}
+		else if (node.operationType() == CSGNodeOperationType::Intersection)
+		{
+			return false;
+		}
+	}
+		
+	return false;
+}
+
+void mergeNode(CSGNode* dest, const CSGNode& source)
+{
+	*dest = source;
+}
+
+MergeResult lmu::mergeNodes(CSGNode& n1Root, CSGNode& n2Root, const LargestCommonSubgraph& lcs)
+{
+	if (lcs.isEmptyOrInvalid())
+		return MergeResult::None;
+
+	bool n1IsValid = isValidMergeNode(n1Root, *lcs.n1Pos);
+	bool n2IsValid = isValidMergeNode(n2Root, *lcs.n2Pos);
+
+	if (n1IsValid && n2IsValid)
+	{
+		if (numNodes(n1Root) >= numNodes(n2Root))
+		{
+			mergeNode(lcs.n1Pos, n2Root);
+			return MergeResult::First;
+		}
+		else
+		{
+			mergeNode(lcs.n2Pos, n1Root);
+			return MergeResult::Second;
+		}
+	}
+	else if (n1IsValid)
+	{
+		mergeNode(lcs.n1Pos, n2Root);
+		return MergeResult::First;
+	}
+	else if (n2IsValid)
+	{
+		mergeNode(lcs.n2Pos, n1Root);
+		return MergeResult::Second;
+	}
+	else
+	{
+		throw MergeResult::None;
+	}
 }
 

@@ -402,6 +402,7 @@ int main(int argc, char *argv[])
 
 	
 	viewer.core.show_lines = true;
+	viewer.core.background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);
 	viewer.core.point_size = 5.0;
 	viewer.callback_key_down = &key_down;
 	viewer.core.camera_dnear = 3.9;
