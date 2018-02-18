@@ -196,7 +196,7 @@ namespace lmu
 
 		virtual Mesh mesh() const override
 		{
-			return _function->mesh();
+			return _function->meshCRef();
 		}
 
 	protected:
@@ -209,6 +209,7 @@ namespace lmu
 	class CSGNode : public ICSGNode 
 	{
 	public:
+
 		explicit CSGNode(CSGNodePtr node) :
 			_node(node)
 		{
@@ -436,6 +437,17 @@ namespace lmu
 	};
 
 	MergeResult mergeNodes(const LargestCommonSubgraph& lcs);
+
+
+
+	Mesh computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), 
+		const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+
+	Eigen::MatrixXd computePointCloud(const CSGNode& node, const Eigen::Vector3i& numSamples, double maxDistance, double errorSigma,
+		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+
+	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
+
 }
 
 #endif

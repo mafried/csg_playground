@@ -4,23 +4,12 @@
 #define BOOST_PARAMETER_MAX_ARITY 12
 
 #include <igl/readOFF.h>
-
-#include <igl/copyleft/cgal/mesh_boolean.h>
-#include <igl/copyleft/cgal/CSGTree.h>
-#include <igl/viewer/Viewer.h>
+#include <igl/opengl/glfw/Viewer.h>
 
 #include <Eigen/Core>
 #include <iostream>
 #include <tuple>
 #include <chrono>
-
-/*
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Mesh_triangulation_3.h>
-#include <CGAL/Mesh_complex_3_in_triangulation_3.h>
-#include <CGAL/Mesh_criteria_3.h>
-#include <CGAL/Implicit_mesh_domain_3.h>
-#include <CGAL/make_mesh_3.h>*/
 
 #include "mesh.h"
 #include "ransac.h"
@@ -31,147 +20,24 @@
 #include "tests.h"
 
 #include "csgnode_evo.h"
+#include "csgnode_helper.h"
 
 #include "evolution.h"
 
-/*
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::FT FT;
-typedef K::Point_3 Point;
-typedef FT(Function)(const Point&);
-typedef CGAL::Implicit_mesh_domain_3<Function, K> Mesh_domain;
-
-#ifdef CGAL_CONCURRENT_MESH_3
-typedef CGAL::Parallel_tag Concurrency_tag;
-#else
-typedef CGAL::Sequential_tag Concurrency_tag;
-#endif
-
-// Triangulation
-typedef CGAL::Mesh_triangulation_3<Mesh_domain, CGAL::Default, Concurrency_tag>::type Tr;
-typedef CGAL::Mesh_complex_3_in_triangulation_3<Tr> C3t3;
-// Criteria
-typedef CGAL::Mesh_criteria_3<Tr> Mesh_criteria;
-// Sizing field
-struct Spherical_sizing_field
+void update(igl::opengl::glfw::Viewer& viewer)
 {
-	typedef ::FT FT;
-	typedef Point Point_3;
-	typedef Mesh_domain::Index Index;
-
-	FT operator()(const Point_3& p, const int, const Index&) const
-	{
-		FT sq_d_to_origin = CGAL::squared_distance(p, Point(CGAL::ORIGIN));
-		return CGAL::abs(CGAL::sqrt(sq_d_to_origin) - 0.5) / 5. + 0.025;
-	}
-};
-
-// To avoid verbose function and named parameters call
-using namespace CGAL::parameters;
-// Function
-FT sphere_function(const Point& p)
-{
-	return CGAL::squared_distance(p, Point(CGAL::ORIGIN)) - 1;
 }
 
-*/
-
-
-Eigen::MatrixXd VA, VB, VC;
-Eigen::VectorXi J, I;
-Eigen::MatrixXi FA, FB, FC;
-
-Eigen::MatrixXd V;
-Eigen::MatrixXi F;
-
-
-//C3t3 mesh;
-
-igl::MeshBooleanType boolean_type(
-	igl::MESH_BOOLEAN_TYPE_UNION);
-
-const char * MESH_BOOLEAN_TYPE_NAMES[] =
-{
-	"Union",
-	"Intersect",
-	"Minus",
-	"XOR",
-	"Resolve",
-};
-
-void update(igl::viewer::Viewer &viewer)
-{
-	igl::copyleft::cgal::mesh_boolean(VA, FA, VB, FB, boolean_type, VC, FC, J);
-	/*Eigen::MatrixXd C(FC.rows(), 3);
-	for (size_t f = 0; f<C.rows(); f++)
-	{
-		if (J(f)<FA.rows())
-		{
-			C.row(f) = Eigen::RowVector3d(1, 0, 0);
-		}
-		else
-		{
-			C.row(f) = Eigen::RowVector3d(0, 1, 0);
-		}
-	}*/
-	
-	//const auto& tri = mesh.triangulation();
-	//V.resize(tri.number_of_vertices(), 3);
-	//F.resize(tri.number_of_vertices() /  3, 3);
-
-	//int i = 0;
-	//for (auto it = tri.all_vertices_begin(); it != tri.all_vertices_end(); it++)
-	//{
-	//	V.row(i) = Eigen::RowVector3d(it->point().x(), it->point().y(), it->point().z());		
-	//	i++;
-	//}
-
-	//i = 0;
-	//for (auto it = tri.all_cells_begin(); it != tri.all_cells_begin(); it++)
-	//{
-	//	it->vertex(i)
-	//	i++;
-	//}
-	
-
-	//for (auto iter = mesh.vertices_in_complex_begin(); iter != mesh.vertices_in_complex_end(); ++iter)
-	//{
-	//
-	//	VA.row(i) = Eigen::RowVector3d(iter->point().x(), iter->point().y(), iter->point().z());			
-	//	i++;
-	//}
-
-	//auto data = toIglMesh(mesh);
-
-	//viewer.data.clear();
-	//viewer.data.add_points(V, Eigen::RowVector3d(1.0, 0, 0));
-	//viewer.data.set_mesh(std::get<0>(data), std::get<1>(data));
-	
-	//viewer.data.set_colors(C);
-	std::cout << "A " << MESH_BOOLEAN_TYPE_NAMES[boolean_type] << " B." << std::endl;
-}
-
-bool key_down(igl::viewer::Viewer &viewer, unsigned char key, int mods)
+bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 {
 	switch (key)
 	{
 	default:
 		return false;
-	case '.':
-		boolean_type =
-			static_cast<igl::MeshBooleanType>(
-			(boolean_type + 1) % igl::NUM_MESH_BOOLEAN_TYPES);
-		break;
-	case ',':
-		boolean_type =
-			static_cast<igl::MeshBooleanType>(
-			(boolean_type + igl::NUM_MESH_BOOLEAN_TYPES - 1) %
-				igl::NUM_MESH_BOOLEAN_TYPES);
-		break;
-	case '[':
+	case '-':
 		viewer.core.camera_dnear -= 0.1;
 		return true;
-	case ']':
+	case '+':
 		viewer.core.camera_dnear += 0.1;
 		return true;
 	}
@@ -185,7 +51,7 @@ int main(int argc, char *argv[])
 	using namespace std;
 
 	//RUN_TEST(CSGNodeTest);
-	
+
 	//igl::readOFF(TUTORIAL_SHARED_PATH "/decimated-knight.off", VB, FB);
 	// Plot the mesh with pseudocolors
 
@@ -201,54 +67,103 @@ int main(int argc, char *argv[])
 	// Mesh generation
 	mesh = CGAL::make_mesh_3<C3t3>(domain, criteria, no_exude(), no_perturb());
 
-	int a = 5; 
+	int a = 5;
 	std::cout << a;
 
 	// Output
 	std::ofstream file("out.off");
 	mesh.output_boundary_to_off(file);
-	file.close(); 
+	file.close();
 	*/
-	
-	igl::viewer::Viewer viewer;
+
+	igl::opengl::glfw::Viewer viewer;
 
 	// Initialize
 	update(viewer);
 
 	//lmu::CSGTreeGA ga;
-	
+
 	Eigen::Affine3d t = Eigen::Affine3d::Identity();
-	t = Eigen::Translation3d(0.5,0,0);
+	//t = Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ());//
+	t = Eigen::Translation3d(0.1, 0, 0);
 	//rotate(Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ()));
 
-	lmu::Mesh mesh1 = lmu::createSphere(t, 0.5, 100, 100);
-	lmu::Mesh mesh2 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 100, 100);
+	lmu::Mesh mesh1 = lmu::createBox(t, Eigen::Vector3d(0.5, 0.5, 0.5), 4); ;// lmu::createCylinder(t, 0.2, 0.2, 1.2, 10, 10);//
+	lmu::Mesh mesh2 = lmu::createCylinder(Eigen::Affine3d::Identity(), 0.2, 0.2, 1.0, 30, 30);
+	lmu::Mesh mesh3 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 30, 30);
+	lmu::Mesh mesh;
 	//lmu::Mesh mesh2 = lmu::createBox(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5, 0.5, 0.5));
-	
-	igl::copyleft::cgal::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh2.vertices, mesh2.indices },"m" };
-	
+
+	//igl::copyleft::cork::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh3.vertices, mesh3.indices }, igl::MeshBooleanType::MESH_BOOLEAN_TYPE_UNION };
+
+	//igl::copyleft::cgal::mesh_boolean(mesh1.vertices, mesh1.indices, mesh3.vertices, mesh3.indices, igl::MeshBooleanType::MESH_BOOLEAN_TYPE_UNION, mesh.vertices, mesh.indices);
+
 	//lmu::Mesh csgMesh(meshTree.cast_V<MatrixXd>(), meshTree.F());	
-	//lmu::Mesh csgMesh(mesh1.vertices, mesh1.indices, mesh1.normals);
 
-	auto csgMesh = lmu::Mesh(meshTree.cast_V<MatrixXd>(), meshTree.F());//lmu::fromOBJFile("flower.obj");
+	//lmu::Mesh csgMesh(mesh.vertices, mesh.indices, mesh.normals);
 
-	auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.05, 0.005); //(csgMesh, 0.001, 0.1, 0.005); <= mick
+	//auto csgMesh = lmu::fromOBJFile("mick.obj");// lmu::Mesh(meshTree.cast_V<MatrixXd>(), meshTree.F());//lmu::fromOBJFile("flower.obj");
+
+	//auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.05, 0.005); //(csgMesh, 0.001, 0.1, 0.005); <= mick
 	//auto pointCloud = lmu::readPointCloud("pt_001.dat");
 
-	lmu::writePointCloud("pt_001.dat", pointCloud);
+	//lmu::writePointCloud("pt_001.dat", pointCloud);
 
-	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes =
+
+	CSGNode node =
+	
+		op<Union>(
+		{
+			geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0"),
+			geo<IFBox>(t, Eigen::Vector3d(0.2,0.2,0.2),2, "Box_0"),
+			geo<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 0.5, "Cylinder_0"),
+		});
+
+	CSGNode node2 =
+
+		op<Union>(
 	{
-		std::make_shared<IFSphere>(t,0.5, "Sphere_0"),
-		std::make_shared<IFSphere>(Eigen::Affine3d::Identity(),0.5, "Sphere_1")
-	};
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+		geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0"),
+		geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0")
+	});
 
-	//std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
-	//while (shapes.size() != 5)
+
+	lmu::Mesh csgMesh = computeMesh(node, Eigen::Vector3i(100, 10, 10));
+	viewer.data().set_mesh(csgMesh.vertices, csgMesh.indices);
+
+	auto error = computeDistanceError(csgMesh.vertices, node, node2, true);
+
+	viewer.data().set_colors(error);
+	//auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(100, 100, 100), 0.01, 0.01);
+	//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	//viewer.data().point_size = 0.01;
+	
+	//viewer.data().set_points(std::get<0>(data), Eigen::Vector3d(1,1,1));// .leftCols(3), pointCloud.rightCols(3));
+
+	/*for (int i = 0; i < csgMesh.normals.rows(); ++i)
+	{
+		auto x = csgMesh.normals.row(i).x() < 0.0 ? 0.5 : csgMesh.normals.row(i).x();
+		auto y = csgMesh.normals.row(i).y() < 0.0 ? 0.5 : csgMesh.normals.row(i).y();
+		auto z = csgMesh.normals.row(i).z() < 0.0 ? 0.5 : csgMesh.normals.row(i).z();
+				
+		csgMesh.normals.row(i) = Eigen::RowVector3d(x,y,z);		
+	}*/
+
+	//viewer.data.set_colors(csgMesh.normals);
+
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;// =
 	//{
-	//	shapes = lmu::ransacWithCGAL(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	//}
+	//	std::make_shared<IFBox>(t, Eigen::Vector3d(0.5,0.5,0.5), "Box_0"),
+	//	std::make_shared<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 1.0, "Cylinder_0")
+	//};
+	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+	
+
+	/*std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
+	while (shapes.size() != 5)
+	{
+		shapes = lmu::ransacWithPCL(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	}*/
 	
 	int rows = 0; 
 	for (const auto& shape : shapes)
@@ -300,15 +215,15 @@ int main(int argc, char *argv[])
 	}
 
 
-	viewer.data.set_points(points.leftCols(3), points.rightCols(3));
+	//viewer.data.set_points(points.leftCols(3), points.rightCols(3));
+	//viewer.data.set_mesh(csgMesh.vertices, csgMesh.indices);
 
 	//auto shapes = lmu::ransac(mesh1.vertices, mesh1.normals);
 
 	//lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 5);
 	//c.create(10).write("tree.dot");
 	
-	//viewer.data.set_mesh(csgMesh.vertices, csgMesh.indices);
-
+	
 	//std::cout << "COLLIDE: " << lmu::collides(*shapes[0], *shapes[1]) << std::endl;
 
 	//auto graph = lmu::createRandomConnectionGraph(30,0.5);
@@ -336,7 +251,7 @@ int main(int argc, char *argv[])
 
 	 //tree.write("tree.dot");
 
-	 auto cliquesAndNodes = computeNodesForCliques(cliques, graph);
+	 //auto cliquesAndNodes = computeNodesForCliques(cliques, graph, ParallelismOptions::PerCliqueParallelism);
 	 
 	 //int i = 0;
 	 //for (auto& can : cliquesAndNodes)
@@ -347,13 +262,13 @@ int main(int argc, char *argv[])
 	 //return 0;
 	
 	 //lmu::CSGNodeCreator creator(shapes);
-	 //auto node = lmu::createCSGNodeWithGA(shapes, graph); //creator.create(3);
+	 //auto node = lmu::createCSGNodeWithGA(shapes, true, graph); //creator.create(3);
 	 
-	 auto node = mergeCSGNodeCliqueSimple(cliquesAndNodes);
+	 //auto node = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 
-	 lmu::writeNode(node, "tree.dot");
+	 //lmu::writeNode(node, "tree.dot");
 
-	 try
+	 /*try
 	 {
 		 //tree.childs[0].childs[0].childs[0].write("tree.dot");
 		 auto treeMesh = node.mesh();
@@ -362,7 +277,7 @@ int main(int argc, char *argv[])
 	 catch (const std::exception& ex)
 	 {
 		 std::cout << "Could not create CSG mesh. Reason: " << ex.what() << std::endl;
-	 }
+	 }*/
 
 	 /*lmu::CSGTree tr3;
 	 tr3.operation = lmu::OperationType::Union;
@@ -399,7 +314,6 @@ int main(int argc, char *argv[])
 	
 	//viewer.data.set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 	
-	//viewer.data.set_points(mesh1.vertices, mesh1.normals);
 	
 	//MatrixXd D(shapes[0]->mesh().vertices.rows() + shapes[0]->points().rows(), shapes[0]->mesh().vertices.cols());
 	//D << shapes[0]->mesh().vertices, shapes[0]->points();
@@ -409,11 +323,12 @@ int main(int argc, char *argv[])
 	//viewer.data.set_points(shapes[1]->points().leftCols(3), shapes[1]->points().rightCols(3));//Eigen::Vector3d(1, 1, 1));
 
 	
-	viewer.core.show_lines = true;
-	viewer.core.background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);
-	viewer.core.point_size = 5.0;
+	//viewer.core. = true;
+	viewer.core.background_color = Eigen::Vector4f(0.3, 0.3, 0.3, 1.0);
+	//viewer.core.point_size = 5.0;
 	viewer.callback_key_down = &key_down;
 	viewer.core.camera_dnear = 3.9;
+	viewer.core.lighting_factor = 0;
 	
 	viewer.launch();
 }

@@ -63,11 +63,20 @@ namespace lmu
 
 	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, CSGNodeTournamentSelector, CSGNodeNoFitnessIncreaseStopCriterion>;
 
-	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph = Graph());
+	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, bool inParallel = false, const lmu::Graph& connectionGraph = Graph());
 
 	using GeometryCliqueWithCSGNode = std::tuple<Clique, CSGNode>;
 
-	std::vector<GeometryCliqueWithCSGNode> computeNodesForCliques(std::vector<Clique> geometryCliques, const Graph& connectionGraph);
+	enum class ParallelismOptions
+	{
+		NoParallelism = 0,
+		PerCliqueParallelism = 1, 
+		GAParallelism = 2
+	};
+	ParallelismOptions operator|(ParallelismOptions lhs, ParallelismOptions rhs);
+	ParallelismOptions operator&(ParallelismOptions lhs, ParallelismOptions rhs);
+
+	std::vector<GeometryCliqueWithCSGNode> computeNodesForCliques(std::vector<Clique> geometryCliques, const Graph& connectionGraph, ParallelismOptions po);
 
 	using CSGNodeClique = std::vector<GeometryCliqueWithCSGNode>;
 

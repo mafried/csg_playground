@@ -13,8 +13,8 @@
 #include <cmath>
 #include <algorithm>
 
-#include <igl/copyleft/cgal/mesh_boolean.h>
-#include <igl/copyleft/cgal/CSGTree.h>
+//#include <igl/copyleft/cgal/mesh_boolean.h>
+//#include <igl/copyleft/cgal/CSGTree.h>
 
 void createCSGTreeTemplateFromCliquesRec(lmu::CSGTree& tree, const std::vector<lmu::Clique>& cliques, size_t start, size_t size)
 {	
@@ -271,7 +271,7 @@ lmu::CSGTree lmu::createCSGTreeWithGA(const std::vector<std::shared_ptr<Implicit
 	std::cout << "Connection graph: " << !connectionGraph.m_vertices.empty() << std::endl;
 
 	lmu::CSGTreeGA ga;
-	lmu::CSGTreeGA::Parameters p(150, 2, 0.3, 0.3);
+	lmu::CSGTreeGA::Parameters p(150, 2, 0.3, 0.3, true);
 
 	lmu::CSGTreeTournamentSelector s(2, true);
 
@@ -352,7 +352,7 @@ void lmu::CSGTree::write(const std::string & file)
 
 lmu::Mesh createIglCSGTreeRec(const lmu::CSGTree& tree)
 {
-	igl::MeshBooleanType iglOp;
+	/*igl::MeshBooleanType iglOp;
 	std::string opStr; 
 
 	switch (tree.operation)
@@ -388,7 +388,7 @@ lmu::Mesh createIglCSGTreeRec(const lmu::CSGTree& tree)
 	for (const auto& func : tree.functions)
 	{
 		std::cout << "function " << func->name() << std::endl;
-		childs.push_back(func->mesh());
+		childs.push_back(func->meshCRef());
 	}
 
 	if (childs.size() != 2)
@@ -406,7 +406,9 @@ lmu::Mesh createIglCSGTreeRec(const lmu::CSGTree& tree)
 		igl::copyleft::cgal::mesh_boolean(childs[1].vertices, childs[1].indices, childs[0].vertices, childs[0].indices, iglOp, res.vertices, res.indices, vJ);
 	}
 	
-	return res;
+	return res;*/
+
+	return lmu::Mesh();
 }
 
 lmu::Mesh lmu::CSGTree::createMesh() const
@@ -598,7 +600,7 @@ void fillUnknownOperationsRec(lmu::CSGTree& tree, const std::vector<lmu::Clique>
 {
 	static lmu::CSGTreeGA ga; 
 
-	static lmu::CSGTreeGA::Parameters p(150,2, 0.3, 0.3);
+	static lmu::CSGTreeGA::Parameters p(150,2, 0.3, 0.3, true);
 	static lmu::CSGTreeTournamentSelector s(2);	
 	
 	//static lmu::CSGTreeIterationStopCriterion isc(100);

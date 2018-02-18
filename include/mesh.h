@@ -4,6 +4,9 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <igl/per_vertex_normals.h>
+#include <igl/per_edge_normals.h>
+#include <igl/per_face_normals.h>
+#include <igl/AABB.h>
 
 #include <iostream>
 #include <memory>
@@ -37,9 +40,9 @@ namespace lmu
 
 	void transform(Mesh& mesh);
 
-	Mesh createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size);
+	Mesh createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions);
 	Mesh createSphere(const Eigen::Affine3d& transform, double radius, int stacks, int slices);
-	Mesh createCylinder(const Eigen::Affine3d& transform, double radius, double height, int stacks, int slices);
+	Mesh createCylinder(const Eigen::Affine3d& transform, float bottomRadius, float topRadius, float height, int stacks, int slices);
 
 	Mesh fromOBJFile(const std::string& file);
 
@@ -47,6 +50,8 @@ namespace lmu
 	{
 		Sphere = 0,
 		Cylinder,
+		Cone,
+		Box,
 		Null
 	};
 
@@ -65,7 +70,12 @@ namespace lmu
 
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) = 0;
 
-		Mesh& mesh()
+		Mesh& meshRef()
+		{
+			return _mesh;
+		}
+
+		const Mesh& meshCRef() const 
 		{
 			return _mesh;
 		}
@@ -148,18 +158,36 @@ namespace lmu
 		double _radius;
 	};
 
-	struct IFCylinder : public ImplicitFunction
+	class IFMeshSupported : public ImplicitFunction
+	{
+	public: 
+		IFMeshSupported(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
+			ImplicitFunction(transform, mesh, name)
+		{
+			_tree.init(_mesh.vertices, _mesh.indices);
+
+			igl::per_face_normals(_mesh.vertices, _mesh.indices, _fn);
+			igl::per_vertex_normals(_mesh.vertices, _mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, _fn, _vn);
+			igl::per_edge_normals(_mesh.vertices, _mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, _fn, _en, _e, _emap);
+		}
+
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override;
+
+	private: 
+		//We need all this stuff (especially the AABB tree for accelerating distance lookups.
+		igl::AABB<Eigen::MatrixXd, 3> _tree;
+		Eigen::MatrixXd _fn, _vn, _en; //note that _vn is the same as mesh's _normals. TODO
+		Eigen::MatrixXi _e;
+		Eigen::VectorXi _emap;
+	};
+
+	struct IFCylinder : public IFMeshSupported
 	{
 		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name) :
-			ImplicitFunction(transform, createCylinder(transform, radius, height, 50, 50), name),
+			IFMeshSupported(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
 			_radius(radius),
 			_height(height)
 		{
-		}
-
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
-		{
-			return Eigen::Vector4d(); //TODO
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -175,6 +203,28 @@ namespace lmu
 	private:
 		double _radius;
 		double _height;
+	};
+
+	struct IFBox : public IFMeshSupported
+	{
+		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name) :
+			IFMeshSupported(transform, createBox(transform, size, numSubdivisions), name),
+			_size(size)
+		{
+		}
+
+		virtual ImplicitFunctionType type() const override
+		{
+			return ImplicitFunctionType::Box;
+		}
+
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFBox>(*this);
+		}
+
+	private:
+		Eigen::Vector3d _size;
 	};
 
 	struct IFNull : public ImplicitFunction

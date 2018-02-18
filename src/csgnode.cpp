@@ -2,14 +2,14 @@
 
 #include <limits>
 #include <fstream>
+#include <random>
 
 #include "boost/graph/graphviz.hpp"
 
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
-#include <igl/copyleft/cgal/mesh_boolean.h>
-#include <igl/copyleft/cgal/CSGTree.h>
+#include <igl/copyleft/marching_cubes.h>
 
 using namespace lmu;
 
@@ -40,7 +40,7 @@ std::tuple<int, int> UnionOperation::numAllowedChilds() const
 }
 Mesh lmu::UnionOperation::mesh() const
 {
-	if (_childs.size() == 0)
+	/*if (_childs.size() == 0)
 		return Mesh(); 
 	if (_childs.size() == 1)
 		return _childs[0].mesh();
@@ -59,7 +59,9 @@ Mesh lmu::UnionOperation::mesh() const
 		left = res;
 	}
 
-	return res;	
+	return res;*/
+
+	return Mesh();
 }
 
 CSGNodePtr IntersectionOperation::clone() const
@@ -89,7 +91,7 @@ std::tuple<int, int> IntersectionOperation::numAllowedChilds() const
 }
 Mesh lmu::IntersectionOperation::mesh() const
 {
-	if (_childs.size() == 0)
+	/*if (_childs.size() == 0)
 		return Mesh();
 	if (_childs.size() == 1)
 		return _childs[0].mesh();
@@ -108,7 +110,9 @@ Mesh lmu::IntersectionOperation::mesh() const
 		left = res;
 	}
 
-	return res;
+	return res;*/
+
+	return Mesh();
 }
 
 CSGNodePtr DifferenceOperation::clone() const
@@ -169,7 +173,7 @@ std::tuple<int, int> DifferenceOperation::numAllowedChilds() const
 }
 Mesh lmu::DifferenceOperation::mesh() const
 {
-	if (_childs.size() != 2)
+	/*if (_childs.size() != 2)
 		return Mesh();
 	
 	Mesh res, left, right;
@@ -180,7 +184,9 @@ Mesh lmu::DifferenceOperation::mesh() const
 
 	igl::copyleft::cgal::mesh_boolean(left.vertices, left.indices, right.vertices, right.indices, igl::MESH_BOOLEAN_TYPE_MINUS, res.vertices, res.indices, vJ);
 	
-	return res;
+	return res;*/
+
+	return Mesh();
 }
 
 /*
@@ -688,6 +694,170 @@ MergeResult lmu::mergeNodes(const LargestCommonSubgraph& lcs)
 	{
 		throw MergeResult::None;
 	}
+}
+
+std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node)
+{
+	auto geos = allGeometryNodePtrs(node);
+
+	double minS = std::numeric_limits<double>::max();
+	double maxS = -std::numeric_limits<double>::max();
+
+	Eigen::Vector3d min(minS, minS, minS);
+	Eigen::Vector3d max(maxS, maxS, maxS);
+	
+	for (const auto& geo : geos)
+	{
+
+		Eigen::Vector3d minCandidate = geo->function()->meshCRef().vertices.colwise().minCoeff();
+		Eigen::Vector3d maxCandidate = geo->function()->meshCRef().vertices.colwise().maxCoeff();
+
+		min(0) = min(0) < minCandidate(0) ? min(0) : minCandidate(0);
+		min(1) = min(1) < minCandidate(1) ? min(1) : minCandidate(1);
+		min(2) = min(2) < minCandidate(2) ? min(2) : minCandidate(2);
+
+		max(0) = max(0) > maxCandidate(0) ? max(0) : maxCandidate(0);
+		max(1) = max(1) > maxCandidate(1) ? max(1) : maxCandidate(1);
+		max(2) = max(2) > maxCandidate(2) ? max(2) : maxCandidate(2);
+	}
+
+	return std::make_tuple(min, max);
+}
+
+Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, const Eigen::Vector3d& minDim, const Eigen::Vector3d& maxDim)
+{
+	Eigen::Vector3d min, max;
+
+	if (minDim == Eigen::Vector3d(0.0,0.0,0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
+	{
+		auto dims = computeDimensions(node);
+		min = std::get<0>(dims);
+		max = std::get<1>(dims);
+	}
+	else
+	{
+		min = minDim;
+		max = maxDim;
+	}
+
+	//Add a bit dimensions to avoid cuts (TODO: do it right with modulo stepSize).
+	min -= (max - min) * 0.05;
+	max += (max - min) * 0.05;
+
+	Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
+
+	int num = numSamples(0)*numSamples(1)*numSamples(2);
+	Eigen::MatrixXd samplingPoints(num, 3);
+	Eigen::VectorXd samplingValues(num);
+		
+	for (int x = 0; x < numSamples(0); ++x)
+	{
+		for (int y= 0; y < numSamples(1); ++y)
+		{
+			for (int z = 0; z < numSamples(2); ++z)
+			{
+				int idx = numSamples(0) * numSamples(1) * z + numSamples(0) * y + x;
+
+				Eigen::Vector3d samplingPoint((double)x * stepSize(0) + min(0), (double)y * stepSize(1) + min(1), (double)z * stepSize(2) + min(2));
+
+				samplingPoints.row(idx) = samplingPoint;
+
+				samplingValues(idx) = node.signedDistanceAndGradient(samplingPoint)(0);
+			}
+		}
+	}
+
+	Mesh mesh;
+
+	igl::copyleft::marching_cubes(samplingValues, samplingPoints, numSamples(0), numSamples(1), numSamples(2), mesh.vertices, mesh.indices);
+
+	return mesh;
+}
+
+Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector3i & numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
+{
+
+	Eigen::Vector3d min, max;
+
+	if (minDim == Eigen::Vector3d(0.0, 0.0, 0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
+	{
+		auto dims = computeDimensions(node);
+		min = std::get<0>(dims);
+		max = std::get<1>(dims);
+	}
+	else
+	{
+		min = minDim;
+		max = maxDim;
+	}
+
+	//Add a bit dimensions to avoid cuts (TODO: do it right with modulo stepSize).
+	min -= (max - min) * 0.05;
+	max += (max - min) * 0.05;
+
+	Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
+
+	std::vector<Eigen::Matrix<double,1,6>> samplingPoints;
+	
+	std::random_device rd{};
+	std::mt19937 gen{ rd() };
+
+	std::normal_distribution<> dx{ 0.0 , errorSigma };
+	std::normal_distribution<> dy{ 0.0 , errorSigma };
+	std::normal_distribution<> dz{ 0.0 , errorSigma };
+
+	for (int x = 0; x < numSamples(0); ++x)
+	{
+		for (int y = 0; y < numSamples(1); ++y)
+		{
+			for (int z = 0; z < numSamples(2); ++z)
+			{	
+				Eigen::Vector3d samplingPoint((double)x * stepSize(0) + min(0), (double)y * stepSize(1) + min(1), (double)z * stepSize(2) + min(2));
+
+				auto samplingValue = node.signedDistanceAndGradient(samplingPoint);
+				
+				if (abs(samplingValue(0)) < maxDistance)
+				{
+					Eigen::Matrix<double, 1, 6> sp; 
+					sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
+
+					samplingPoints.push_back(sp);
+				}
+			}
+		}
+	}
+
+	Eigen::MatrixXd res(samplingPoints.size(), 6);
+	for (int i = 0; i < samplingPoints.size(); ++i)
+		res.row(i) = samplingPoints[i].row(0);
+	
+	return res;
+}
+
+Eigen::VectorXd lmu::computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize)
+{
+	Eigen::VectorXd res(samplePoints.rows());
+
+	double maxError = 0; 
+
+	for (int i = 0; i < samplePoints.rows(); ++i)
+	{
+		double error = abs(referenceNode.signedDistanceAndGradient(samplePoints.row(i))(0) - node.signedDistanceAndGradient(samplePoints.row(i))(0));
+
+		maxError = maxError < error ? error : maxError;
+
+		res.row(i) << error;
+	}
+
+	if (normalize && maxError > 0.0)
+	{
+		for (int i = 0; i < samplePoints.rows(); ++i)
+		{
+			res.row(i) << (res.row(i) / maxError);
+		}
+	}
+
+	return res;
 }
 
 std::ostream& lmu::operator<<(std::ostream& os, const SerializedCSGNode& v)

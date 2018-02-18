@@ -178,21 +178,23 @@ namespace lmu
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate) :
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
-				crossoverRate(crossoverRate)
+				crossoverRate(crossoverRate),
+				rankingInParallel(rankingInParallel)
 			{
 			}
 
 			std::string info() const
 			{
 				std::stringstream ss;
-				ss << "Population Size: " << populationSize << 
-					" Num Best Parents: " << numBestParents << 
-					" Mutation Rate: " << mutationRate << 
-					" Crossover Rate: " << crossoverRate;
+				ss << "Population Size: " << populationSize <<
+					" Num Best Parents: " << numBestParents <<
+					" Mutation Rate: " << mutationRate <<
+					" Crossover Rate: " << crossoverRate <<
+					" Ranking in parallel: " << rankingInParallel;
 				return ss.str();
 			}
 
@@ -200,6 +202,7 @@ namespace lmu
 			int numBestParents;
 			double mutationRate;
 			double crossoverRate;
+			bool rankingInParallel;
 		};
 
 		struct Statistics
@@ -350,7 +353,7 @@ namespace lmu
 			{
 				std::cout << "Start iteration " << std::endl;
 
-				rankAndSortPopulation(population, ranker);
+				rankAndSortPopulation(population, ranker, params.rankingInParallel);
 
 				std::cout << "Best: " << population.front().rank << " Worst: " << population.back().rank << std::endl;
 				stats.bestCandidateScores.push_back(population.front().rank);
@@ -450,18 +453,33 @@ namespace lmu
 			return population;
 		}
 
-		std::vector<RankedCreature> rankAndSortPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker) const 
+		std::vector<RankedCreature> rankAndSortPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel = false) const 
 		{
 			std::cout << "Rank population." << std::endl;
 						
 			//double minRank = std::numeric_limits<double>::max();
 			//double maxRank = -std::numeric_limits<double>::max();
 			
-			for (auto& c : population)
-			{	
-				c.rank = ranker.rank(c.creature);
-				//minRank = minRank < c.rank ? minRank : c.rank;
-				//maxRank = maxRank > c.rank ? maxRank : c.rank;
+			if (inParallel)
+			{
+#ifndef _OPENMP 
+				throw std::runtime_error("Cliques should run in parallel but OpenMP is not available.");
+#endif
+
+#pragma omp parallel for
+				for (int i = 0; i < population.size(); ++i)
+				{
+					population[i].rank = ranker.rank(population[i].creature);
+				}
+			}
+			else
+			{
+				for (auto& c : population)
+				{
+					c.rank = ranker.rank(c.creature);
+					//minRank = minRank < c.rank ? minRank : c.rank;
+					//maxRank = maxRank > c.rank ? maxRank : c.rank;
+				}
 			}
 
 			//normalize rank

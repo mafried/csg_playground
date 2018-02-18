@@ -273,10 +273,10 @@ double lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes)
 	return std::log(numPoints);
 }
 
-lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph)
+lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, bool inParallel, const lmu::Graph& connectionGraph)
 {
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.3);
+	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.3, inParallel);
 
 	lmu::CSGNodeTournamentSelector s(2, true);
 
@@ -304,74 +304,113 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	return res.population[0].creature;
 }
 
-std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> geometryCliques, const lmu::Graph& connectionGraph)
+void computeNodesForClique(const Clique& clique, const lmu::Graph& connectionGraph, bool gAInParallel, std::vector<GeometryCliqueWithCSGNode>& res)
+{
+	if (clique.functions.empty())
+	{
+		return;
+	}
+	else if (clique.functions.size() == 1)
+	{
+		res.push_back(std::make_tuple(clique, CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0]))));
+	}
+	else if (clique.functions.size() == 2)
+	{
+		lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(clique.functions), clique.functions);
+		lmu::CSGTreeRanker ranker2(lambdaBasedOnPoints(clique.functions), clique.functions);
+
+		std::vector<CSGNode> candidates;
+
+		CSGNode un(std::make_shared<UnionOperation>("un"));
+		un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
+		un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
+		candidates.push_back(un);
+
+		CSGNode inter(std::make_shared<IntersectionOperation>("inter"));
+		inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
+		inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
+		candidates.push_back(inter);
+
+		CSGNode lr(std::make_shared<DifferenceOperation>("lr"));
+		lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
+		lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
+		candidates.push_back(lr);
+
+		CSGNode rl(std::make_shared<DifferenceOperation>("rl"));
+		rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
+		rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
+		candidates.push_back(rl);
+
+		//CSGTree t1; t1.operation = OperationType::Union; t1.functions = clique.functions;
+		//CSGTree t2; t2.operation = OperationType::Intersection; t2.functions = clique.functions;
+		//CSGTree t3; t3.operation = OperationType::DifferenceLR; t3.functions = clique.functions;
+		//CSGTree t4; t4.operation = OperationType::DifferenceRL; t4.functions = clique.functions;
+		//std::vector<CSGTree> trees = { t1,t2,t3,t4 };
+		//int i = 0;
+
+		double maxScore = -std::numeric_limits<double>::max();
+		const CSGNode* bestCandidate = nullptr;
+		for (const auto& candidate : candidates)
+		{
+
+			double curScore = ranker.rank(candidate);
+			std::cout << candidate.name() << " for " << clique.functions[0]->name() << " " << clique.functions[1]->name() << " rank: " << curScore /*<< " tree rank: " << ranker2.rank( trees[i++]) */ << std::endl;
+
+			if (maxScore < curScore)
+			{
+				maxScore = curScore;
+				bestCandidate = &candidate;
+			}
+		}
+
+		res.push_back(std::make_tuple(clique, *bestCandidate));
+	}
+	else
+	{
+		res.push_back(std::make_tuple(clique, createCSGNodeWithGA(clique.functions, gAInParallel, connectionGraph)));
+	}
+}
+
+ParallelismOptions lmu::operator|(ParallelismOptions lhs, ParallelismOptions rhs)
+{
+	return static_cast<ParallelismOptions>(static_cast<int>(lhs) | static_cast<int>(rhs));
+}
+ParallelismOptions lmu::operator&(ParallelismOptions lhs, ParallelismOptions rhs)
+{
+	return static_cast<ParallelismOptions>(static_cast<int>(lhs) & static_cast<int>(rhs));
+}
+
+std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> geometryCliques, const lmu::Graph& connectionGraph, ParallelismOptions po)
 {
 	std::vector<GeometryCliqueWithCSGNode> res;
 
-	for (const auto& clique : geometryCliques)
+	bool cliquesParallel = (po & ParallelismOptions::PerCliqueParallelism) == ParallelismOptions::PerCliqueParallelism;
+	bool gAParallel = (po & ParallelismOptions::GAParallelism) == ParallelismOptions::GAParallelism;
+	
+	if (cliquesParallel)
 	{
-		if (clique.functions.empty())
+#ifndef _OPENMP 
+		throw std::runtime_error("Cliques should run in parallel but OpenMP is not available.");
+#endif
+
+#pragma omp parallel
 		{
-			continue;
-		}
-		else if (clique.functions.size() == 1)
-		{
-			res.push_back(std::make_tuple(clique, CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0]))));
-		}
-		else if (clique.functions.size() == 2)
-		{
-			lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(clique.functions), clique.functions);
-			lmu::CSGTreeRanker ranker2(lambdaBasedOnPoints(clique.functions), clique.functions);
-
-			std::vector<CSGNode> candidates; 
-
-			CSGNode un(std::make_shared<UnionOperation>("un"));
-			un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
-			un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
-			candidates.push_back(un);
-
-			CSGNode inter(std::make_shared<IntersectionOperation>("inter"));
-			inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
-			inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
-			candidates.push_back(inter);
-
-			CSGNode lr(std::make_shared<DifferenceOperation>("lr"));
-			lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
-			lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
-			candidates.push_back(lr);
-
-			CSGNode rl(std::make_shared<DifferenceOperation>("rl"));
-			rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[1])));
-			rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
-			candidates.push_back(rl);
-
-			//CSGTree t1; t1.operation = OperationType::Union; t1.functions = clique.functions;
-			//CSGTree t2; t2.operation = OperationType::Intersection; t2.functions = clique.functions;
-			//CSGTree t3; t3.operation = OperationType::DifferenceLR; t3.functions = clique.functions;
-			//CSGTree t4; t4.operation = OperationType::DifferenceRL; t4.functions = clique.functions;
-			//std::vector<CSGTree> trees = { t1,t2,t3,t4 };
-			//int i = 0;
-
-			double maxScore = -std::numeric_limits<double>::max();
-			const CSGNode* bestCandidate = nullptr;
-			for (const auto& candidate : candidates)
+#pragma omp master  
 			{
-				
-				double curScore = ranker.rank(candidate);
-				std::cout << candidate.name() << " for " << clique.functions[0]->name() << " " << clique.functions[1]->name() << " rank: " << curScore /*<< " tree rank: " << ranker2.rank( trees[i++]) */ << std::endl;
-
-				if (maxScore < curScore)
-				{
-					maxScore = curScore;
-					bestCandidate = &candidate;
-				}
+				std::cout << "OpenMP is running with " << omp_get_num_threads() << " threads." << std::endl;
 			}
-
-			res.push_back(std::make_tuple(clique, *bestCandidate));
+#pragma omp for
+			for (int i = 0; i < geometryCliques.size(); ++i)
+			{
+				computeNodesForClique(geometryCliques[i], connectionGraph, gAParallel, res);
+			}
 		}
-		else
+	}
+	else
+	{
+		for (const auto& clique : geometryCliques)
 		{
-			res.push_back(std::make_tuple(clique, createCSGNodeWithGA(clique.functions, connectionGraph)));
+			computeNodesForClique(clique, connectionGraph, gAParallel, res);
 		}
 	}
 

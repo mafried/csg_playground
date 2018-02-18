@@ -35,6 +35,14 @@ include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
+#OpenMP
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 # Add your project files
 file(GLOB SRCFILES *.cpp)
 
@@ -44,7 +52,11 @@ message("APP Headers: " ${APP_HEADERS})
 FILE(GLOB_RECURSE APP_SOURCES "src/*.cpp")
 message("APP Sources: " ${APP_SOURCES})
 
+if(MSVC)
+	add_definitions(-D_USE_MATH_DEFINES)
+endif()
+
 
 add_executable(${PROJECT_NAME}_bin ${APP_HEADERS} ${APP_SOURCES})
 
-target_link_libraries(${PROJECT_NAME}_bin ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_SAMPLE_CONSENSUS_LIBRARIES} igl::core igl::viewer igl::cgal)
+target_link_libraries(${PROJECT_NAME}_bin ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_SAMPLE_CONSENSUS_LIBRARIES} igl::core igl::opengl_glfw igl::cgal)

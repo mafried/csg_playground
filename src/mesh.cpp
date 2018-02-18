@@ -5,6 +5,8 @@
 #include <cmath>
 
 #include <igl/readOBJ.h>
+#include <igl/signed_distance.h>
+#include <igl/upsample.h>
 
 using namespace lmu;
 
@@ -20,8 +22,14 @@ void lmu::transform(Mesh& mesh)
 	}
 }
 
+//
+// Following code for geometry generation derived from: 
+// 
+// https://github.com/jjuiddong/Introduction-to-3D-Game-Programming-With-DirectX11/blob/master/Common/GeometryGenerator.cpp
+// Under MIT License 
+//
 
-Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size)
+Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions)
 {
 	Mesh mesh; 
 
@@ -79,6 +87,45 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	lmu::transform(mesh);
 
+	Mesh upsampledMesh;// = mesh;
+
+	igl::upsample(mesh.vertices, mesh.indices, upsampledMesh.vertices, upsampledMesh.indices, numSubdivisions);
+
+
+	//Eigen::MatrixXd fn; 
+	//igl::per_face_normals(upsampledMesh.vertices, upsampledMesh.indices, fn);
+	igl::per_vertex_normals(upsampledMesh.vertices, upsampledMesh.indices, upsampledMesh.normals);
+
+	return upsampledMesh;
+}
+
+Mesh meshFromGeometry(const std::vector<Eigen::RowVector3d>& vertices, const std::vector<int>& indices, const Eigen::Affine3d& transform)
+{
+	Mesh mesh;
+
+	mesh.vertices.resize(vertices.size(), 3);
+
+	int i = 0;
+	for (const auto& vs : vertices)
+	{
+		mesh.vertices.row(i) = vs;
+		i++;
+	}
+
+	mesh.indices.resize(indices.size() / 3, 3);
+
+	for (int j = 0; j < indices.size() / 3; j++)
+	{
+		mesh.indices.row(j) = Eigen::RowVector3i(indices[j * 3], indices[j * 3 + 1], indices[j * 3 + 2]);
+		//std::cout << "HERE";
+	}
+
+	mesh.transform = transform;
+
+	lmu::transform(mesh);
+
+	igl::per_vertex_normals(mesh.vertices, mesh.indices, mesh.normals);
+	
 	return mesh;
 }
 
@@ -142,39 +189,114 @@ Mesh lmu::createSphere(const Eigen::Affine3d & transform, double radius, int sta
 		indicesVector.push_back(baseIndex + i + 1);
 	}
 
-
-
-	Mesh mesh;
-
-	mesh.vertices.resize(verticesVector.size(), 3);
-
-	int i = 0;
-	for (const auto& vs : verticesVector)
-	{
-		mesh.vertices.row(i) = vs;		
-		i++;
-	}
-
-	mesh.indices.resize(indicesVector.size() / 3, 3);
-
-	for (int j = 0; j < indicesVector.size() / 3; j++)
-	{
-		mesh.indices.row(j) = Eigen::RowVector3i(indicesVector[j*3], indicesVector[j*3+1], indicesVector[j*3+2]);
-		//std::cout << "HERE";
-	}
-
-	mesh.transform = transform;
-
-	igl::per_vertex_normals(mesh.vertices, mesh.indices, mesh.normals);
-
-	lmu::transform(mesh);
-
-	return mesh;
+	return meshFromGeometry(verticesVector, indicesVector, transform);
 }
 
-Mesh lmu::createCylinder(const Eigen::Affine3d & transform, double radius, double height, int stacks, int slices)
+void buildCylinderTopCap(float topRadius, float height, int sliceCount, std::vector<Eigen::RowVector3d>& vertices, std::vector<int>& indices)
 {
-	return Mesh(); //TODO
+	const double pi = 3.14159265358979323846;
+
+	int baseIndex = vertices.size();
+
+	double y = 0.5*height;
+	double dTheta = 2.0*pi / sliceCount;
+
+	for (int i = 0; i <= sliceCount; i++)
+	{
+		double x = topRadius*cos(i*dTheta);
+		double z = topRadius*sin(i*dTheta);
+
+		//double u = x / height + 0.5;
+		//double v = z / height + 0.5;
+		vertices.push_back(Eigen::RowVector3d(x, y, z));
+	}
+	vertices.push_back(Eigen::RowVector3d(0, y, 0));
+	int centerIndex = vertices.size() - 1;
+	for (int i = 0; i < sliceCount; i++)
+	{
+		indices.push_back(centerIndex);
+		indices.push_back(baseIndex + i + 1);
+		indices.push_back(baseIndex + i);
+	}
+}
+
+void buildCylinderBottomCap(float bottomRadius, float height, int sliceCount, std::vector<Eigen::RowVector3d>& vertices, std::vector<int>& indices)
+{
+	const double pi = 3.14159265358979323846;
+
+	int baseIndex = vertices.size();
+
+	double y = -0.5 * height;
+	double dTheta = 2.0 * pi / sliceCount;
+
+	for (int i = 0; i <= sliceCount; i++) {
+		double x = bottomRadius * cos(i * dTheta);
+		double z = bottomRadius * sin(i * dTheta);
+
+		double u = x / height + 0.5;
+		double v = z / height + 0.5;
+		vertices.push_back(Eigen::RowVector3d(x, y, z));
+	}
+	vertices.push_back(Eigen::RowVector3d(0, y, 0));
+	int centerIndex = vertices.size() - 1;
+	for (int i = 0; i < sliceCount; i++) {
+		indices.push_back(centerIndex);
+		indices.push_back(baseIndex + i);
+		indices.push_back(baseIndex + i + 1);
+	}
+}
+
+Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, float topRadius, float height, int slices, int stacks)
+{
+	const double pi = 3.14159265358979323846;
+
+	double stackHeight = height / stacks;
+	double radiusStep = (topRadius - bottomRadius) / stacks;
+	double ringCount = stacks + 1;
+
+	std::vector<Eigen::RowVector3d> vertices;
+	std::vector<int> indices;
+
+
+	for (int i = 0; i < ringCount; i++) {
+		double y = -0.5*height + i*stackHeight;
+		double r = bottomRadius + i*radiusStep;
+		double dTheta = 2.0*pi / slices;
+		for (int j = 0; j <= slices; j++) 
+		{
+			double c = cos(j*dTheta);
+			double s = sin(j*dTheta);
+
+			Eigen::Vector3d v(r*c, y, r*s);
+			//Eigen::Vector2d uv((double)j / sliceCount, 1.0 - (double)i / stackCount);
+			//Eigen::Vector3d t(-s, 0.0, c);
+
+			//double dr = bottomRadius - topRadius;
+			//Eigen::Vector3d bitangent(dr*c, -height, dr*s);
+
+			//auto n = t.cross(bitangent);
+			//n.normalize();
+			vertices.push_back(Eigen::RowVector3d(v));
+
+		}
+	}
+	int ringVertexCount = slices + 1;
+	for (int i = 0; i < stacks; i++) {
+		for (int j = 0; j < slices; j++) {
+			indices.push_back(i*ringVertexCount + j);
+			indices.push_back((i + 1)*ringVertexCount + j);
+			indices.push_back((i + 1)*ringVertexCount + j + 1);
+
+			indices.push_back(i*ringVertexCount + j);
+			indices.push_back((i + 1)*ringVertexCount + j + 1);
+			indices.push_back(i*ringVertexCount + j + 1);
+		}
+	}
+
+	buildCylinderTopCap(topRadius, height, slices, vertices, indices);
+	buildCylinderBottomCap(bottomRadius, height, slices, vertices, indices);
+	
+	return meshFromGeometry(vertices, indices, transform);
 }
 
 Mesh lmu::fromOBJFile(const std::string & file)
@@ -197,6 +319,8 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 		return "Sphere";
 	case ImplicitFunctionType::Cylinder:
 		return "Cylinder";
+	case ImplicitFunctionType::Box:
+		return "Box";
 	case ImplicitFunctionType::Null:
 		return "Null";
 	default:
@@ -204,4 +328,16 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 	}
 }
 
+Eigen::Vector4d lmu::IFMeshSupported::signedDistanceAndGradient(const Eigen::Vector3d & p)
+{
+	Eigen::MatrixXd points(1,3);
+	points.row(0) << p.x(), p.y(), p.z();
 
+	Eigen::VectorXd d;
+	Eigen::VectorXi i;
+	Eigen::MatrixXd n, c;
+
+	igl::signed_distance_pseudonormal(points, _mesh.vertices, _mesh.indices, _tree, _fn, _vn, _en, _emap, d, i, c, n);
+
+	return Eigen::Vector4d(d(0), n.row(0).x(), n.row(0).y(), n.row(0).z());
+}

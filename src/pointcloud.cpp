@@ -143,7 +143,7 @@ Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	i = 0;
 	for (const auto& point : remainingPoints)
 	{
-		res.block<1, 3>(i, 0) = point + Eigen::Vector3d(dx(gen), dy(gen), dz(gen));
+		res.block<1, 3>(i, 0) = point;// +Eigen::Vector3d(dx(gen), dy(gen), dz(gen));
 
 		res.block<1, 3>(i, 3) = remainingNormals[i];
 

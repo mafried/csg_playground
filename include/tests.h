@@ -5,26 +5,12 @@
 #include "csgtree.h"
 #include "csgnode.h"
 #include "csgnode_evo.h"
+#include "csgnode_helper.h"
 #include "evolution.h"
 
 using namespace lmu;
 
-CSGNode geometry(ImplicitFunctionPtr function)
-{
-	return CSGNode(std::make_shared<CSGNodeGeometry>(function));
-}
-CSGNode opUnion(const std::vector<CSGNode>& childs = {})
-{
-	return CSGNode(std::make_shared<UnionOperation>("", childs));
-}
-CSGNode opDiff(const std::vector<CSGNode>& childs = {})
-{
-	return CSGNode(std::make_shared<DifferenceOperation>("", childs));
-}
-CSGNode opInter(const std::vector<CSGNode>& childs = {})
-{
-	return CSGNode(std::make_shared<IntersectionOperation>("", childs));
-}
+
 std::unordered_map<std::string, ImplicitFunctionPtr> geometries(const std::vector<std::string>& names)
 {
 	std::unordered_map<std::string, ImplicitFunctionPtr> map;
