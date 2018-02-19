@@ -52,119 +52,55 @@ int main(int argc, char *argv[])
 
 	//RUN_TEST(CSGNodeTest);
 
-	//igl::readOFF(TUTORIAL_SHARED_PATH "/decimated-knight.off", VB, FB);
-	// Plot the mesh with pseudocolors
-
-	// Domain (Warning: Sphere_3 constructor uses squared radius !)
-	/*Mesh_domain domain(sphere_function,
-		K::Sphere_3(CGAL::ORIGIN, 2.));
-
-	// Mesh criteria
-	Spherical_sizing_field size;
-	Mesh_criteria criteria(facet_angle = 30, facet_size = 0.1, facet_distance = 0.025,
-		cell_radius_edge_ratio = 2, cell_size = size);
-
-	// Mesh generation
-	mesh = CGAL::make_mesh_3<C3t3>(domain, criteria, no_exude(), no_perturb());
-
-	int a = 5;
-	std::cout << a;
-
-	// Output
-	std::ofstream file("out.off");
-	mesh.output_boundary_to_off(file);
-	file.close();
-	*/
 
 	igl::opengl::glfw::Viewer viewer;
 
 	// Initialize
 	update(viewer);
-
-	//lmu::CSGTreeGA ga;
-
-	Eigen::Affine3d t = Eigen::Affine3d::Identity();
-	//t = Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ());//
-	t = Eigen::Translation3d(0.1, 0, 0);
-	//rotate(Eigen::AngleAxisd(20.0, Eigen::Vector3d::UnitZ()));
-
-	lmu::Mesh mesh1 = lmu::createBox(t, Eigen::Vector3d(0.5, 0.5, 0.5), 4); ;// lmu::createCylinder(t, 0.2, 0.2, 1.2, 10, 10);//
-	lmu::Mesh mesh2 = lmu::createCylinder(Eigen::Affine3d::Identity(), 0.2, 0.2, 1.0, 30, 30);
-	lmu::Mesh mesh3 = lmu::createSphere(Eigen::Affine3d::Identity(), 0.5, 30, 30);
-	lmu::Mesh mesh;
-	//lmu::Mesh mesh2 = lmu::createBox(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5, 0.5, 0.5));
-
-	//igl::copyleft::cork::CSGTree meshTree = { { mesh1.vertices, mesh1.indices },{ mesh3.vertices, mesh3.indices }, igl::MeshBooleanType::MESH_BOOLEAN_TYPE_UNION };
-
-	//igl::copyleft::cgal::mesh_boolean(mesh1.vertices, mesh1.indices, mesh3.vertices, mesh3.indices, igl::MeshBooleanType::MESH_BOOLEAN_TYPE_UNION, mesh.vertices, mesh.indices);
-
-	//lmu::Mesh csgMesh(meshTree.cast_V<MatrixXd>(), meshTree.F());	
-
-	//lmu::Mesh csgMesh(mesh.vertices, mesh.indices, mesh.normals);
-
-	//auto csgMesh = lmu::fromOBJFile("mick.obj");// lmu::Mesh(meshTree.cast_V<MatrixXd>(), meshTree.F());//lmu::fromOBJFile("flower.obj");
-
-	//auto pointCloud = lmu::pointCloudFromMesh(csgMesh, 0.001, 0.05, 0.005); //(csgMesh, 0.001, 0.1, 0.005); <= mick
-	//auto pointCloud = lmu::readPointCloud("pt_001.dat");
-
-	//lmu::writePointCloud("pt_001.dat", pointCloud);
-
-
-	CSGNode node =
 	
+	CSGNode node =
+
+		op<Difference>(
+		{
 		op<Union>(
 		{
-			geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0"),
-			geo<IFBox>(t, Eigen::Vector3d(0.2,0.2,0.2),2, "Box_0"),
-			geo<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 0.5, "Cylinder_0"),
+			op<Union>(
+			{
+				geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.6,0.6,0.6),2, "Box_0"),
+				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, -0.3, 0), 0.3, "Sphere_0")
+			}),
+			geo<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 1.0, "Cylinder_0"),
+		}),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.7, 0), 0.3, "Sphere_1")
 		});
 
 	CSGNode node2 =
 
 		op<Union>(
 	{
-		geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0"),
-		geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_0")
+		geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5,0.5,0.5),2, "Box_0"),
+		geo<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 1.0, "Cylinder_0")
+		//geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, -0.2, 0), 0.2, "Sphere_0"),
+		//geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_1")
 	});
 
 
-	lmu::Mesh csgMesh = computeMesh(node, Eigen::Vector3i(100, 10, 10));
-	viewer.data().set_mesh(csgMesh.vertices, csgMesh.indices);
+	//lmu::Mesh csgMesh = computeMesh(node, Eigen::Vector3i(50, 50, 50));
+	//viewer.data().set_mesh(csgMesh.vertices, csgMesh.indices);
 
-	auto error = computeDistanceError(csgMesh.vertices, node, node2, true);
-
-	viewer.data().set_colors(error);
-	//auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(100, 100, 100), 0.01, 0.01);
-	//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	//viewer.data().point_size = 0.01;
+	//auto error = computeDistanceError(csgMesh.vertices, node, node2, true);
+	//viewer.data().set_colors(error);
 	
-	//viewer.data().set_points(std::get<0>(data), Eigen::Vector3d(1,1,1));// .leftCols(3), pointCloud.rightCols(3));
-
-	/*for (int i = 0; i < csgMesh.normals.rows(); ++i)
-	{
-		auto x = csgMesh.normals.row(i).x() < 0.0 ? 0.5 : csgMesh.normals.row(i).x();
-		auto y = csgMesh.normals.row(i).y() < 0.0 ? 0.5 : csgMesh.normals.row(i).y();
-		auto z = csgMesh.normals.row(i).z() < 0.0 ? 0.5 : csgMesh.normals.row(i).z();
-				
-		csgMesh.normals.row(i) = Eigen::RowVector3d(x,y,z);		
-	}*/
-
-	//viewer.data.set_colors(csgMesh.normals);
-
-	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;// =
-	//{
-	//	std::make_shared<IFBox>(t, Eigen::Vector3d(0.5,0.5,0.5), "Box_0"),
-	//	std::make_shared<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 1.0, "Cylinder_0")
-	//};
-	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+	auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(40, 40, 40), 0.01, 0.01);
 	
-
-	/*std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
-	while (shapes.size() != 5)
-	{
-		shapes = lmu::ransacWithPCL(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	}*/
+	viewer.data().point_size = 5.0;
 	
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes; 
+	for (const auto& geo : allGeometryNodePtrs(node))	
+		shapes.push_back(geo->function());
+	
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.001, shapes);
+
 	int rows = 0; 
 	for (const auto& shape : shapes)
 	{
@@ -196,15 +132,16 @@ int main(int argc, char *argv[])
 	colors.row(14) = Eigen::Vector3d(.5, .5, .5);
 	colors.row(15) = Eigen::Vector3d(0, 0, 0);
 
-	for (const auto& shape : shapes)
+	
+	for( auto& shape : shapes)
 	{	
-		for (int i = 0; i < shape->points().rows() - 1; ++i)
+		for (int i = 0; i < shape->points().rows(); ++i)
 		{
 			auto row = shape->points().row(i);
 			points.row(j) = row;
-			points.row(j)[3] = colors.row(k % colors.size())[0];
-			points.row(j)[4] = colors.row(k % colors.size())[1];
-			points.row(j)[5] = colors.row(k % colors.size())[2];
+			//points.row(j)[3] = colors.row(k % colors.size())[0];
+			//points.row(j)[4] = colors.row(k % colors.size())[1];
+			//points.row(j)[5] = colors.row(k % colors.size())[2];
 
 			j++;
 		}
@@ -214,115 +151,29 @@ int main(int argc, char *argv[])
 		k++;
 	}
 
-
-	//viewer.data.set_points(points.leftCols(3), points.rightCols(3));
-	//viewer.data.set_mesh(csgMesh.vertices, csgMesh.indices);
-
-	//auto shapes = lmu::ransac(mesh1.vertices, mesh1.normals);
-
-	//lmu::CSGTreeCreator c(shapes, 0.5, 0.7, 5);
-	//c.create(10).write("tree.dot");
-	
-	
-	//std::cout << "COLLIDE: " << lmu::collides(*shapes[0], *shapes[1]) << std::endl;
-
-	//auto graph = lmu::createRandomConnectionGraph(30,0.5);
 	 auto graph = lmu::createConnectionGraph(shapes);
 
 	 lmu::writeConnectionGraph("graph.dot", graph);
 
 	 auto cliques = lmu::getCliques(graph);
 
-	 //if (cliques.size() != 3)
-	 //{
-	 //	 std::cout << "NOT ENOUGH CLIQUES!" << std::endl;
-	//	 int i; 
-	//	 std::cin >> i;
-	 //} 
-
-	//std::cout << "SIZE: " << cliques.size();
-	 //int i; 
-	 //std::cin >> i;
+	 auto cliquesAndNodes = computeNodesForCliques(cliques, graph, ParallelismOptions::PerCliqueParallelism | ParallelismOptions::GAParallelism);
 	
-
-	 //auto tree = lmu::createCSGTreeWithGA(shapes, graph);
-
-	 //auto tree = lmu::createCSGTreeTemplateFromCliques(cliques);
-
-	 //tree.write("tree.dot");
-
-	 //auto cliquesAndNodes = computeNodesForCliques(cliques, graph, ParallelismOptions::PerCliqueParallelism);
-	 
-	 //int i = 0;
-	 //for (auto& can : cliquesAndNodes)
-	 //{
-	 //	 lmu::writeNode(std::get<1>(can), "tree" + std::to_string(i++) + ".dot");
-	 //}
-	 //std::cin >> i;
-	 //return 0;
-	
-	 //lmu::CSGNodeCreator creator(shapes);
-	 //auto node = lmu::createCSGNodeWithGA(shapes, true, graph); //creator.create(3);
-	 
-	 //auto node = mergeCSGNodeCliqueSimple(cliquesAndNodes);
-
-	 //lmu::writeNode(node, "tree.dot");
-
-	 /*try
+	 CSGNode recNode(nullptr);
+	 try
 	 {
-		 //tree.childs[0].childs[0].childs[0].write("tree.dot");
-		 auto treeMesh = node.mesh();
-		 viewer.data.set_mesh(treeMesh.vertices, treeMesh.indices);
+		 recNode = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 	 }
 	 catch (const std::exception& ex)
 	 {
-		 std::cout << "Could not create CSG mesh. Reason: " << ex.what() << std::endl;
-	 }*/
+		 std::cout << "Could not merge. Reason: " << ex.what() << std::endl;
+	 }
 
-	 /*lmu::CSGTree tr3;
-	 tr3.operation = lmu::OperationType::Union;
-	 tr3.functions = { shapes[3], shapes[0] };
+	 writeNode(recNode, "tree.dot");
 
-	 lmu::CSGTree tr2;
-	 tr2.operation = lmu::OperationType::Union;
-	 tr2.functions = { shapes[1], shapes[2] };
-	 
-	 lmu::CSGTree tr1;
-	 tr1.operation = lmu::OperationType::Union;
-	 tr1.childs = { tr2, tr3 };
-
-	 lmu::CSGTree tr0;
-	 tr0.operation = lmu::OperationType::Intersection;
-	 tr0.functions = { shapes[0] };
-	 tr0.childs = { tr1 };
-
-	 int numPoints = 0;
-	 for (const auto& shape : shapes)
-		 numPoints += shape->points().rows();
-	 double lambda = std::log(numPoints);
-	 lmu::CSGTreeRanker ranker(lambda, shapes);
-	 std::cout << "Rank: tr0 " << ranker.rank(tr0) << std::endl;
-	 std::cout << "Rank: tr1 " << ranker.rank(tr1) << std::endl;
-	 */
-	 
-	// auto tree = lmu::createCSGTreeWithGA(shapes);
-	
-	 //tree.write("tree_tmp.dot");
-	
-	//auto tree2 = lmu::CSGTreeCreator(shapes, 0.5, 0.7, 20).create();
-	//tree2.write("tree.dot");
-	
-	//viewer.data.set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	
-	
-	//MatrixXd D(shapes[0]->mesh().vertices.rows() + shapes[0]->points().rows(), shapes[0]->mesh().vertices.cols());
-	//D << shapes[0]->mesh().vertices, shapes[0]->points();
-
-	//viewer.data.set_points(csgMesh.vertices, Eigen::Vector3d(1,1,1));
-	
-	//viewer.data.set_points(shapes[1]->points().leftCols(3), shapes[1]->points().rightCols(3));//Eigen::Vector3d(1, 1, 1));
-
-	
+	 auto treeMesh = computeMesh(recNode, Eigen::Vector3i(50, 50, 50));
+	 viewer.data().set_mesh(treeMesh.vertices, treeMesh.indices);
+	 	
 	//viewer.core. = true;
 	viewer.core.background_color = Eigen::Vector4f(0.3, 0.3, 0.3, 1.0);
 	//viewer.core.point_size = 5.0;

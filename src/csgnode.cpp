@@ -119,49 +119,26 @@ CSGNodePtr DifferenceOperation::clone() const
 {
 	return std::make_shared<DifferenceOperation>(*this);
 }
-/*
-/*
-case OperationType::DifferenceLR:
-
-if (sdsGrads.size() == 2)
-{
-auto sdGrad1 = sdsGrads[0];
-auto sdGrad2 = (-1.0)*sdsGrads[1];
-
-if (sdGrad2[0] > sdGrad1[0])
-res = sdGrad2;
-else
-res = sdGrad1;
-
-//Negate gradient
-res[1] = (-1.0)*res[1];
-res[2] = (-1.0)*res[2];
-res[3] = (-1.0)*res[3];
-}
-else
-{
-std::cout << "Warning: Not exactly two operands for difference operation." << std::endl;
-res[0] = std::numeric_limits<double>::max();
-}
-
-break;
-*/
 Eigen::Vector4d DifferenceOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
 {
-	auto left = _childs[0].signedDistanceAndGradient(p);		
+	auto left = _childs[0].signedDistanceAndGradient(p);
 	auto right = _childs[1].signedDistanceAndGradient(p);
 
-	auto res = left; 
-	res[1] = (-1.0)*res[1];
-	res[2] = (-1.0)*res[2];
-	res[3] = (-1.0)*res[3];
+	Eigen::Vector3d grad;	
+	double value;
 
-	if ((-1.0)*right[0] > res[0])
+	if (left.x() > -right.x())
 	{
-		res = (-1.0) * right;		
+		value = left.x();
+		grad = Eigen::Vector3d(left.y(), left.z(), left.w());
 	}
-
-	return res;
+	else
+	{
+		value = -right.x();
+		grad = Eigen::Vector3d(-right.y(), -right.z(), -right.w());
+	}
+	
+	return Eigen::Vector4d(value, grad.x(), grad.y(), grad.z());
 }
 CSGNodeOperationType DifferenceOperation::operationType() const
 {
@@ -316,7 +293,48 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 	return res;
 }
 
-double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs) 
+std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node);
+
+/*double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs) 
+{
+	auto dims = computeDimensions(node);
+	double maxSize = (std::get<1>(dims) - std::get<0>(dims)).maxCoeff();
+	double score = 0.0;
+	int numPoints = 0;
+
+	for (const auto& func : funcs)
+	{
+		for (int i = 0; i < func->points().rows(); ++i)
+		{
+			auto row = func->points().row(i);
+
+			Eigen::Vector3d p = row.head<3>();
+			Eigen::Vector3d n = row.tail<3>();
+
+			n.normalize();
+
+			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
+
+			double d = distAndGrad[0];// / epsilon;
+
+			Eigen::Vector3d grad = distAndGrad.tail<3>();
+			double minusGradientDotN = lmu::clamp(grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
+			double theta = std::acos(minusGradientDotN) / M_PI;// / alpha;
+		
+			double scoreDelta = lmu::clamp(abs(d) / maxSize, 0.0, 1.0) + theta;
+
+			score += scoreDelta;			
+		}
+
+		numPoints += func->points().rows();
+	}
+
+	//std::cout << "ScoreGeo: " << score << std::endl;
+
+	return 1.0 / (score / 2.0 / (double)numPoints);
+}*/
+
+double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
 {
 	//std::cout << "Compute Geometry Score" << std::endl;
 
@@ -335,7 +353,7 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 			double d = distAndGrad[0] / epsilon;
 
 			Eigen::Vector3d grad = distAndGrad.tail<3>();
-			double minusGradientDotN = lmu::clamp(-grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
+			double minusGradientDotN = lmu::clamp(/*-*/grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
 			double theta = std::acos(minusGradientDotN) / alpha;
 
 			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
@@ -692,7 +710,7 @@ MergeResult lmu::mergeNodes(const LargestCommonSubgraph& lcs)
 	}
 	else
 	{
-		throw MergeResult::None;
+		return MergeResult::None;
 	}
 }
 

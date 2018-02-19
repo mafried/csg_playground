@@ -76,7 +76,7 @@ namespace lmu
 	ParallelismOptions operator|(ParallelismOptions lhs, ParallelismOptions rhs);
 	ParallelismOptions operator&(ParallelismOptions lhs, ParallelismOptions rhs);
 
-	std::vector<GeometryCliqueWithCSGNode> computeNodesForCliques(std::vector<Clique> geometryCliques, const Graph& connectionGraph, ParallelismOptions po);
+	std::vector<GeometryCliqueWithCSGNode> computeNodesForCliques(const std::vector<Clique>& geometryCliques, const Graph& connectionGraph, ParallelismOptions po);
 
 	using CSGNodeClique = std::vector<GeometryCliqueWithCSGNode>;
 

@@ -25,9 +25,11 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 	double geometryScore = computeGeometryScore(node, epsilon, alpha, _functions);
 	//bool isInvalid = _earlyOutTest && treeIsInvalid(node);
 
-	double score = /*isInvalid ?
-		lmu::worstRank :*/ geometryScore  - _lambda * numNodes(node);
+	int maxDepth = 10;
 
+	double score = /*isInvalid ?
+		lmu::worstRank :*/ geometryScore - _lambda * numNodes(node);//* ((double)maxDepth / (double)depth(node));
+	
 	//if (isInvalid)
 	//	std::cout << "EARLY OUT!" << std::endl;
 
@@ -82,7 +84,11 @@ bool lmu::CSGNodeRanker::treeIsInvalid(const lmu::CSGNode& node) const
 	if (node.childs().size() < std::get<0>(numAllowedChilds) || node.childs().size() > std::get<1>(numAllowedChilds))
 		return true;
 
-	//TODO
+	for (const auto& child : node.childsCRef())
+	{
+		if (treeIsInvalid(child))
+			return true;
+	}
 
 	return false; 
 }
@@ -317,8 +323,7 @@ void computeNodesForClique(const Clique& clique, const lmu::Graph& connectionGra
 	else if (clique.functions.size() == 2)
 	{
 		lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(clique.functions), clique.functions);
-		lmu::CSGTreeRanker ranker2(lambdaBasedOnPoints(clique.functions), clique.functions);
-
+		
 		std::vector<CSGNode> candidates;
 
 		CSGNode un(std::make_shared<UnionOperation>("un"));
@@ -341,18 +346,10 @@ void computeNodesForClique(const Clique& clique, const lmu::Graph& connectionGra
 		rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0])));
 		candidates.push_back(rl);
 
-		//CSGTree t1; t1.operation = OperationType::Union; t1.functions = clique.functions;
-		//CSGTree t2; t2.operation = OperationType::Intersection; t2.functions = clique.functions;
-		//CSGTree t3; t3.operation = OperationType::DifferenceLR; t3.functions = clique.functions;
-		//CSGTree t4; t4.operation = OperationType::DifferenceRL; t4.functions = clique.functions;
-		//std::vector<CSGTree> trees = { t1,t2,t3,t4 };
-		//int i = 0;
-
 		double maxScore = -std::numeric_limits<double>::max();
 		const CSGNode* bestCandidate = nullptr;
 		for (const auto& candidate : candidates)
 		{
-
 			double curScore = ranker.rank(candidate);
 			std::cout << candidate.name() << " for " << clique.functions[0]->name() << " " << clique.functions[1]->name() << " rank: " << curScore /*<< " tree rank: " << ranker2.rank( trees[i++]) */ << std::endl;
 
@@ -380,7 +377,7 @@ ParallelismOptions lmu::operator&(ParallelismOptions lhs, ParallelismOptions rhs
 	return static_cast<ParallelismOptions>(static_cast<int>(lhs) & static_cast<int>(rhs));
 }
 
-std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(std::vector<Clique> geometryCliques, const lmu::Graph& connectionGraph, ParallelismOptions po)
+std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(const std::vector<Clique>& geometryCliques, const lmu::Graph& connectionGraph, ParallelismOptions po)
 {
 	std::vector<GeometryCliqueWithCSGNode> res;
 

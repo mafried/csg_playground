@@ -24,7 +24,7 @@ namespace lmu
 		std::vector<std::shared_ptr<ImplicitFunction>> functions;
 	};
 
-	struct Graph : public boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, std::shared_ptr<lmu::ImplicitFunction>>
+	struct  Graph : public boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, std::shared_ptr<lmu::ImplicitFunction>>
 	{
 		std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, vertex_descriptor> vertexLookup;
 	};

@@ -338,6 +338,8 @@ Eigen::Vector4d lmu::IFMeshSupported::signedDistanceAndGradient(const Eigen::Vec
 	Eigen::MatrixXd n, c;
 
 	igl::signed_distance_pseudonormal(points, _mesh.vertices, _mesh.indices, _tree, _fn, _vn, _en, _emap, d, i, c, n);
+		
+	//std::cout << n.rows() << std::endl;
 
 	return Eigen::Vector4d(d(0), n.row(0).x(), n.row(0).y(), n.row(0).z());
 }
