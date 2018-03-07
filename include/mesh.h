@@ -85,6 +85,11 @@ namespace lmu
 			return _points;
 		}
 
+		const Eigen::MatrixXd& pointsCRef()
+		{
+			return _points;
+		}
+
 		void setPoints(const Eigen::MatrixXd& points)
 		{
 			_points = points;
@@ -114,9 +119,10 @@ namespace lmu
 
 	struct IFSphere : public ImplicitFunction 
 	{
-		IFSphere(const Eigen::Affine3d& transform, double radius, const std::string& name) : 
+		IFSphere(const Eigen::Affine3d& transform, double radius, const std::string& name, double displacement = 0.0) : 
 			ImplicitFunction(transform, createSphere(transform, radius, 50, 50), name),
-			_radius(radius)
+			_radius(radius),
+			_displacement(displacement)
 		{
 		}
 
@@ -128,13 +134,17 @@ namespace lmu
 				 (p(2) - _pos(2)) * (p(2) - _pos(2))) -
 				_radius*_radius);
 
+			
+			double d2 = std::sin(_displacement * p.x())*sin(_displacement * p.y())*sin(_displacement * p.z());
+			
+
 			//std::cout << _name << " distance to " << p << ": " << d << std::endl;
 
 			Eigen::Vector3d gradient = (2.0 * (p - _pos));
 			gradient.normalize();
 
 			Eigen::Vector4d res;
-			res << d, gradient;
+			res << (d+d2), gradient;
 
 			return res;
 		}
@@ -156,6 +166,7 @@ namespace lmu
 
 	private: 
 		double _radius;
+		double _displacement;
 	};
 
 	class IFMeshSupported : public ImplicitFunction
@@ -188,6 +199,7 @@ namespace lmu
 			_radius(radius),
 			_height(height)
 		{
+			_invTrans = transform.inverse();
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -200,17 +212,62 @@ namespace lmu
 			return std::make_shared<IFCylinder>(*this);
 		}
 
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		{		
+
+			auto ps = _invTrans * p;
+
+			double delta = 0.001;
+
+			double d = distance(ps);
+			//double d1 = distance(Eigen::Vector3d(ps.x() + delta, ps.y(), ps.z()));
+			//double d2 = distance(Eigen::Vector3d(ps.x(), ps.y() + delta, ps.z()));
+
+			//Eigen::Vector3d v1(ps.x()) + delta, d1
+
+
+			//std::cout << _name << " distance to " << p << ": " << d << std::endl;
+
+			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
+			gradient.normalize();
+
+			Eigen::Vector4d res;
+			res << (d), gradient;
+
+			return res;
+		}
+
+		inline double distance(const Eigen::Vector3d& ps)
+		{
+			double l = Eigen::Vector2d(ps.x(), ps.z()).norm();
+			double dx = std::abs(l) - _height;
+			double dy = std::abs(ps.y()) - _height;
+			return std::max(l - _radius, abs(ps.y()) - _height / 2.0);// std::min(std::max(dx, dy), 0.0) + Eigen::Vector2d(std::max(dx, 0.0), std::max(dy, 0.0)).norm();
+		}
+
+		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
+		{
+			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
+			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
+			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
 	private:
 		double _radius;
 		double _height;
+		Eigen::Affine3d _invTrans;
 	};
 
 	struct IFBox : public IFMeshSupported
 	{
-		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name) :
+		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name, double displacement = 0.0) :
 			IFMeshSupported(transform, createBox(transform, size, numSubdivisions), name),
-			_size(size)
+			_size(size),
+			_displacement(displacement)
 		{
+			_invTrans = transform.inverse();
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -223,8 +280,44 @@ namespace lmu
 			return std::make_shared<IFBox>(*this);
 		}
 
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		{
+			auto ps = _invTrans * p;
+
+			double d = distance(ps);
+		
+			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
+			gradient.normalize();
+
+			Eigen::Vector4d res;
+			res << (d), gradient;
+
+			return res;
+		}
+
+
+		inline double distance(const Eigen::Vector3d& ps)
+		{
+			double d1 = std::max(abs(ps.x()) - _size.x() / 2.0, std::max(abs(ps.y()) - _size.y() / 2.0, abs(ps.z()) - _size.z() / 2.0));
+
+			double d2 = std::sin(_displacement * ps.x())*sin(_displacement * ps.y())*sin(_displacement * ps.z());
+
+			return d1 + d2;			
+		}
+
+		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
+		{
+			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
+			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
+			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
 	private:
 		Eigen::Vector3d _size;
+		Eigen::Affine3d _invTrans;
+		float _displacement;
 	};
 
 	struct IFNull : public ImplicitFunction

@@ -83,6 +83,7 @@ namespace lmu
 		{
 			return _type;
 		}
+
 	protected: 
 		std::string _name;
 		CSGNodeType _type;
@@ -206,6 +207,17 @@ namespace lmu
 	};
 
 	
+	// =================================================================================== Standard Methods ===================================================================================
+
+	class CSGNode;
+
+	int depth(const CSGNode& node, int curDepth = 0);
+	int numNodes(const CSGNode& node);
+	int numPoints(const CSGNode& node);
+	CSGNode* nodePtrAt(CSGNode& node, int idx);
+	int depthAt(const CSGNode& node, int idx);
+	std::vector<CSGNodePtr> allGeometryNodePtrs(const CSGNode& node);
+	
 	class CSGNode : public ICSGNode 
 	{
 	public:
@@ -229,49 +241,64 @@ namespace lmu
 			return *this;
 		}
 
-		virtual CSGNodePtr clone() const override
+		inline virtual CSGNodePtr clone() const override final
 		{
 			return _node->clone();
 		}
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override
+		inline virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override final
 		{
 			return _node->signedDistanceAndGradient(p);
 		}
 
-		virtual std::string name() const override
+		inline virtual std::string name() const override final
 		{
 			return _node->name(); 
 		}
 
-		virtual CSGNodeType type() const override
+		inline virtual CSGNodeType type() const override final
 		{
 			return _node->type();
 		}
 
-		virtual CSGNodeOperationType operationType() const override
+		inline virtual CSGNodeOperationType operationType() const override final
 		{
 			return _node->operationType();
 		}
 
-		virtual std::vector<CSGNode> childs() const override
+		inline virtual std::vector<CSGNode> childs() const override final
 		{
 			return _node->childs();
 		}
 
-		virtual bool addChild(const CSGNode& child) override
+		inline virtual bool addChild(const CSGNode& child) override final
 		{
 			return _node->addChild(child);
 		}
 
-		virtual std::tuple<int,int> numAllowedChilds() const override
+		inline virtual std::tuple<int,int> numAllowedChilds() const override final
 		{
 			return _node->numAllowedChilds();
 		}
 
-		virtual ImplicitFunctionPtr function() const override
+		inline virtual ImplicitFunctionPtr function() const override final
 		{
 			return _node->function();
+		}
+
+		inline virtual Mesh mesh() const override final
+		{
+			return _node->mesh();
+		}
+
+		inline virtual const std::vector<CSGNode>& childsCRef() const override final
+		{
+			return _node->childsCRef();
+		}
+
+		inline virtual std::vector<CSGNode>& childsRef() override final
+		{
+			return _node->childsRef();
 		}
 
 		CSGNodePtr nodePtr() const
@@ -279,19 +306,25 @@ namespace lmu
 			return _node;
 		}
 
-		virtual Mesh mesh() const override
+		std::string info() const 
 		{
-			return _node->mesh();
-		}
+			std::stringstream ss;
 
-		virtual const std::vector<CSGNode>& childsCRef() const override
-		{
-			return _node->childsCRef();
-		}
+			auto functions = allGeometryNodePtrs(*this);
 
-		virtual std::vector<CSGNode>& childsRef() override
-		{
-			return _node->childsRef();
+			ss << "# Num nodes: " << numNodes(*this) << std::endl;
+			ss << "# Depth: " << depth(*this) << std::endl;
+			ss << "# Functions: " << functions.size() << std::endl;
+			int totalNumPoints = 0;
+			for (const auto& f : functions)
+			{
+				int numPoints = f->function()->pointsCRef().rows();
+				totalNumPoints += numPoints;
+				ss << "#    function '" << f->name() << "' type: " << iFTypeToString(f->function()->type()) << " #points: " << numPoints << std::endl;
+			}
+			ss << "# Num points: " << totalNumPoints << std::endl;
+
+			return ss.str();
 		}
 
 	private: 
@@ -342,32 +375,8 @@ namespace lmu
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
 	};
-
-	/*class DifferenceRLOperation : public CSGNodeOperation
-	{
-	public:
-		DifferenceRLOperation(const std::string& name, const std::vector<CSGNode>& childs = {}) :
-			CSGNodeOperation(name, childs)
-		{
-		}
-
-		virtual CSGNodePtr clone() const override;
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
-		virtual CSGNodeOperationType operationType() const override;
-		virtual std::tuple<int, int> numAllowedChilds() const override;
-		virtual Mesh mesh() const override;
-	};*/
-
-	// =================================================================================== Methods ===================================================================================
-
+	
 	CSGNode createOperation(CSGNodeOperationType type, const std::string& name = std::string(), const std::vector<CSGNode>& childs = {});
-
-	int depth(const CSGNode& node, int curDepth = 0);
-	int numNodes(const CSGNode& node);
-	int numPoints(const CSGNode& node);
-	CSGNode* nodePtrAt(CSGNode& node, int idx);
-	int depthAt(const CSGNode& node, int idx);	
-	std::vector<CSGNodePtr> allGeometryNodePtrs(const CSGNode& node);
 
 	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
 
@@ -437,9 +446,7 @@ namespace lmu
 	};
 
 	MergeResult mergeNodes(const LargestCommonSubgraph& lcs);
-
-
-
+	
 	Mesh computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), 
 		const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
@@ -447,7 +454,6 @@ namespace lmu
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
-
 }
 
 #endif

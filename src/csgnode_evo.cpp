@@ -2,6 +2,8 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <boost/dynamic_bitset.hpp>
+#include <boost/graph/adjacency_list.hpp>
 
 using namespace lmu;
 
@@ -17,44 +19,16 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {
 	const double alpha = M_PI / 18.0;
 	const double epsilon = 0.01;
-
-	//lmu::writeNode(node, "tree_tmp.dot");
-	
-	//std::cout << "Start Geom Score" << std::endl;
-
+		
 	double geometryScore = computeGeometryScore(node, epsilon, alpha, _functions);
-	//bool isInvalid = _earlyOutTest && treeIsInvalid(node);
 
-	int maxDepth = 10;
-
-	double score = /*isInvalid ?
-		lmu::worstRank :*/ geometryScore - _lambda * numNodes(node);//* ((double)maxDepth / (double)depth(node));
-	
-	//if (isInvalid)
-	//	std::cout << "EARLY OUT!" << std::endl;
-
-
-	//if (_earlyOutTest && treeIsInvalid(tree))
-	//	score = 0.0;
-
-	std::cout << "lambda: " << _lambda << std::endl;
-	std::cout << "geometry score: " << geometryScore << std::endl;
-
-	//std::cout << "NODE SIZE: " << lmu::numNodes(node) << std::endl;
-
-	//int i;
-	//std::cin >> i;
-
-
-	//std::cout << "size score: " << tree.sizeWithFunctions() << std::endl;
-	//std::cout << "score: " << score << std::endl;
-
-	//Important check. If not done, trees with a poor geometry score (lower than size penalty term)
-	//Have a negative score which always outperforms more decent scores.
-	//if (score < 0)
-	//	score = 0;
-
-	return score;//1.0 / (1.0 + score);
+	double score = geometryScore - _lambda * numNodes(node);
+		
+	//std::cout << "lambda: " << _lambda << std::endl;
+	//std::cout << "geometry score: " << geometryScore << std::endl;
+		
+		
+	return score;
 }
 
 std::string lmu::CSGNodeRanker::info() const
@@ -64,33 +38,72 @@ std::string lmu::CSGNodeRanker::info() const
 	return ss.str();
 }
 
-bool funcsDoConnect(const std::vector< std::shared_ptr<lmu::ImplicitFunction>>& funcs, const std::shared_ptr<lmu::ImplicitFunction>& func, const lmu::Graph& connectionGraph)
+boost::dynamic_bitset<> getFunctionConnectionBitfield(const std::shared_ptr<lmu::ImplicitFunction>& func, const lmu::Graph& connectionGraph, const std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, int>& funcToIdx, int bitfieldSize)
 {
-	for (auto& f : funcs)
-	{
-		auto v1 = connectionGraph.vertexLookup.at(f);
-		auto v2 = connectionGraph.vertexLookup.at(func);
+	boost::dynamic_bitset<> bf(bitfieldSize);
 
-		if (boost::edge(v1, v2, connectionGraph).second)
-			return true;
+	//Go through all adjacent nodes of the node holding func and mark them in the bitfield as connected.
+	boost::graph_traits<Graph>::adjacency_iterator  neighbour, neighbourEnd;
+	for (boost::tie(neighbour, neighbourEnd) = boost::adjacent_vertices(connectionGraph.vertexLookup.at(func), connectionGraph); neighbour != neighbourEnd; ++neighbour)	
+		bf.set(funcToIdx.at(connectionGraph[*neighbour]), true);	
 
-	}
-	return false;
+	return bf;
 }
 
-bool lmu::CSGNodeRanker::treeIsInvalid(const lmu::CSGNode& node) const
+bool treeIsInvalidRec(const lmu::CSGNode& node, boost::dynamic_bitset<>& bf, const Graph& connectionGraph, const std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, int>& funcToIdx)
 {
 	auto numAllowedChilds = node.numAllowedChilds();
 	if (node.childs().size() < std::get<0>(numAllowedChilds) || node.childs().size() > std::get<1>(numAllowedChilds))
 		return true;
 
-	for (const auto& child : node.childsCRef())
+	if (node.type() == CSGNodeType::Operation)
+	{	
+		boost::dynamic_bitset<> lastBF(bf.size());
+		static boost::dynamic_bitset<> emptyBF(bf.size());
+
+		bool firstRun = true; 
+
+		for (const auto& child : node.childsCRef())
+		{
+			boost::dynamic_bitset<> childBF(bf.size());
+
+			if (treeIsInvalidRec(child, childBF, connectionGraph, funcToIdx))
+				return true;
+						
+			if ((childBF & lastBF) == emptyBF && !firstRun)
+				return true; 
+
+			firstRun = false;
+			lastBF = childBF;		
+
+			bf |= lastBF;
+		}		
+	}
+	else
 	{
-		if (treeIsInvalid(child))
-			return true;
+		bf = getFunctionConnectionBitfield(node.function(), connectionGraph, funcToIdx, bf.size());
 	}
 
-	return false; 
+	return false;
+}
+
+bool lmu::CSGNodeRanker::treeIsInvalid(const lmu::CSGNode& node) const
+{
+	//Check if all functions were used in the tree.
+	std::unordered_set<std::shared_ptr<lmu::ImplicitFunction>> usedFuncs; 
+	for (auto const& func : allGeometryNodePtrs(node))
+		usedFuncs.insert(func->function());
+
+	if (usedFuncs.size() != _functions.size())
+		return true;
+
+	//Check if subtrees have overlapping functions sets.
+	boost::dynamic_bitset<> bf(_functions.size());
+	std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, int> funcToIdx;
+	for (int i = 0; i < _functions.size(); ++i)
+		funcToIdx[_functions[i]] = i;
+
+	return treeIsInvalidRec(node, bf, _connectionGraph, funcToIdx);
 }
 
 CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb, double subtreeProb, int maxTreeDepth, const Graph& connectionGraph) :
@@ -279,7 +292,31 @@ double lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes)
 	return std::log(numPoints);
 }
 
-lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, bool inParallel, const lmu::Graph& connectionGraph)
+long long binom(int n, int k)
+{
+	long long ans = 1;
+	k = k>n - k ? n - k : k;
+	int j = 1;
+	for (; j <= k; j++, n--)
+	{
+		if (n%j == 0)
+		{
+			ans *= n / j;
+		}
+		else
+			if (ans%j == 0)
+			{
+				ans = ans / j*n;
+			}
+			else
+			{
+				ans = (ans*n) / j;
+			}
+	}
+	return ans;
+}
+
+lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, bool inParallel, const lmu::Graph& connectionGraph, const std::string& statsFile)
 {
 	lmu::CSGNodeGA ga;
 	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.3, inParallel);
@@ -287,38 +324,43 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	lmu::CSGNodeTournamentSelector s(2, true);
 
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(10, 0.01,500);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(10, 0.01,1000);
 
+	int maxDepth =(int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph) > 0 ? boost::num_edges(connectionGraph) : binom(shapes.size(),2)) * M_PI));
+	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
 
-	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, 10, connectionGraph);
+	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, maxDepth, connectionGraph);
 
 	double lambda = lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 
 	lmu::CSGNodeRanker r(lambda, shapes, connectionGraph);
 
-	auto task = ga.runAsync(p, s, c, r, isc);
+	//auto task = ga.runAsync(p, s, c, r, isc);
 
 	//int i;
 	//std::cin >> i;
 
 	//ga.stop();
 
-	auto res = task.get();
+	auto res = ga.run(p, s, c, r, isc);// task.get();
 
-	res.statistics.save("stats.dat");
+	res.statistics.save(statsFile, &res.population[0].creature);
 	return res.population[0].creature;
 }
 
-void computeNodesForClique(const Clique& clique, const lmu::Graph& connectionGraph, bool gAInParallel, std::vector<GeometryCliqueWithCSGNode>& res)
+std::tuple<long long, double> computeNodesForClique(const Clique& clique, bool gAInParallel, std::vector<GeometryCliqueWithCSGNode>& res)
 {
+	TimeTicker ticker; 
+	double score = 0.0;
+
 	if (clique.functions.empty())
 	{
-		return;
+		return std::make_tuple(0, 0.0);
 	}
 	else if (clique.functions.size() == 1)
 	{
-		res.push_back(std::make_tuple(clique, CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0]))));
+		res.push_back(std::make_tuple(clique, CSGNode(std::make_shared<CSGNodeGeometry>(clique.functions[0]))));		
 	}
 	else if (clique.functions.size() == 2)
 	{
@@ -360,12 +402,19 @@ void computeNodesForClique(const Clique& clique, const lmu::Graph& connectionGra
 			}
 		}
 
+		score = maxScore;
 		res.push_back(std::make_tuple(clique, *bestCandidate));
 	}
 	else
 	{
-		res.push_back(std::make_tuple(clique, createCSGNodeWithGA(clique.functions, gAInParallel, connectionGraph)));
+		std::stringstream ss; 
+		ss << clique << ".dat";
+		score = 666.0;
+
+		res.push_back(std::make_tuple(clique, createCSGNodeWithGA(clique.functions, gAInParallel, Graph(), ss.str())));
 	}
+
+	return std::make_tuple(ticker.tick(), score);
 }
 
 ParallelismOptions lmu::operator|(ParallelismOptions lhs, ParallelismOptions rhs)
@@ -377,12 +426,14 @@ ParallelismOptions lmu::operator&(ParallelismOptions lhs, ParallelismOptions rhs
 	return static_cast<ParallelismOptions>(static_cast<int>(lhs) & static_cast<int>(rhs));
 }
 
-std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(const std::vector<Clique>& geometryCliques, const lmu::Graph& connectionGraph, ParallelismOptions po)
+std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(const std::vector<Clique>& geometryCliques, ParallelismOptions po)
 {
 	std::vector<GeometryCliqueWithCSGNode> res;
 
 	bool cliquesParallel = (po & ParallelismOptions::PerCliqueParallelism) == ParallelismOptions::PerCliqueParallelism;
 	bool gAParallel = (po & ParallelismOptions::GAParallelism) == ParallelismOptions::GAParallelism;
+
+	std::ofstream f("clique_info.dat");
 	
 	if (cliquesParallel)
 	{
@@ -394,22 +445,35 @@ std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(const std::ve
 		{
 #pragma omp master  
 			{
-				std::cout << "OpenMP is running with " << omp_get_num_threads() << " threads." << std::endl;
+				f << "OpenMP is running with " << omp_get_num_threads() << " threads." << std::endl;
 			}
 #pragma omp for
 			for (int i = 0; i < geometryCliques.size(); ++i)
 			{
-				computeNodesForClique(geometryCliques[i], connectionGraph, gAParallel, res);
+				f << "Clique " << (i + 1) << " of " << geometryCliques.size() << " is started" << geometryCliques[i] << std::endl;
+							
+				auto stats = computeNodesForClique(geometryCliques[i], gAParallel, res);
+				f << "Timing: " << std::get<0>(stats) << " Score: " << std::get<1>(stats) << std::endl;
+
+				f << geometryCliques[i] << " done." << std::endl;
 			}
 		}
 	}
 	else
 	{
+		int i = 1;
 		for (const auto& clique : geometryCliques)
 		{
-			computeNodesForClique(clique, connectionGraph, gAParallel, res);
+			f << "Clique " << (i++) << " of " << geometryCliques.size() << " is started: " << clique << std::endl;
+
+			auto stats = computeNodesForClique(clique, gAParallel, res);
+			f << "Timing: " << std::get<0>(stats) << " Score: " << std::get<1>(stats) << std::endl;
+
+			f << clique << " done." << std::endl;
 		}
 	}
+
+	f.close();
 
 	return res;
 }
@@ -435,17 +499,47 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 		auto n2 = candidateList.front();
 		candidateList.pop_front();
 		
-		switch (mergeNodes(findLargestCommonSubgraph(*n1, *n2)))
+		LargestCommonSubgraph lcs(n1, n2, {}, {}, 0);
+		
+		while (true)
+		{
+			lcs = findLargestCommonSubgraph(*n1, *n2);
+
+			std::stringstream ss;
+			ss << serializeNode(*n1);
+
+			std::stringstream ss2;
+			ss2 << serializeNode(*n2);
+
+			std::cout << "Candidates: " << ss.str() << " ## " << ss2.str() << " Node: " << (lcs.n1Appearances.empty() ? "No Appearance" : lcs.n1Appearances[0]->name()) << std::endl;
+
+			if (!lcs.isEmptyOrInvalid())
+			{
+				break;
+			}
+			else
+			{
+				candidateList.push_back(n2);
+
+				n2 = candidateList.front();
+				candidateList.pop_front();
+			}
+		}
+
+		switch (mergeNodes(lcs))
 		{
 		case MergeResult::First: 
+			std::cout << "Merged with first" << std::endl;
 			candidateList.push_front(n1);
 			break;
 		case MergeResult::Second:
+			std::cout << "Merged with second" << std::endl;
 			candidateList.push_front(n2);
 			break;
 		case MergeResult::None:
+			std::cout << "Not merged" << std::endl;
 			candidateList.push_back(n1);
-			candidateList.push_back(n2);
+			candidateList.push_back(n2);			
 			break;
 		}
 	}

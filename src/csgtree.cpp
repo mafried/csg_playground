@@ -63,6 +63,11 @@ std::string lmu::opTypeToString(OperationType type)
 	}
 }
 
+std::string lmu::info(const lmu::CSGTree & tree)
+{
+	return std::string();
+}
+
 lmu::CSGTree lmu::createCSGTreeTemplateFromCliques(std::vector<lmu::Clique>& cliques)
 {
 	//Fill implicit function => clique lookup, fill clique graph.

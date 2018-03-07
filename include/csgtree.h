@@ -113,7 +113,14 @@ namespace lmu
 		int sizeWithFunctions() const;
 
 		std::vector<std::shared_ptr<ImplicitFunction>> functionsRecursively() const;
+
+		std::string info() const
+		{
+			return std::string();
+		}
 	};  
+
+	std::string info(const lmu::CSGTree& tree);
 
 	lmu::CSGTree createCSGTreeTemplateFromCliques(std::vector<lmu::Clique>& cliques);
 	lmu::CSGTree createCSGTreeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::Graph& connectionGraph = lmu::Graph());

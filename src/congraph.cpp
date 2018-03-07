@@ -7,6 +7,15 @@
 #include "boost/graph/graphviz.hpp"
 #include "boost/graph/bron_kerbosch_all_cliques.hpp"
 
+std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
+{
+	os << "Clique#";
+	for (const auto& f : c.functions)
+		os << f->name() << " ";
+	os << "#";
+	return os;
+}
+
 lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs)
 {
 	Graph graph;

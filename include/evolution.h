@@ -10,10 +10,13 @@
 #include <atomic>
 #include <future>
 #include <chrono>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 
 #include "csgtree.h"
+
+#include <omp.h>
 
 namespace lmu
 {
@@ -53,15 +56,22 @@ namespace lmu
 				using parm_t = decltype(d)::param_type;
 
 				bool firstRun = true;
-				int best = 0;
+				int best = 0;				
 				for (int i = 0; i < _k; ++i)
 				{
 					int idx = d(_rndEngine, parm_t{ 0, (int)population.size() - 1 });
-					while (firstRun && _dropWorstPossible && population[idx].rank == lmu::worstRank)
-					{
-						std::cout << "Dropped from tournament." << std::endl;
-						idx = d(_rndEngine, parm_t{ 0, (int)population.size() - 1 });
-					}
+
+					//while (_dropWorstPossible && population[idx].rank == lmu::worstRank)
+					//{
+					//	std::cout << "Dropped from tournament." << std::endl;
+					//	idx = d(_rndEngine, parm_t{ 0, (int)population.size() - 1 });
+					//
+					//	if (dropWorstCounter++ > population.size())
+					//	{
+					//		dropWorstCounter = 0;
+					//		break;
+					//	}
+					//}
 					if (firstRun || population[idx].rank > population[best].rank)
 					{					
 						firstRun = false;
@@ -212,8 +222,7 @@ namespace lmu
 				numMutations(0),
 				numMutationTries(0),
 				numCrossovers(0),
-				numCrossoverTries(0),
-				duration(0)
+				numCrossoverTries(0)	
 			{
 			}
 
@@ -225,22 +234,14 @@ namespace lmu
 			double deltaBestScores;
 			double deltaWorstScores;
 			std::vector<double> bestCandidateScores;
-			std::vector<double> worstCandidateScores;
 
-			long duration;
-			std::chrono::high_resolution_clock::time_point time;
-			void durationTick()
-			{
-				if (time != std::chrono::high_resolution_clock::time_point())
-				{
-					duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - time).count();
-					time = std::chrono::high_resolution_clock::time_point();
-				}
-				else
-				{
-					time = std::chrono::high_resolution_clock::now();
-				}
-			}
+			std::vector<double> worstCandidateScores;
+			std::vector<long long> rankingDurations;
+			std::vector<long long> sortingDurations;
+
+			std::vector<long long> scmDurations;
+		
+			TimeTicker totalDuration, iterationDuration;
 
 			void update()
 			{
@@ -257,15 +258,18 @@ namespace lmu
 				std::cout << "--- Iteration Statistics ---" << std::endl;
 				std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
 				std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
-				std::cout << "Score Delta Best: " << deltaBestScores << " Worst: " << deltaWorstScores << std::endl;
-				std::cout << "Duration: " << duration << std::endl;
+				std::cout << "Score Delta Best: " << deltaBestScores << " Worst: " << deltaWorstScores << std::endl;				
 			}
 
-			void save(const std::string& file)
+			void save(const std::string& file, const Creature* bestCreature = nullptr)
 			{
 				std::cout << "Save statistics to file " << file << "." << std::endl;
 
 				std::ofstream fs(file);
+
+				auto end = std::chrono::system_clock::now();
+				std::time_t end_time = std::chrono::system_clock::to_time_t(end);
+				fs << "# Time: " << std::ctime(&end_time);
 
 				std::istringstream iss(info);
 				std::string line;
@@ -273,15 +277,21 @@ namespace lmu
 				{
 					fs << "# " << line << std::endl;
 				}
+				
+				fs << "# Duration: " << totalDuration.current << std::endl;
 
-				fs << "# Duration: " << duration << std::endl;
+				if (bestCreature)
+				{
+					fs << "# Best Candidate: " << std::endl;
 
-				fs << "# iteration    best candidate score    worst candidate score" << std::endl;
+					fs << bestCreature->info() << std::endl;
+
+					fs << "# iteration    best candidate score    worst candidate score    ranking durations    sorting durations    scm durations" << std::endl;
+				}
 
 				for (int i = 0; i < bestCandidateScores.size(); ++i)
 				{
-					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[0] << std::endl;
-				
+					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
 				}
 
 				fs.close();
@@ -339,9 +349,7 @@ namespace lmu
 		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, StopCriterion& stopCriterion) const
 		{
 			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion));
-
-			stats.durationTick();
-
+	
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
 			std::cout << "Random population with " << population.size() << " creatures was created." << std::endl;
@@ -349,41 +357,42 @@ namespace lmu
 			int iterationCount = 0;
 			_stopRequested.store(false);
 
-			while (!stopCriterion.shouldStop(population, iterationCount) && !_stopRequested.load())
+			while (!stopCriterion.shouldStop(population, iterationCount) && !_stopRequested.load())			
 			{
 				std::cout << "Start iteration " << std::endl;
+				stats.iterationDuration.reset();
+				
+				rankPopulation(population, ranker, params.rankingInParallel);
+				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 
-				rankAndSortPopulation(population, ranker, params.rankingInParallel);
-
-				std::cout << "Best: " << population.front().rank << " Worst: " << population.back().rank << std::endl;
+				sortPopulation(population);
+				stats.sortingDurations.push_back(stats.iterationDuration.tick());
+				
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
-				//population.front().creature.write("tree_tmp.dot");
-
 				auto newPopulation = getNBestParents(population, params.numBestParents);
 
 				while (newPopulation.size() < params.populationSize)
 				{
 					auto parent1 = parentSelector.selectFrom(population);
 					auto parent2 = parentSelector.selectFrom(population);
-
-					auto offspring = crossover(parent1, parent2, params.crossoverRate, creator, stats);
-					
+									
+					auto offspring = crossover(parent1, parent2, params.crossoverRate, creator, stats);					
+				
 					newPopulation.push_back(mutate(offspring[0], params.mutationRate, creator, stats));
 					newPopulation.push_back(mutate(offspring[1], params.mutationRate, creator, stats));
 				}
+				stats.scmDurations.push_back(stats.iterationDuration.tick());
 				
 				population = newPopulation; 
-
 				stats.update();
 				stats.print();
-
 				iterationCount++;
 			}
 
-			stats.durationTick();
-			
+			stats.totalDuration.tick();
+						
 			return Result(population, stats);
 		}
 
@@ -453,7 +462,7 @@ namespace lmu
 			return population;
 		}
 
-		std::vector<RankedCreature> rankAndSortPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel = false) const 
+		void rankPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel = false) const 
 		{
 			std::cout << "Rank population." << std::endl;
 						
@@ -466,19 +475,19 @@ namespace lmu
 				throw std::runtime_error("Cliques should run in parallel but OpenMP is not available.");
 #endif
 
-#pragma omp parallel for
+#pragma omp parallel for				
 				for (int i = 0; i < population.size(); ++i)
-				{
+				{					
 					population[i].rank = ranker.rank(population[i].creature);
 				}
 			}
 			else
 			{
 				for (auto& c : population)
-				{
+				{				
 					c.rank = ranker.rank(c.creature);
 					//minRank = minRank < c.rank ? minRank : c.rank;
-					//maxRank = maxRank > c.rank ? maxRank : c.rank;
+					//maxRank = maxRank > c.rank ? maxRank : c.rank;				
 				}
 			}
 
@@ -486,16 +495,20 @@ namespace lmu
 			//for (auto& c : population)			
 			//	c.rank = (c.rank - minRank) / (maxRank - minRank);
 			
+			
+
+		}
+
+		void sortPopulation(std::vector<RankedCreature>& population) const
+		{
 			std::cout << "Sort population." << std::endl;
 
 			//sort by rank
 			std::sort(population.begin(), population.end(),
 				[](const RankedCreature& a, const RankedCreature& b) -> bool
 			{
-				return a.rank > b.rank; 
+				return a.rank > b.rank;
 			});
-
-			return population;
 		}
 
 		mutable std::default_random_engine _rndEngine;

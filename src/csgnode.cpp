@@ -612,8 +612,8 @@ LargestCommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2)
 	getSubgraphsRec(n1, n1Subgraphs);
 	getSubgraphsRec(n2, n2Subgraphs);
 
-	printSubgraphMap(n1Subgraphs);
-	printSubgraphMap(n2Subgraphs);
+	//printSubgraphMap(n1Subgraphs);
+	//printSubgraphMap(n2Subgraphs);
 	
 	LargestCommonSubgraph lgs(&n1, &n2, {}, {}, 0);
 
