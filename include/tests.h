@@ -139,7 +139,8 @@ TEST(CSGNodeTest)
 	};
 
 	auto mergedNode = mergeCSGNodeCliqueSimple(clique);
-	
+	writeNode(mergedNode, "test.dot");
+
 	std::stringstream ss;
 	ss << serializeNode(mergedNode);
 	
@@ -209,8 +210,6 @@ TEST(CSGNodeTest)
 	};
 
 	mergedNode = mergeCSGNodeCliqueSimple(clique);
-
-	writeNode(mergedNode, "test.dot");
 }
 
 #endif

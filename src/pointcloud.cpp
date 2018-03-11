@@ -29,7 +29,7 @@ void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 	}
 }
 
-Eigen::MatrixXd lmu::readPointCloud(const std::string& file)
+Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
 {
 	std::ifstream s(file);
 	
@@ -50,6 +50,10 @@ Eigen::MatrixXd lmu::readPointCloud(const std::string& file)
 		{
 			double v; 
 			s >> v;
+
+			if (j < 3)
+				v = v * scaleFactor;
+
 			points(i,j) = v;
 		}
 	}

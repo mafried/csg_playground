@@ -751,6 +751,8 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 		auto dims = computeDimensions(node);
 		min = std::get<0>(dims);
 		max = std::get<1>(dims);
+
+		std::cout << "Min: " << min << " Max: " << max << std::endl;
 	}
 	else
 	{
@@ -781,6 +783,9 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 				samplingPoints.row(idx) = samplingPoint;
 
 				samplingValues(idx) = node.signedDistanceAndGradient(samplingPoint)(0);
+
+				//if(samplingValues(idx)  < 0)
+				//	std::cout << samplingValues(idx) << std::endl;
 			}
 		}
 	}

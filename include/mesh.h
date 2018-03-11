@@ -346,6 +346,135 @@ namespace lmu
 		double _radius;
 		double _height;
 	};
+
+	static double compute_dot_product(double v1[], double v2[]) {
+		return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+	}
+
+	static double compute_norm2(double v[]) {
+		return sqrt(compute_dot_product(v, v));
+	}
+
+	struct IFCylinder2 : public ImplicitFunction
+	{
+		IFCylinder2(const std::string& name, const std::vector<double>& parameters) :
+			ImplicitFunction(Eigen::Affine3d::Identity(), lmu::Mesh(), name),
+			_parameters(parameters)
+		{
+		}
+
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		{
+			double d = distance(p);
+
+			Eigen::Vector3d gradient = gradientPerCentralDifferences(p, 0.001);
+			gradient.normalize();
+
+			Eigen::Vector4d res;
+			res << (d), gradient;
+
+			return res;
+		}
+
+		inline double distance(const Eigen::Vector3d& p)
+		{
+			double axis_dir[] = { _parameters[0], _parameters[1], _parameters[2] };
+			double axis_pos[] = { _parameters[3], _parameters[4], _parameters[5] };
+			double radius = _parameters[6];
+			double diff[] = { p.x() - axis_pos[0], p.y() - axis_pos[1], p.z() - axis_pos[2] };
+			double lamb = compute_dot_product(axis_dir, diff);
+			double v[] = { diff[0] - lamb*axis_dir[0], diff[1] - lamb*axis_dir[1],
+				diff[2] - lamb*axis_dir[2] };
+			double axis_dist = compute_norm2(v);
+			double d = axis_dist - radius;
+			
+			return -d; //???
+		}
+
+		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
+		{
+			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
+			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
+			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
+		virtual ImplicitFunctionType type() const override
+		{
+			return ImplicitFunctionType::Cylinder;
+		}
+
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFCylinder2>(*this);
+		}
+
+	private:
+		std::vector<double> _parameters;
+	};
+
+	struct IFBox2 : public ImplicitFunction
+	{
+		IFBox2(const std::string& name, const std::vector<double>& parameters) :
+			ImplicitFunction(Eigen::Affine3d::Identity(), lmu::Mesh(), name),
+			_parameters(parameters)
+		{
+		}
+
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		{
+			double d = distance(p);
+
+			Eigen::Vector3d gradient = gradientPerCentralDifferences(p, 0.001);
+			gradient.normalize();
+
+			Eigen::Vector4d res;
+			res << (d), gradient;
+
+			return res;
+		}
+
+		inline double distance(const Eigen::Vector3d& p)
+		{
+			double xmin = _parameters[0];
+			double xmax = _parameters[1];
+			double ymin = _parameters[2];
+			double ymax = _parameters[3];
+			double zmin = _parameters[4];
+			double zmax = _parameters[5];
+
+			double xtmp = std::min(p.x() - xmin, xmax - p.x());
+			double ytmp = std::min(p.y() - ymin, ymax - p.y());
+			double ztmp = std::min(p.z() - zmin, zmax - p.z());
+
+			return std::min(xtmp, std::min(ytmp, ztmp));
+		}
+
+		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
+		{
+			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
+			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
+			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
+		virtual ImplicitFunctionType type() const override
+		{
+			return ImplicitFunctionType::Box;
+		}
+
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFBox2>(*this);
+		}
+
+	private:
+		std::vector<double> _parameters;
+	};
+
+	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file);
 }
 
 #endif

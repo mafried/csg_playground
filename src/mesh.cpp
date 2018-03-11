@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <iostream>
+#include <fstream>
 #include <cmath>
 
 #include <igl/readOBJ.h>
@@ -85,12 +86,17 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	mesh.transform = transform;
 
+	std::cout << "Before:" << std::endl;
+	std::cout << mesh.vertices << std::endl;
+
 	lmu::transform(mesh);
 
 	Mesh upsampledMesh;// = mesh;
 
 	igl::upsample(mesh.vertices, mesh.indices, upsampledMesh.vertices, upsampledMesh.indices, numSubdivisions);
 
+	std::cout << "After:" << std::endl;
+	std::cout << mesh.vertices << std::endl;
 
 	//Eigen::MatrixXd fn; 
 	//igl::per_face_normals(upsampledMesh.vertices, upsampledMesh.indices, fn);
@@ -326,6 +332,65 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 	default:
 		return "Undefined Type";
 	}
+}
+
+Eigen::Matrix3d rotationMatrixFrom(const Eigen::Vector3d& x, Eigen::Vector3d& y)
+{	
+	Eigen::Matrix3d m;
+	m.col(0) = x.normalized();
+	m.col(2) = x.cross(y).normalized();
+	m.col(1) = m.col(2).cross(x).normalized();
+
+	return m;
+}
+
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string & file)
+{
+	std::ifstream s(file);
+	
+	int cylCount = 0; 
+	int boxCount = 0;
+	std::vector<std::shared_ptr<ImplicitFunction>> res;
+
+	while (!s.eof())
+	{
+		std::string type;
+		s >> type; 
+		
+		std::cout << "Type: " << type << std::endl;
+
+		if (type == "cylinder")
+		{		
+			double x, y, z, ax, ay, az, radius, height;
+			s >> ax >> ay >> az >> x >> y >> z >> radius >> height;
+
+			Eigen::Translation3d t(x, z + height / 2, y  );
+			Eigen::AngleAxisd r(M_PI / 2 , Eigen::Vector3d(1,0,0));
+			//Eigen::Matrix3d r = rotationMatrixFrom(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(ax,ay,az));
+
+			//std::vector<double> params = { x,y,z,ax,ay,az,radius, height };
+
+			res.push_back(std::make_shared<IFCylinder>((Eigen::Affine3d)r*t,radius, height, "Cylinder" + std::to_string(cylCount++)));
+		}
+		else if (type == "box")
+		{
+			double xmin, ymin, zmin, xmax, ymax, zmax;
+			s >> xmin >> xmax >> ymin >> ymax >> zmin >> zmax;
+
+			Eigen::Translation3d t(xmin + (xmax-xmin) * 0.5, ymin + (ymax - ymin) * 0.5, zmin + (zmax - zmin) * 0.5);
+					
+			std::cout << "BOX: " << xmin + (xmax - xmin) * 0.5 << " " << ymin + (ymax - ymin) * 0.5 << " " << zmin + (zmax - zmin) * 0.5 << std::endl;
+			
+			std::cout << ymax << " min: " << ymin << std::endl;
+			//std::cout << xmin << ymin << zmin << "Max: " << xmax << ymax << zmax << std::endl;
+
+			std::vector<double> params = { xmin, ymin, zmin, xmax, ymax, zmax };
+
+			res.push_back(std::make_shared<IFBox>((Eigen::Affine3d)t, Eigen::Vector3d(xmax-xmin, ymax-ymin, zmax-zmin), 1,"Box" + std::to_string(boxCount++)));
+		}
+	}
+
+	return res;
 }
 
 Eigen::Vector4d lmu::IFMeshSupported::signedDistanceAndGradient(const Eigen::Vector3d & p)

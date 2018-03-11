@@ -32,10 +32,10 @@ enum class ApproachType
 	Partition
 };
 
-ApproachType approachType = ApproachType::None;
+ApproachType approachType = ApproachType::Partition;
 ParallelismOptions paraOptions = ParallelismOptions::NoParallelism;
-int sampling = 90;//35;
-int nodeIdx = 2;
+int sampling = 58;//35;
+int nodeIdx = 3;
 
 void update(igl::opengl::glfw::Viewer& viewer)
 {
@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
 			paraOptions = static_cast<ParallelismOptions>(std::stoi(std::string(argv[2])));
 			sampling = std::stoi(std::string(argv[3]));
 			nodeIdx = std::stoi(std::string(argv[4]));
-			
+
 			std::cout << "Start in batch mode. Approach Type: " << static_cast<int>(approachType) << " paraOptions: " << static_cast<int>(paraOptions) << " sampling: " << sampling << " nodeIdx: " << nodeIdx << std::endl;
 			std::cout << "Per GA Parallelism: " << static_cast<int>((paraOptions & ParallelismOptions::GAParallelism)) << std::endl;
 			std::cout << "Per Clique Parallelism: " << static_cast<int>((paraOptions & ParallelismOptions::PerCliqueParallelism)) << std::endl;
@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 
 
 	CSGNode node(nullptr);
-	
+
 	if (nodeIdx == 0)
 	{
 		node =
@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
 	{
 		node =
 
-		op<Difference>(
+			op<Difference>(
 		{
 		op<Union>(
 		{
@@ -195,55 +195,41 @@ int main(int argc, char *argv[])
 		}),
 			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.7, 0), 0.4, "Sphere_1")
 		});
-	}	
+	}
 	else if (nodeIdx == 2)
 	{
-		node = 
+		node =
 			op<Union>(
-			{
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.0, 0), 0.2, "Sphere_1"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.3, 0), 0.2, "Sphere_2"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.6, 0), 0.2, "Sphere_3"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.9, 0), 0.2, "Sphere_4"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 1.2, 0), 0.2, "Sphere_5"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 1.5, 0), 0.2, "Sphere_6"),
-				
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.0, 0), 0.2, "Sphere_7"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.3, 0), 0.2, "Sphere_8"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.6, 0), 0.2, "Sphere_9"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.9, 0), 0.2, "Sphere_10"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 1.2, 0), 0.2, "Sphere_11"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 1.5, 0), 0.2, "Sphere_12"),
-				
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.0, 0), 0.2, "Sphere_13"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.3, 0), 0.2, "Sphere_14"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.6, 0), 0.2, "Sphere_15"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.9, 0), 0.2, "Sphere_16"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 1.2, 0), 0.2, "Sphere_17"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 1.5, 0), 0.2, "Sphere_18"),
+		{
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.0, 0), 0.25, "Sphere_1"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.3, 0), 0.25, "Sphere_2"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.6, 0), 0.25, "Sphere_3"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.9, 0), 0.25, "Sphere_4"),
 
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.0, 0), 0.2, "Sphere_19"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.3, 0), 0.2, "Sphere_20"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.6, 0), 0.2, "Sphere_21"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.9, 0), 0.2, "Sphere_22"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 1.2, 0), 0.2, "Sphere_23"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 1.5, 0), 0.2, "Sphere_24"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.0, 0), 0.25, "Sphere_7"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.3, 0), 0.25, "Sphere_8"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.6, 0), 0.25, "Sphere_9"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.9, 0), 0.25, "Sphere_10"),
 
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.0, 0), 0.2, "Sphere_25"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.3, 0), 0.2, "Sphere_26"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.6, 0), 0.2, "Sphere_27"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.9, 0), 0.2, "Sphere_28"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 1.2, 0), 0.2, "Sphere_29"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 1.5, 0), 0.2, "Sphere_30"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.0, 0), 0.25, "Sphere_13"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.3, 0), 0.25, "Sphere_14"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.6, 0), 0.25, "Sphere_15"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.6, 0.9, 0), 0.25, "Sphere_16"),
 
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 0.0, 0), 0.2, "Sphere_31"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 0.3, 0), 0.2, "Sphere_32"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 0.6, 0), 0.2, "Sphere_33"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 0.9, 0), 0.2, "Sphere_34"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 1.2, 0), 0.2, "Sphere_35"),
-				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.5, 1.5, 0), 0.2, "Sphere_36"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.0, 0), 0.25, "Sphere_19"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.3, 0), 0.25, "Sphere_20"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.6, 0), 0.25, "Sphere_21"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.9, 0.9, 0), 0.25, "Sphere_22"),
 
-			});
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.0, 0), 0.25, "Sphere_25"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.3, 0), 0.25, "Sphere_26"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.6, 0), 0.25, "Sphere_27"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(1.2, 0.9, 0), 0.25, "Sphere_28"),
+		});
+	}
+	else if (nodeIdx == 3)
+	{
+		node = geometry(std::make_shared<IFNull>(""));
 	}
 	else
 	{
@@ -251,44 +237,35 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	CSGNode node2 =
-
-		op<Union>(
-	{
-		geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(0.5,0.5,0.5),2, "Box_0",2.0),
-		geo<IFCylinder>(Eigen::Affine3d::Identity(), 0.2, 1.0, "Cylinder_0")
-		//geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, -0.2, 0), 0.2, "Sphere_0"),
-		//geo<IFSphere>(Eigen::Affine3d::Identity(), 0.2, "Sphere_1")
-	});
-
-
-	//node = op<Difference>(
-	//{
-	//  geo<IFBox>((Eigen::Affine3d)(rot90x), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1"),
-	//  geo<IFCylinder>((Eigen::Affine3d)(rot90x), 0.2, 1.0, "Cylinder_0")
-	//});
 	//lmu::Mesh csgMesh = computeMesh(node, Eigen::Vector3i(50, 50, 50));
 	//viewer.data().set_mesh(csgMesh.vertices, csgMesh.indices);
 
 	//auto error = computeDistanceError(csgMesh.vertices, node, node2, true);
 	//viewer.data().set_colors(error);
 
-	auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(sampling, sampling, sampling), 0.05, 0.01);
-
 	//high: lmu::computePointCloud(node, Eigen::Vector3i(120, 120, 120), 0.05, 0.01);
 	//medium: lmu::computePointCloud(node, Eigen::Vector3i(75, 75, 75), 0.05, 0.01);
 	//low: lmu::computePointCloud(node, Eigen::Vector3i(50, 50, 50), 0.05, 0.01);
 
-
-	viewer.data().point_size = 5.0;
-
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
+	Eigen::MatrixXd pointCloud;
 	std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
-	for (const auto& geo : allGeometryNodePtrs(node))
-		shapes.push_back(geo->function());
-	
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+	double ransacShapeDist = 0.0;
+
+	if (nodeIdx == 3)
+	{
+		pointCloud = readPointCloud("fayolle_data/body.xyz");
+		shapes = fromFile("fayolle_data/body.fit");
+		ransacShapeDist = 1.0;
+	}
+	else
+	{
+		pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(sampling, sampling, sampling), 0.05, 0.01);
+		for (const auto& geo : allGeometryNodePtrs(node))
+			shapes.push_back(geo->function());
+		ransacShapeDist = 0.05;
+	}
+
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), ransacShapeDist, shapes);
 
 	int rows = 0;
 	for (const auto& shape : shapes)
@@ -341,7 +318,7 @@ int main(int argc, char *argv[])
 	}
 
 	//viewer.data().set_points(points.leftCols(3), points.rightCols(3));
-
+	
 
 	//std::cout << "PointCloud: " << pointCloud.rows() << " Points: " << points.rows() << std::endl;
 	std::ofstream f("pipeline_info.dat");
@@ -410,13 +387,13 @@ int main(int argc, char *argv[])
 
 	writeNode(recNode, "tree.dot");
 	
-	auto treeMesh = computeMesh(recNode, Eigen::Vector3i(100, 100, 100));
+	auto treeMesh = computeMesh(recNode, Eigen::Vector3i(150, 150, 150));
 	igl::writeOBJ("tree_mesh.obj", treeMesh.vertices, treeMesh.indices);
 
 	viewer.data().set_mesh(treeMesh.vertices, treeMesh.indices);
-
+	
 	//viewer.core. = true;
-	viewer.core.background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);
+	viewer.core.background_color = Eigen::Vector4f(0.5, 0.5, 0.5, 0.5);
 	//viewer.core.point_size = 5.0;
 	viewer.callback_key_down = &key_down;
 	viewer.core.camera_dnear = 0.1;
