@@ -586,15 +586,24 @@ CSGNode* getRoot(const SerializedCSGNode& n, int start, int end)
 
 using SubgraphMap = std::unordered_map<std::string, std::vector<CSGNode*>>;
 
-void getSubgraphsRec(CSGNode& node, SubgraphMap& res)
+void getSubgraphsRec(CSGNode& node, SubgraphMap& res, const std::vector<std::string>& blackList)
 {
 	std::stringstream ss;
 	ss << serializeNode(node);
 	
-	res[ss.str()].push_back(&node);
+	std::string graph = ss.str(); 
+	
+	if (std::find(blackList.begin(), blackList.end(), graph) == blackList.end())
+	{
+		res[graph].push_back(&node);
+	}
+	else
+	{
+		std::cout << "Blacklisted: " << graph << std::endl;
+	}
 
 	for (auto& child : node.childsRef())
-		getSubgraphsRec(child, res);
+		getSubgraphsRec(child, res, blackList);
 }
 
 void printSubgraphMap(const SubgraphMap& map)
@@ -606,16 +615,16 @@ void printSubgraphMap(const SubgraphMap& map)
 	}
 }
 
-LargestCommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2)
+CommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2, const std::vector<std::string>& blackList)
 {
 	SubgraphMap n1Subgraphs, n2Subgraphs;
-	getSubgraphsRec(n1, n1Subgraphs);
-	getSubgraphsRec(n2, n2Subgraphs);
+	getSubgraphsRec(n1, n1Subgraphs, blackList);
+	getSubgraphsRec(n2, n2Subgraphs, blackList);
 
 	//printSubgraphMap(n1Subgraphs);
 	//printSubgraphMap(n2Subgraphs);
 	
-	LargestCommonSubgraph lgs(&n1, &n2, {}, {}, 0);
+	CommonSubgraph lgs(&n1, &n2, {}, {}, 0);
 
 	for (auto serN1 : n1Subgraphs)
 	{
@@ -625,7 +634,7 @@ LargestCommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2)
 			int sgSize = numNodes(*it->second[0]);
 			if (lgs.size < sgSize)
 			{	
-				lgs = LargestCommonSubgraph(&n1, &n2, serN1.second, it->second, sgSize);
+				lgs = CommonSubgraph(&n1, &n2, serN1.second, it->second, sgSize);
 			}			
 		}
 	}
@@ -633,7 +642,34 @@ LargestCommonSubgraph lmu::findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2)
 	return lgs;
 }
 
-bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode)
+std::vector<CommonSubgraph> lmu::findCommonSubgraphs(CSGNode& n1, CSGNode& n2)
+{
+	std::vector<CommonSubgraph> res;
+
+	SubgraphMap n1Subgraphs, n2Subgraphs;
+	getSubgraphsRec(n1, n1Subgraphs, {});
+	getSubgraphsRec(n2, n2Subgraphs, {});
+
+	for (auto serN1 : n1Subgraphs)
+	{
+		auto it = n2Subgraphs.find(serN1.first);
+		if (it != n2Subgraphs.end())
+		{
+			int sgSize = numNodes(*it->second[0]);			
+			auto lgs = CommonSubgraph(&n1, &n2, serN1.second, it->second, sgSize);
+			res.push_back(lgs);
+		}
+	}
+
+	std::sort(res.begin(), res.end(), [](const CommonSubgraph& a, const CommonSubgraph& b)
+	{
+		return a.size > b.size;
+	});
+
+	return res;
+}
+
+bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode, bool allowIntersections)
 {
 	if (&node == &searchNode)
 		return true;
@@ -642,30 +678,30 @@ bool isValidMergeNode(const CSGNode& node, const CSGNode& searchNode)
 	{
 		if (node.operationType() == CSGNodeOperationType::Difference)
 		{
-			return isValidMergeNode(node.childsCRef()[0], searchNode);
+			return isValidMergeNode(node.childsCRef()[0], searchNode, allowIntersections);
 		}
 		else if (node.operationType() == CSGNodeOperationType::Union)
 		{
 			for (const auto& child : node.childsCRef())
 			{
-				if (isValidMergeNode(child, searchNode))
+				if (isValidMergeNode(child, searchNode, allowIntersections))
 					return true;
 			}
 		}
 		else if (node.operationType() == CSGNodeOperationType::Intersection)
 		{
-			return false;
+			return allowIntersections;
 		}
 	}
 		
 	return false;
 }
 
-CSGNode* getValidMergeNode(const CSGNode& root, const std::vector<CSGNode*>& candidateNodes)
+CSGNode* getValidMergeNode(const CSGNode& root, const std::vector<CSGNode*>& candidateNodes, bool allowIntersections)
 {
 	for (const auto& candidateNode : candidateNodes)
 	{
-		if (isValidMergeNode(root, *candidateNode))
+		if (isValidMergeNode(root, *candidateNode, allowIntersections))
 			return candidateNode;
 	}
 
@@ -677,13 +713,13 @@ void mergeNode(CSGNode* dest, const CSGNode& source)
 	*dest = source;
 }
 
-MergeResult lmu::mergeNodes(const LargestCommonSubgraph& lcs)
+MergeResult lmu::mergeNodes(const CommonSubgraph& lcs, bool allowIntersections)
 {
 	if (lcs.isEmptyOrInvalid())
 		return MergeResult::None;
 
-	CSGNode* validMergeNodeInN1 = getValidMergeNode(*lcs.n1Root, lcs.n1Appearances);
-	CSGNode* validMergeNodeInN2 = getValidMergeNode(*lcs.n2Root, lcs.n2Appearances);
+	CSGNode* validMergeNodeInN1 = getValidMergeNode(*lcs.n1Root, lcs.n1Appearances, allowIntersections);
+	CSGNode* validMergeNodeInN2 = getValidMergeNode(*lcs.n2Root, lcs.n2Appearances, allowIntersections);
 
 	if (validMergeNodeInN1 && validMergeNodeInN2)
 	{
@@ -715,7 +751,7 @@ MergeResult lmu::mergeNodes(const LargestCommonSubgraph& lcs)
 }
 
 std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node)
-{
+{	
 	auto geos = allGeometryNodePtrs(node);
 
 	double minS = std::numeric_limits<double>::max();
@@ -726,7 +762,6 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& no
 	
 	for (const auto& geo : geos)
 	{
-
 		Eigen::Vector3d minCandidate = geo->function()->meshCRef().vertices.colwise().minCoeff();
 		Eigen::Vector3d maxCandidate = geo->function()->meshCRef().vertices.colwise().maxCoeff();
 
@@ -781,9 +816,9 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 				Eigen::Vector3d samplingPoint((double)x * stepSize(0) + min(0), (double)y * stepSize(1) + min(1), (double)z * stepSize(2) + min(2));
 
 				samplingPoints.row(idx) = samplingPoint;
-
+			
 				samplingValues(idx) = node.signedDistanceAndGradient(samplingPoint)(0);
-
+			
 				//if(samplingValues(idx)  < 0)
 				//	std::cout << samplingValues(idx) << std::endl;
 			}
@@ -795,6 +830,164 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 	igl::copyleft::marching_cubes(samplingValues, samplingPoints, numSamples(0), numSamples(1), numSamples(2), mesh.vertices, mesh.indices);
 
 	return mesh;
+}
+
+bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc)
+{
+	bool optimizedSomething = false;
+
+	if (node.type() == CSGNodeType::Operation)
+	{
+		auto& childs = node.childsRef();
+
+		switch (node.operationType())
+		{
+		case CSGNodeOperationType::Intersection:
+						
+			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
+			{
+				if (childs[0].function() == childs[1].function())
+				{
+					node = childs[0];
+					optimizedSomething = true;
+					std::cout << "Optimize Intersection 0" << std::endl;
+					break;
+				}
+			}
+			
+			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
+			{
+				node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
+				optimizedSomething = true;
+				std::cout << "Optimize Intersection 1" << std::endl;
+				break;
+			}
+			
+			if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
+			{
+				node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
+				optimizedSomething = true;
+				std::cout << "Optimize Intersection 2" << std::endl;
+				break;
+			}
+			
+			break;
+
+		case CSGNodeOperationType::Union:
+
+			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
+			{
+				if (childs[0].function() == childs[1].function())
+				{
+					node = childs[0];
+					optimizedSomething = true;
+					std::cout << "Optimize Union 0" << std::endl;
+					break;
+				}
+			}
+			
+			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
+			{
+				node = childs[1];
+				optimizedSomething = true;
+				std::cout << "Optimize Union 1" << std::endl;
+				break;
+			}
+			
+			if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
+			{
+				node = childs[0];
+				optimizedSomething = true;
+				std::cout << "Optimize Union 2" << std::endl;
+				break;
+			}
+			
+			break;
+
+		case CSGNodeOperationType::Difference:
+
+			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
+			{
+				if (childs[0].function() == childs[1].function())
+				{
+					node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
+					optimizedSomething = true;
+					std::cout << "Optimize Difference 0" << std::endl;
+					break;
+				}
+			}
+			
+			if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
+			{
+				node = childs[0];
+				optimizedSomething = true;
+				std::cout << "Optimize Difference 1" << std::endl;
+				break;
+			}
+			
+			break;
+		}
+	}
+
+	if (!optimizedSomething)
+	{
+		for (auto & child : node.childsRef())
+		{
+			optimizedSomething |= optimizeCSGNodeStructureRec(child, nullFunc);
+		}
+	}
+	
+	return optimizedSomething;
+}
+
+void lmu::optimizeCSGNodeStructure(CSGNode& node)
+{
+	auto nullFunc = std::make_shared<IFNull>("Null");
+
+	while (optimizeCSGNodeStructureRec(node, nullFunc))
+	{
+		std::cout << "Optimized structure" << std::endl;
+	}
+}
+
+void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
+{
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> funcs;
+	auto funcNodes = allGeometryNodePtrs(node);
+	for (const auto& funcNode : funcNodes)
+		funcs.push_back(funcNode->function());
+
+	double score = computeGeometryScore(node, 1.0, 1.0, funcs);
+
+	double closestScoreDelta = std::numeric_limits<double>::max();
+	CSGNodePtr closestScoreFuncNode = nullptr;
+	for (const auto& funcNode : funcNodes)
+	{
+		double funcNodeScore = computeGeometryScore(CSGNode(funcNode), 1.0, 1.0, funcs);
+		if (std::abs(score - funcNodeScore) < closestScoreDelta)
+		{
+			closestScoreDelta = std::abs(score - funcNodeScore);
+			closestScoreFuncNode = funcNode;
+		}
+	}
+	
+	std::cout << "Try to optimize node. Delta:  " << closestScoreDelta << std::endl;
+	if (closestScoreFuncNode && closestScoreDelta <= tolerance)
+	{
+		std::cout << "optimized node. Delta: " << closestScoreDelta << std::endl;
+				
+		std::cout << "  from " << serializeNode(node) << std::endl;
+		std::cout << "  to   " << serializeNode(CSGNode(closestScoreFuncNode)) << std::endl;
+
+		node = CSGNode(closestScoreFuncNode);		
+	}
+	else
+	{
+		for (auto& child : node.childsRef())
+		{
+			optimizeCSGNode(child, tolerance);
+		}
+	}
 }
 
 Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector3i & numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)

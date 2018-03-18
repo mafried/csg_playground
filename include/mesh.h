@@ -474,7 +474,7 @@ namespace lmu
 		std::vector<double> _parameters;
 	};
 
-	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file);
+	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);
 }
 
 #endif

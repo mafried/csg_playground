@@ -478,6 +478,23 @@ std::vector<GeometryCliqueWithCSGNode> lmu::computeNodesForCliques(const std::ve
 	return res;
 }
 
+size_t getHash(const CSGNode* n1, const CSGNode* n2)
+{
+	std::size_t seed = 0;
+	boost::hash_combine(seed, reinterpret_cast<std::uintptr_t>(n1));
+	boost::hash_combine(seed, reinterpret_cast<std::uintptr_t>(n2));
+	
+	return seed;
+}
+
+void lmu::optimizeCSGNodeClique(CSGNodeClique& clique, float tolerance)
+{
+	for (auto& item : clique)
+	{
+		optimizeCSGNodeStructure(std::get<1>(item));// , tolerance);
+	}
+}
+
 CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 {
 	if (clique.empty())
@@ -491,6 +508,8 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 	for (auto& item : clique)	
 		candidateList.push_back(&std::get<1>(item));	
 
+	bool allowIntersections = false;
+
 	while (candidateList.front() != candidateList.back())
 	{
 		auto n1 = candidateList.front(); 
@@ -498,70 +517,85 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 
 		auto n2 = candidateList.front();
 		candidateList.pop_front();
-		
-		LargestCommonSubgraph lcs(n1, n2, {}, {}, 0);
-		
+
+		std::cout << "Took two new nodes" << std::endl;
+
+		auto firstN2 = n2;
 		while (true)
 		{
-			lcs = findLargestCommonSubgraph(*n1, *n2);
+			std::cout << "Find css" << std::endl;
 
-			std::stringstream ss;
-			ss << serializeNode(*n1);
+			auto css = findCommonSubgraphs(*n1, *n2);
 
-			std::stringstream ss2;
-			ss2 << serializeNode(*n2);
+			std::cout << "Found css" << std::endl;
 
-			std::cout << "Candidates: " << ss.str() << " ## " << ss2.str() << " Node: " << (lcs.n1Appearances.empty() ? "No Appearance" : lcs.n1Appearances[0]->name()) << std::endl;
-
-			if (!lcs.isEmptyOrInvalid())
+			CSGNode* mergedNode = nullptr;
+			for (const auto& cs : css)
 			{
+				std::cout << "Write nodes" << std::endl;
+
+				writeNode(*n1, "n1.dot");
+				writeNode(*n2, "n2.dot");
+
+				std::cout << "Wrote nodes" << std::endl;
+
+				std::cout << "Merge nodes" << std::endl;
+
+				switch (mergeNodes(cs, allowIntersections))
+				{
+				case MergeResult::First:
+					std::cout << "Merged with n1" << std::endl;
+					mergedNode = n1;
+					break;
+				case MergeResult::Second:
+					std::cout << "Merged with n2" << std::endl;
+					mergedNode = n2;
+					break;
+				case MergeResult::None:
+					std::cout << "Not merged" << std::endl;			
+					break;
+				}
+				
+				if (mergedNode)
+					break;
+			}
+
+			std::cout << "Merged nodes" << std::endl;
+
+			if (mergedNode)
+			{
+				std::cout << "Merge node available" << std::endl;
+
+				candidateList.push_front(mergedNode);
+				allowIntersections = false;
 				break;
 			}
 			else
 			{
+				std::cout << "Merge node not available" << std::endl;
+
 				candidateList.push_back(n2);
-
-				n2 = candidateList.front();
+				auto n2 = candidateList.front();
 				candidateList.pop_front();
-			}
-		}
 
-		switch (mergeNodes(lcs))
-		{
-		case MergeResult::First: 
-			std::cout << "Merged with first" << std::endl;
-			candidateList.push_front(n1);
-			break;
-		case MergeResult::Second:
-			std::cout << "Merged with second" << std::endl;
-			candidateList.push_front(n2);
-			break;
-		case MergeResult::None:
-			std::cout << "Not merged" << std::endl;
-			candidateList.push_back(n1);
-			candidateList.push_back(n2);			
-			break;
+				if (n2 == firstN2)
+				{
+					if (allowIntersections)
+					{
+						std::cout << "could not merge n1 with any other node - n1 is ignored now." << std::endl;
+						break;
+					}
+					else
+					{
+						std::cout << "Try to merge now with intersections allowed." << std::endl;
+						allowIntersections = true;
+					}					
+				}
+			}
 		}
 	}
 
+	std::cout << "Candidate list: " << candidateList.size() << std::endl;
+
 	return *candidateList.front();
 }
-
-/*
-CSGNode lmu::mergeCliques(const std::vector<CliqueWithCSGNode>& cliques)
-{
-	//Beide merge operanden müssen konnektivitätserhaltend sein (an einer ke position sein)
-
-	//Konnektivitätserhaltend: 
-	// - ke subtree nicht Schnitt mit nicht ke subtree => Schnitt geht nur, wenn beide subtrees ke sind
-	// - ke subtree nicht auf rechter seite bei minus mit nicht ke subtree => Geht nur, wenn beide subtrees ke sind, oder rechts nicht ke subtree, links ke subtree. Regel für beide ke, damit sich ke nicht selbst aufhebt? 
-	// - union zweier ke subtrees ok
-	// - union ein ke, einer nicht ok
-	// - nicht geteiltes Blatt => kein ke subtree
-	// - geteiltes Blatt => ke subtree
-
-	// Mehrere Kandidaten für ein Shape => schnitt, union vor minus 
-
-	return CSGNode(nullptr);
-}
-*/

@@ -411,9 +411,9 @@ namespace lmu
 
 	SerializedCSGNode serializeNode(CSGNode& node);
 
-	struct LargestCommonSubgraph
+	struct CommonSubgraph
 	{
-		LargestCommonSubgraph(CSGNode* n1Root, CSGNode* n2Root, const std::vector<CSGNode*>& n1Appearances, const std::vector<CSGNode*>& n2Appearances, int size) :
+		CommonSubgraph(CSGNode* n1Root, CSGNode* n2Root, const std::vector<CSGNode*>& n1Appearances, const std::vector<CSGNode*>& n2Appearances, int size) :
 			n1Root(n1Root),
 			n2Root(n2Root),
 			n1Appearances(n1Appearances),
@@ -436,7 +436,9 @@ namespace lmu
 		int size;
 	};
 
-	LargestCommonSubgraph findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2);
+	CommonSubgraph findLargestCommonSubgraph(CSGNode& n1, CSGNode& n2, const std::vector<std::string>& blackList = {});
+
+	std::vector<CommonSubgraph> findCommonSubgraphs(CSGNode & n1, CSGNode & n2);
 
 	enum class MergeResult
 	{
@@ -445,10 +447,14 @@ namespace lmu
 		None
 	};
 
-	MergeResult mergeNodes(const LargestCommonSubgraph& lcs);
+	MergeResult mergeNodes(const CommonSubgraph& lcs, bool allowIntersections);
 	
 	Mesh computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), 
 		const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+	
+	void optimizeCSGNodeStructure(CSGNode& node);
+
+	void optimizeCSGNode(CSGNode& node, double tolerance);
 
 	Eigen::MatrixXd computePointCloud(const CSGNode& node, const Eigen::Vector3i& numSamples, double maxDistance, double errorSigma,
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));

@@ -33,8 +33,8 @@ enum class ApproachType
 };
 
 ApproachType approachType = ApproachType::Partition;
-ParallelismOptions paraOptions = ParallelismOptions::NoParallelism;
-int sampling = 58;//35;
+ParallelismOptions paraOptions = ParallelismOptions::GAParallelism;
+int sampling = 30;//35;
 int nodeIdx = 3;
 
 void update(igl::opengl::glfw::Viewer& viewer)
@@ -253,9 +253,10 @@ int main(int argc, char *argv[])
 
 	if (nodeIdx == 3)
 	{
-		pointCloud = readPointCloud("fayolle_data/body.xyz");
-		shapes = fromFile("fayolle_data/body.fit");
-		ransacShapeDist = 1.0;
+		float scaling = 0.1;
+		pointCloud = readPointCloud("fayolle_data/body.xyz", scaling);
+		shapes = fromFile("fayolle_data/body.fit", scaling);
+		ransacShapeDist = scaling * 0.5;
 	}
 	else
 	{
@@ -264,6 +265,9 @@ int main(int argc, char *argv[])
 			shapes.push_back(geo->function());
 		ransacShapeDist = 0.05;
 	}
+
+	writeNode(node, "tree.dot");
+
 
 	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), ransacShapeDist, shapes);
 
@@ -318,8 +322,12 @@ int main(int argc, char *argv[])
 	}
 
 	//viewer.data().set_points(points.leftCols(3), points.rightCols(3));
-	
+	//viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
+	//viewer.data().point_size = 2.0;
 
+	//if (interactiveMode)
+	//	viewer.launch();
+	
 	//std::cout << "PointCloud: " << pointCloud.rows() << " Points: " << points.rows() << std::endl;
 	std::ofstream f("pipeline_info.dat");
 	f << "Approach Type: " << static_cast<int>(approachType) << std::endl;
@@ -360,8 +368,12 @@ int main(int argc, char *argv[])
 			case ApproachType::Partition:
 				{
 					auto cliquesAndNodes = computeNodesForCliques(cliques, paraOptions);
+					optimizeCSGNodeClique(cliquesAndNodes, 100.0);
+
 					auto cliqueCompDur = ticker.tick();
 					f << "Per clique node computation: duration: " << cliqueCompDur;
+
+					
 					recNode = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 
 					auto mergeDur = ticker.tick();
@@ -378,6 +390,9 @@ int main(int argc, char *argv[])
 	catch (const std::exception& ex)
 	{
 		std::cout << "Could not merge. Reason: " << ex.what() << std::endl;
+		int i;
+		std::cin >> i;
+		return -1;
 	}
 
 	f << "Output CSG tree: size: " << numNodes(recNode) << " depth: " << depth(recNode) << " geometry score: " << computeGeometryScore(recNode, epsilon, alpha, shapes) << std::endl;
@@ -386,15 +401,15 @@ int main(int argc, char *argv[])
 	f.close();
 
 	writeNode(recNode, "tree.dot");
-	
+
 	auto treeMesh = computeMesh(recNode, Eigen::Vector3i(150, 150, 150));
 	igl::writeOBJ("tree_mesh.obj", treeMesh.vertices, treeMesh.indices);
 
 	viewer.data().set_mesh(treeMesh.vertices, treeMesh.indices);
 	
 	//viewer.core. = true;
-	viewer.core.background_color = Eigen::Vector4f(0.5, 0.5, 0.5, 0.5);
-	//viewer.core.point_size = 5.0;
+	viewer.core.background_color = Eigen::Vector4f(1,1,1,1);
+	viewer.data().point_size = 2.0;
 	viewer.callback_key_down = &key_down;
 	viewer.core.camera_dnear = 0.1;
 	viewer.core.lighting_factor = 0;

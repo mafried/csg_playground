@@ -344,7 +344,7 @@ Eigen::Matrix3d rotationMatrixFrom(const Eigen::Vector3d& x, Eigen::Vector3d& y)
 	return m;
 }
 
-std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string & file)
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string & file, double scaling)
 {
 	std::ifstream s(file);
 	
@@ -364,6 +364,12 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 			double x, y, z, ax, ay, az, radius, height;
 			s >> ax >> ay >> az >> x >> y >> z >> radius >> height;
 
+			x *= scaling;
+			y *= scaling;
+			z *= scaling;
+			radius *= scaling; 
+			height *= scaling;
+
 			Eigen::Translation3d t(x, z + height / 2, y  );
 			Eigen::AngleAxisd r(M_PI / 2 , Eigen::Vector3d(1,0,0));
 			//Eigen::Matrix3d r = rotationMatrixFrom(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(ax,ay,az));
@@ -376,6 +382,13 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 		{
 			double xmin, ymin, zmin, xmax, ymax, zmax;
 			s >> xmin >> xmax >> ymin >> ymax >> zmin >> zmax;
+
+			xmin *= scaling;
+			ymin *= scaling;
+			zmin *= scaling;
+			xmax *= scaling;
+			ymax *= scaling;
+			zmax *= scaling;
 
 			Eigen::Translation3d t(xmin + (xmax-xmin) * 0.5, ymin + (ymax - ymin) * 0.5, zmin + (zmax - zmin) * 0.5);
 					
