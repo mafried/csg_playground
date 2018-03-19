@@ -32,6 +32,7 @@ namespace lmu
 	CSGNode opUnion(const std::vector<CSGNode>& childs = {});
 	CSGNode opDiff(const std::vector<CSGNode>& childs = {});
 	CSGNode opInter(const std::vector<CSGNode>& childs = {});
+	CSGNode opComp(const std::vector<CSGNode>& childs = {});
 }
 
 #endif

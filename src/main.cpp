@@ -32,7 +32,7 @@ enum class ApproachType
 	Partition
 };
 
-ApproachType approachType = ApproachType::Partition;
+ApproachType approachType = ApproachType::BaselineGA;
 ParallelismOptions paraOptions = ParallelismOptions::GAParallelism;
 int sampling = 30;//35;
 int nodeIdx = 3;
@@ -361,6 +361,7 @@ int main(int argc, char *argv[])
 		{
 			case ApproachType::BaselineGA:
 				recNode = createCSGNodeWithGA(shapes, (paraOptions & ParallelismOptions::GAParallelism) == ParallelismOptions::GAParallelism, graph);
+				optimizeCSGNodeStructure(recNode);
 				f << "Full GA: duration: " << ticker.tick() << std::endl;
 
 				break;

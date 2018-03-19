@@ -375,6 +375,21 @@ namespace lmu
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
 	};
+
+	class ComplementOperation : public CSGNodeOperation
+	{
+	public:
+		ComplementOperation(const std::string& name, const std::vector<CSGNode>& childs = {}) :
+			CSGNodeOperation(name, childs)
+		{
+		}
+
+		virtual CSGNodePtr clone() const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual CSGNodeOperationType operationType() const override;
+		virtual std::tuple<int, int> numAllowedChilds() const override;
+		virtual Mesh mesh() const override;
+	};
 	
 	CSGNode createOperation(CSGNodeOperationType type, const std::string& name = std::string(), const std::vector<CSGNode>& childs = {});
 

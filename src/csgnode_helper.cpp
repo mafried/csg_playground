@@ -18,3 +18,7 @@ CSGNode lmu::opInter(const std::vector<CSGNode>& childs)
 {
 	return CSGNode(std::make_shared<IntersectionOperation>("", childs));
 }
+CSGNode lmu::opComp(const std::vector<CSGNode>& childs)
+{
+	return CSGNode(std::make_shared<ComplementOperation>("", childs));
+}

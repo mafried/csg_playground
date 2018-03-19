@@ -166,6 +166,27 @@ Mesh lmu::DifferenceOperation::mesh() const
 	return Mesh();
 }
 
+CSGNodePtr ComplementOperation::clone() const
+{
+	return std::make_shared<ComplementOperation>(*this);
+}
+Eigen::Vector4d ComplementOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
+{	
+	return _childs[0].signedDistanceAndGradient(p) * -1.0;
+}
+CSGNodeOperationType ComplementOperation::operationType() const
+{
+	return CSGNodeOperationType::Complement;
+}
+std::tuple<int, int> ComplementOperation::numAllowedChilds() const
+{
+	return std::make_tuple(1, 1);
+}
+Mesh lmu::ComplementOperation::mesh() const
+{
+	return Mesh();
+}
+
 /*
 CSGNodePtr DifferenceRLOperation::clone() const
 {
@@ -258,6 +279,8 @@ CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name
 		return CSGNode(std::make_shared<IntersectionOperation>(name, childs));
 	case CSGNodeOperationType::Difference:
 		return CSGNode(std::make_shared<DifferenceOperation>(name, childs));
+	case CSGNodeOperationType::Complement:
+		return CSGNode(std::make_shared<ComplementOperation>(name, childs));
 	default:
 		throw std::runtime_error("Operation type is not supported");
 	}
@@ -917,6 +940,15 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 				}
 			}
 			
+			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
+			{
+				std::vector<CSGNode> childs = { childs[1]};
+				node = CSGNode(std::make_shared<ComplementOperation>("Complement", childs));
+				optimizedSomething = true;
+				std::cout << "Optimize Difference 0" << std::endl;
+				break;
+			}
+
 			if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
 			{
 				node = childs[0];
@@ -924,7 +956,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 				std::cout << "Optimize Difference 1" << std::endl;
 				break;
 			}
-			
+
 			break;
 		}
 	}

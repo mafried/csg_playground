@@ -324,7 +324,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	lmu::CSGNodeTournamentSelector s(2, true);
 
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(10, 0.01,1000);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(100, 0.01,1000);
 
 	int maxDepth =(int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph) > 0 ? boost::num_edges(connectionGraph) : binom(shapes.size(),2)) * M_PI));
 	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
