@@ -11,6 +11,10 @@
 
 #include <Eigen/Core>
 
+#include "json.hpp"
+
+using Json = nlohmann::json;
+
 namespace lmu
 {
 	class ICSGNode;
@@ -35,6 +39,9 @@ namespace lmu
 
 	std::string operationTypeToString(CSGNodeOperationType type);
 	std::string nodeTypeToString(CSGNodeType type);
+	CSGNodeType stringToNodeType(const std::string& type);
+	CSGNodeOperationType stringToOperationType(const std::string& type);
+
 	
 	class CSGNode;
 
@@ -475,6 +482,8 @@ namespace lmu
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
+
+	CSGNode fromJson(const std::string& file);
 }
 
 #endif

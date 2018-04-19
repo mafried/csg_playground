@@ -269,6 +269,34 @@ std::string lmu::nodeTypeToString(CSGNodeType type)
 	}
 }
 
+CSGNodeType lmu::stringToNodeType(const std::string & type)
+{
+	if (type == "Operation")
+		return CSGNodeType::Operation;
+	else if (type == "Geometry")
+		return CSGNodeType::Geometry;
+	else
+		throw std::runtime_error("Undefined Type.");
+}
+
+CSGNodeOperationType lmu::stringToOperationType(const std::string & type)
+{
+	if (type == "Intersection")
+		return CSGNodeOperationType::Intersection;
+	else if (type == "Difference")
+		return CSGNodeOperationType::Difference;
+	else if (type == "Union")
+		return CSGNodeOperationType::Union;
+	else if (type == "Unknown")
+		return CSGNodeOperationType::Unknown;
+	else if (type == "Complement")
+		return CSGNodeOperationType::Complement;
+	else if (type == "Invalid")
+		return CSGNodeOperationType::Invalid;
+	else
+		throw std::runtime_error("Undefined Type.");
+}
+
 CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name, const std::vector<CSGNode>& childs)
 {
 	switch (type)
@@ -1106,6 +1134,90 @@ Eigen::VectorXd lmu::computeDistanceError(const Eigen::MatrixXd& samplePoints, c
 	}
 
 	return res;
+}
+
+CSGNode nodeFromJson(const Json& json)
+{
+	auto name = json.at("name").get<std::string>();
+	auto type = stringToNodeType(json.at("type").get<std::string>());
+
+	CSGNode node(nullptr);
+
+	if (type == CSGNodeType::Operation)
+	{
+		auto opType = stringToOperationType(json.at("operationType").get<std::string>());
+
+		node = createOperation(opType, name);
+
+		auto childs = json.at("childs");
+		for (Json::iterator it = childs.begin(); it != childs.end(); ++it) 
+		{
+			node.addChild(nodeFromJson(*it));
+		}
+	}
+	else if (type == CSGNodeType::Geometry)
+	{
+		auto geoType = json.at("geometryType").get<std::string>();
+
+		Eigen::Vector3d pos(
+			json.at("pos").at(0).get<double>(),			
+			json.at("pos").at(1).get<double>(), 
+			json.at("pos").at(2).get<double>());
+
+		Eigen::Vector3d rot(
+			json.at("rot").at(0).get<double>(),
+			json.at("rot").at(1).get<double>(),
+			json.at("rot").at(2).get<double>());
+
+		Eigen::Affine3d rx = Eigen::Affine3d(Eigen::AngleAxisd(rot.x(), Eigen::Vector3d(1, 0, 0)));
+		Eigen::Affine3d ry = Eigen::Affine3d(Eigen::AngleAxisd(rot.y(), Eigen::Vector3d(0, 1, 0)));
+		Eigen::Affine3d rz = Eigen::Affine3d(Eigen::AngleAxisd(rot.z(), Eigen::Vector3d(0, 0, 1)));		
+		
+		auto transform = (Eigen::Affine3d)(Eigen::Translation3d(pos.x(), pos.y(), pos.z())*(rz * ry * rx));
+
+		if (geoType == "Sphere")
+		{	
+			node = CSGNode(std::make_shared<CSGNodeGeometry>(std::make_shared<IFSphere>(transform, json.at("radius").get<double>(), name)));			
+		} 
+		else if (geoType == "Box")
+		{
+			Eigen::Vector3d size(
+				json.at("size").at(0).get<double>(),
+				json.at("size").at(1).get<double>(),
+				json.at("size").at(2).get<double>());
+
+			node = CSGNode(std::make_shared<CSGNodeGeometry>(std::make_shared<IFBox>(transform, size, json.at("subdivisions").get<int>(), name)));
+		}
+		else if (geoType == "Cylinder")
+		{
+			node = CSGNode(std::make_shared<CSGNodeGeometry>(std::make_shared<IFCylinder>(transform, json.at("radius").get<double>(), json.at("height").get<double>(), name)));
+		}
+		else
+		{
+			throw std::runtime_error("Geometry type unknown.");
+		}
+	}
+	else
+	{
+		throw std::runtime_error("Operation type unknown.");
+	}
+
+	return node;
+}
+
+CSGNode lmu::fromJson(const std::string & file)
+{
+	std::ifstream i(file);
+
+
+	Json j ;
+
+
+	i >> j;
+
+	//std::cout << j.dump();
+
+	return nodeFromJson(j);
 }
 
 std::ostream& lmu::operator<<(std::ostream& os, const SerializedCSGNode& v)
