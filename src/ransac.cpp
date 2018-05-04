@@ -8,7 +8,11 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 
 		for (int i = 0; i < points.rows(); ++i)
 		{	
-			if (std::abs(func->signedDistanceAndGradient(points.row(i))[0]) <= maxDelta)
+			double sd = std::abs(func->signedDistanceAndGradient(points.row(i))[0]);
+
+			//std::cout << sd;
+
+			if (sd <= maxDelta)
 			{
 				Eigen::Matrix<double, 1, 6> row;
 				row << points.row(i), normals.row(i);

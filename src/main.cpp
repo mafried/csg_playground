@@ -49,17 +49,19 @@ int main(int argc, char *argv[])
 		Mesh mesh = computeMesh(node, Eigen::Vector3i(sampling, sampling, sampling));
 
 		pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(sampling, sampling, sampling), maxDistance, errorSigma);
+		for (const auto& geo : allGeometryNodePtrs(node))
+			shapes.push_back(geo->function());
 
-		writeNode(node, "tree.dot");
+		lmu::writeNode(node, "tree.dot");
 		igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 		lmu::writePointCloud("pc.dat", pointCloud);
 
 		lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), ransacShapeDist, shapes);
 
-		int i = 0;
+		std:cout << "Number of shapes: " << shapes.size() << std::endl;
 		for (const auto& shape : shapes)
 		{
-			lmu::writePointCloud("pc_" + std::to_string(i) + ".dat", shape->points());
+			lmu::writePointCloud("pc_" + shape->name() + ".dat", shape->points());
 		}		
 	}
 	catch (const std::exception& ex)
