@@ -481,6 +481,9 @@ namespace lmu
 	Eigen::MatrixXd computePointCloud(const CSGNode& node, const Eigen::Vector3i& numSamples, double maxDistance, double errorSigma,
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
+	Eigen::MatrixXd computePointCloud(const CSGNode& node, int numSamples, double maxDistance, double errorSigma,
+		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
 
 	CSGNode fromJson(const std::string& file);

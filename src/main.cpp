@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 	using namespace std;
 	using namespace lmu;
 
-	if (argc != 6)
+	if (argc != 7)
 	{
 		std::cerr << "Not enough arguments: " << argc << std::endl;
 		std::cerr << "Needed arguments: json file, ransac shape distance, sampling, max distance, error sigma." << std::endl;
@@ -26,18 +26,21 @@ int main(int argc, char *argv[])
 	try
 	{
 		std::string jsonFile = std::string(argv[1]);
-		int sampling = std::stoi(std::string(argv[2]));
+		int samples = std::stoi(std::string(argv[2]));
 
 		double ransacShapeDist = std::stod(std::string(argv[3]));
 		double maxDistance = std::stod(std::string(argv[4]));
 		double errorSigma = std::stod(std::string(argv[5]));
+		int meshSampling = std::stoi(std::string(argv[6]));
 
 		std::cout << "Input:" << std::endl <<
 			"Json file:             " << jsonFile << std::endl <<
-			"Sampling:              " << sampling << std::endl <<
+			"Samples:              " << samples << std::endl <<
 			"Ransac shape distance: " << ransacShapeDist << std::endl <<
 			"Max distance:          " << maxDistance << std::endl <<
-			"Error sigma:           " << errorSigma << std::endl << std::endl;
+			"Error sigma:           " << errorSigma << std::endl << 
+    		"Mesh sampling:          " << meshSampling << std::endl << std::endl;
+
 		
 		Eigen::MatrixXd pointCloud;
 		std::vector<std::shared_ptr<lmu::ImplicitFunction>> shapes;
@@ -46,9 +49,9 @@ int main(int argc, char *argv[])
 		CSGNode node = lmu::fromJson(jsonFile);
 		std::cout << "done." << std::endl;
 
-		Mesh mesh = computeMesh(node, Eigen::Vector3i(sampling, sampling, sampling));
+		Mesh mesh = computeMesh(node, Eigen::Vector3i(meshSampling, meshSampling, meshSampling));
 
-		pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(sampling, sampling, sampling), maxDistance, errorSigma);
+		pointCloud = lmu::computePointCloud(node, samples, maxDistance, errorSigma);
 		for (const auto& geo : allGeometryNodePtrs(node))
 			shapes.push_back(geo->function());
 

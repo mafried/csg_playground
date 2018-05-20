@@ -1110,6 +1110,54 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector
 	return res;
 }
 
+Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, int numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
+{
+	Eigen::Vector3d min, max;
+
+	if (minDim == Eigen::Vector3d(0.0, 0.0, 0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
+	{
+		auto dims = computeDimensions(node);
+		min = std::get<0>(dims);
+		max = std::get<1>(dims);
+	}
+	else
+	{
+		min = minDim;
+		max = maxDim;
+	}
+
+	Eigen::MatrixXd res(numSamples, 6);
+
+	int i = 0; 
+
+	std::random_device rd{};
+	std::mt19937 gen{ rd() };
+
+	std::normal_distribution<> dx{ 0.0 , errorSigma };
+	std::normal_distribution<> dy{ 0.0 , errorSigma };
+	std::normal_distribution<> dz{ 0.0 , errorSigma };
+
+	std::uniform_real_distribution<> px{ min.x(), max.x() };
+	std::uniform_real_distribution<> py{ min.y(), max.y() };
+	std::uniform_real_distribution<> pz{ min.z(), max.z() };
+
+	while (i < numSamples)
+	{
+		Eigen::Vector3d samplingPoint(px(gen), py(gen), pz(gen));
+		auto samplingValue = node.signedDistanceAndGradient(samplingPoint);
+
+		if (abs(samplingValue(0)) < maxDistance)
+		{
+			Eigen::Matrix<double, 1, 6> sp;
+			sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
+			res.row(i) = sp;
+			i++;
+		}
+	}
+
+	return res;
+}
+
 Eigen::VectorXd lmu::computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize)
 {
 	Eigen::VectorXd res(samplePoints.rows());
