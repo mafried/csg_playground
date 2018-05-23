@@ -12,6 +12,7 @@
 namespace lmu
 {
 	void ransacWithSim(const Eigen::MatrixXd& points, const Eigen::MatrixXd& normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions);
+	void ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions);
 }
 
 #endif

@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 	using namespace std;
 	using namespace lmu;
 
-	if (argc != 7)
+	if (argc != 6)
 	{
 		std::cerr << "Not enough arguments: " << argc << std::endl;
 		std::cerr << "Needed arguments: json file, ransac shape distance, sampling, max distance, error sigma." << std::endl;
@@ -28,15 +28,13 @@ int main(int argc, char *argv[])
 		std::string jsonFile = std::string(argv[1]);
 		int samples = std::stoi(std::string(argv[2]));
 
-		double ransacShapeDist = std::stod(std::string(argv[3]));
-		double maxDistance = std::stod(std::string(argv[4]));
-		double errorSigma = std::stod(std::string(argv[5]));
-		int meshSampling = std::stoi(std::string(argv[6]));
+		double maxDistance = std::stod(std::string(argv[3]));
+		double errorSigma = std::stod(std::string(argv[4]));
+		int meshSampling = std::stoi(std::string(argv[5]));
 
 		std::cout << "Input:" << std::endl <<
 			"Json file:             " << jsonFile << std::endl <<
 			"Samples:              " << samples << std::endl <<
-			"Ransac shape distance: " << ransacShapeDist << std::endl <<
 			"Max distance:          " << maxDistance << std::endl <<
 			"Error sigma:           " << errorSigma << std::endl << 
     		"Mesh sampling:          " << meshSampling << std::endl << std::endl;
@@ -59,7 +57,7 @@ int main(int argc, char *argv[])
 		igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 		lmu::writePointCloud("pc.dat", pointCloud);
 
-		lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), ransacShapeDist, shapes);
+		lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), shapes);
 
 		std:cout << "Number of shapes: " << shapes.size() << std::endl;
 		for (const auto& shape : shapes)
