@@ -29,6 +29,7 @@ find_package(LIBIGL REQUIRED QUIET)
 include_directories(${PROJECT_SOURCE_DIR}/third_party/json/src) 
 include_directories(${PROJECT_SOURCE_DIR}/include/) 
 
+
 #PCL
 find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus)
 include_directories(${PCL_INCLUDE_DIRS})

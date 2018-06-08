@@ -156,3 +156,52 @@ Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 
 	return res;
 }
+
+Eigen::MatrixXd lmu::readPointCloudWithColors(const std::string & file, double scaleFactor)
+{
+	size_t numRows = 0;
+	std::ifstream in(file);
+
+	std::string unused;
+	while (std::getline(in, unused))
+	{
+		//std::cout << unused << std::endl;
+		++numRows;
+	}
+	in.close();
+	std::ifstream s(file);
+		
+	size_t numCols = 6;
+
+	Eigen::MatrixXd points(numRows, numCols);
+
+
+	for (int i = 0; i < points.rows(); i++)
+	{
+		//if (s.eof())
+		//	break;
+
+		std::string x; 
+		s >> x;
+		
+		for (int j = 0; j < 3; j++)
+		{
+			double v;
+			s >> v;
+
+			v = v * scaleFactor;
+
+			points(i, j) = v;
+		}
+
+		for (int j = 3; j < 6; j++)
+		{
+			double v;
+			s >> v;
+
+			points(i, j) = v;
+		}
+	}
+
+	return points;
+}
