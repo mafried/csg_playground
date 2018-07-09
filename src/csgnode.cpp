@@ -891,10 +891,13 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 	{
 		auto& childs = node.childsRef();
 
+		std::cout << "Num childs: " << childs.size() << std::endl;
+
 		switch (node.operationType())
 		{
 		case CSGNodeOperationType::Intersection:
-						
+					
+			std::cout << "Intersection" << std::endl;
 			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 			{
 				if (childs[0].function() == childs[1].function())
@@ -925,6 +928,8 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 			break;
 
 		case CSGNodeOperationType::Union:
+
+			std::cout << "Union" << std::endl;
 
 			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 			{
@@ -957,6 +962,8 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 
 		case CSGNodeOperationType::Difference:
 
+			std::cout << "Difference" << std::endl;
+
 			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 			{
 				if (childs[0].function() == childs[1].function())
@@ -970,8 +977,16 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 			
 			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
 			{
-				std::vector<CSGNode> childs = { childs[1]};
-				node = CSGNode(std::make_shared<ComplementOperation>("Complement", childs));
+				std::cout << "D2" << childs.size() << std::endl;
+
+				std::vector<CSGNode> complementChilds = { childs[1]};
+
+				std::cout << "D2.1" << std::endl;
+
+				node = CSGNode(std::make_shared<ComplementOperation>("Complement", complementChilds));
+
+				std::cout << "D2.2" << std::endl;
+
 				optimizedSomething = true;
 				std::cout << "Optimize Difference 0" << std::endl;
 				break;
@@ -979,6 +994,8 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 
 			if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
 			{
+				std::cout << "D3" << std::endl;
+
 				node = childs[0];
 				optimizedSomething = true;
 				std::cout << "Optimize Difference 1" << std::endl;
@@ -1048,66 +1065,6 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 			optimizeCSGNode(child, tolerance);
 		}
 	}
-}
-
-Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector3i & numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
-{
-
-	Eigen::Vector3d min, max;
-
-	if (minDim == Eigen::Vector3d(0.0, 0.0, 0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
-	{
-		auto dims = computeDimensions(node);
-		min = std::get<0>(dims);
-		max = std::get<1>(dims);
-	}
-	else
-	{
-		min = minDim;
-		max = maxDim;
-	}
-
-	//Add a bit dimensions to avoid cuts (TODO: do it right with modulo stepSize).
-	min -= (max - min) * 0.05;
-	max += (max - min) * 0.05;
-
-	Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
-
-	std::vector<Eigen::Matrix<double,1,6>> samplingPoints;
-	
-	std::random_device rd{};
-	std::mt19937 gen{ rd() };
-
-	std::normal_distribution<> dx{ 0.0 , errorSigma };
-	std::normal_distribution<> dy{ 0.0 , errorSigma };
-	std::normal_distribution<> dz{ 0.0 , errorSigma };
-
-	for (int x = 0; x < numSamples(0); ++x)
-	{
-		for (int y = 0; y < numSamples(1); ++y)
-		{
-			for (int z = 0; z < numSamples(2); ++z)
-			{	
-				Eigen::Vector3d samplingPoint((double)x * stepSize(0) + min(0), (double)y * stepSize(1) + min(1), (double)z * stepSize(2) + min(2));
-
-				auto samplingValue = node.signedDistanceAndGradient(samplingPoint);
-				
-				if (abs(samplingValue(0)) < maxDistance)
-				{
-					Eigen::Matrix<double, 1, 6> sp; 
-					sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
-
-					samplingPoints.push_back(sp);
-				}
-			}
-		}
-	}
-
-	Eigen::MatrixXd res(samplingPoints.size(), 6);
-	for (int i = 0; i < samplingPoints.size(); ++i)
-		res.row(i) = samplingPoints[i].row(0);
-	
-	return res;
 }
 
 Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, int numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)

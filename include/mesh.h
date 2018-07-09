@@ -175,21 +175,21 @@ namespace lmu
 		IFMeshSupported(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
 			ImplicitFunction(transform, mesh, name)
 		{
-			_tree.init(_mesh.vertices, _mesh.indices);
+			//_tree.init(_mesh.vertices, _mesh.indices);
 
-			igl::per_face_normals(_mesh.vertices, _mesh.indices, _fn);
-			igl::per_vertex_normals(_mesh.vertices, _mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, _fn, _vn);
-			igl::per_edge_normals(_mesh.vertices, _mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, _fn, _en, _e, _emap);
+			//igl::per_face_normals(_mesh.vertices, _mesh.indices, _fn);
+			//igl::per_vertex_normals(_mesh.vertices, _mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, _fn, _vn);
+			//igl::per_edge_normals(_mesh.vertices, _mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, _fn, _en, _e, _emap);
 		}
 
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override;
 
 	private: 
 		//We need all this stuff (especially the AABB tree for accelerating distance lookups.
-		igl::AABB<Eigen::MatrixXd, 3> _tree;
-		Eigen::MatrixXd _fn, _vn, _en; //note that _vn is the same as mesh's _normals. TODO
-		Eigen::MatrixXi _e;
-		Eigen::VectorXi _emap;
+		//igl::AABB<Eigen::MatrixXd, 3> _tree;
+		//Eigen::MatrixXd _fn, _vn, _en; //note that _vn is the same as mesh's _normals. TODO
+		//Eigen::MatrixXi _e;
+		//Eigen::VectorXi _emap;
 	};
 
 	struct IFCylinder : public IFMeshSupported

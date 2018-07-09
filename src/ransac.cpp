@@ -2,6 +2,13 @@
 
 #include <unordered_map>
 
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/IO/read_xyz_points.h>
+#include <CGAL/Point_with_normal_3.h>
+#include <CGAL/property_map.h>
+#include <CGAL/Shape_detection_3.h>
+
+
 void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
 {
 	for (auto const& func : knownFunctions)
@@ -69,4 +76,3 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 		func->setPoints(points);
 	}
 }
-

@@ -86,17 +86,11 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	mesh.transform = transform;
 
-	std::cout << "Before:" << std::endl;
-	std::cout << mesh.vertices << std::endl;
-
 	lmu::transform(mesh);
 
 	Mesh upsampledMesh;// = mesh;
 
 	igl::upsample(mesh.vertices, mesh.indices, upsampledMesh.vertices, upsampledMesh.indices, numSubdivisions);
-
-	std::cout << "After:" << std::endl;
-	std::cout << mesh.vertices << std::endl;
 
 	//Eigen::MatrixXd fn; 
 	//igl::per_face_normals(upsampledMesh.vertices, upsampledMesh.indices, fn);
@@ -415,7 +409,7 @@ Eigen::Vector4d lmu::IFMeshSupported::signedDistanceAndGradient(const Eigen::Vec
 	Eigen::VectorXi i;
 	Eigen::MatrixXd n, c;
 
-	igl::signed_distance_pseudonormal(points, _mesh.vertices, _mesh.indices, _tree, _fn, _vn, _en, _emap, d, i, c, n);
+	//igl::signed_distance_pseudonormal(points, _mesh.vertices, _mesh.indices, _tree, _fn, _vn, _en, _emap, d, i, c, n);
 		
 	//std::cout << n.rows() << std::endl;
 
