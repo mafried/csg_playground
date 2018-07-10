@@ -355,6 +355,89 @@ namespace lmu
 		return sqrt(compute_dot_product(v, v));
 	}
 
+	struct IFCone : public IFMeshSupported
+	{
+		IFCone(const Eigen::Affine3d& transform, const Eigen::Vector3d& c, const std::string& name) :
+			IFMeshSupported(transform, createCylinder(transform, c.x(), c.y(), c.z(), 200, 200), name),
+			_c(c)
+		{
+			_invTrans = transform.inverse();
+		}
+
+		virtual ImplicitFunctionType type() const override
+		{
+			return ImplicitFunctionType::Cone;
+		}
+
+		std::shared_ptr<ImplicitFunction> clone() const override
+		{
+			return std::make_shared<IFCone>(*this);
+		}
+
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		{
+
+			auto ps = _invTrans * p;
+
+			double delta = 0.001;
+
+			double d = distance(ps);
+			//double d1 = distance(Eigen::Vector3d(ps.x() + delta, ps.y(), ps.z()));
+			//double d2 = distance(Eigen::Vector3d(ps.x(), ps.y() + delta, ps.z()));
+
+			//Eigen::Vector3d v1(ps.x()) + delta, d1
+
+
+			//std::cout << _name << " distance to " << p << ": " << d << std::endl;
+
+			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
+			gradient.normalize();
+
+			Eigen::Vector4d res;
+			res << (d), gradient;
+
+			return res;
+		}
+
+		inline double sign(double v)
+		{
+			if (v < 0.0)
+				return -1.0;
+			else if (v > 0.0)
+				return 1.0;
+			else
+				return 0.0;
+		}
+
+		inline double distance(const Eigen::Vector3d& ps)
+		{
+			Eigen::Vector2d q = Eigen::Vector2d(Eigen::Vector2d(ps.x(), ps.z()).norm(), ps.y());
+			Eigen::Vector2d v = Eigen::Vector2d(_c.z()*_c.y() / _c.x(), -_c.z());
+			Eigen::Vector2d w = v - q;
+			Eigen::Vector2d vv = Eigen::Vector2d(v.dot(v), v.x()*v.x());
+			Eigen::Vector2d qv = Eigen::Vector2d(v.dot(w), v.x()*w.x());
+			Eigen::Vector2d d;
+			d.x() = std::max(qv.x(), 0.0)*qv.x() / vv.x();
+			d.y() = std::max(qv.y(), 0.0)*qv.y() / vv.y();
+
+			return sqrt(w.dot(w) - std::max(d.x(), d.y())) * sign(std::max(q.y()*v.x() - q.x()*v.y(), w.y()));
+		}
+
+		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
+		{
+			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
+			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
+			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
+	private:
+		Eigen::Vector3d _c;
+
+		Eigen::Affine3d _invTrans;
+	};
+
 	struct IFCylinder2 : public ImplicitFunction
 	{
 		IFCylinder2(const std::string& name, const std::vector<double>& parameters) :

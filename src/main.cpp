@@ -32,7 +32,7 @@ enum class ApproachType
 ApproachType approachType = ApproachType::BaselineGA;
 ParallelismOptions paraOptions = ParallelismOptions::GAParallelism;
 int sampling = 30;//35;
-int nodeIdx = 0;
+int nodeIdx = 3;
 
 void update(igl::opengl::glfw::Viewer& viewer)
 {
@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
 	}
 	else if (nodeIdx == 3)
 	{
-		node = geometry(std::make_shared<IFNull>(""));
+		node = geo<IFCone>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), Eigen::Vector3d(0.6, 0.6, 0.6), "cone");
 	}
 	else
 	{
@@ -216,10 +216,10 @@ int main(int argc, char *argv[])
 	//medium: lmu::computePointCloud(node, Eigen::Vector3i(75, 75, 75), 0.05, 0.01);
 	auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(50, 50, 50), 0.05, 0.01);
 
-	auto siftPC = getSIFTKeypoints(pointCloud, 0.01, 0.001, 3, 4, false);
+	pointCloud = getSIFTKeypoints(pointCloud, 0.01, 0.001, 3, 4, false);
 
 	viewer.data().point_size = 2.0;
-	viewer.data().set_points(siftPC.leftCols(3), siftPC.rightCols(3));
+	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
 	viewer.launch();
