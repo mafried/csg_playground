@@ -30,7 +30,7 @@ include_directories(${PROJECT_SOURCE_DIR}/third_party/json/src)
 include_directories(${PROJECT_SOURCE_DIR}/include/) 
 
 #PCL
-find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus)
+find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus keypoints)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
@@ -59,4 +59,4 @@ endif()
 
 add_executable(${PROJECT_NAME}_bin ${APP_HEADERS} ${APP_SOURCES})
 
-target_link_libraries(${PROJECT_NAME}_bin ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_SAMPLE_CONSENSUS_LIBRARIES} igl::core igl::opengl_glfw igl::cgal)
+target_link_libraries(${PROJECT_NAME}_bin ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_SAMPLE_CONSENSUS_LIBRARIES} ${PCL_KEYPOINTS_LIBRARIES} igl::core igl::opengl_glfw igl::cgal)

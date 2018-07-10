@@ -10,6 +10,11 @@
 #include "..\include\pointcloud.h"
 #include "..\include\mesh.h"
 
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/keypoints/sift_keypoint.h>
+#include <pcl/features/normal_3d.h>
+
 void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 {
 	//if (points.cols() != 6)
@@ -155,4 +160,91 @@ Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	}
 
 	return res;
+}
+
+Eigen::MatrixXd lmu::getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable)
+{
+	pcl::PointCloud<pcl::PointNormal>::Ptr pcWithNormals(new pcl::PointCloud<pcl::PointNormal>());
+		
+	pcWithNormals->width = points.rows();
+	pcWithNormals->height = 1;
+	pcWithNormals->is_dense = false;
+	pcWithNormals->points.resize(points.rows());
+
+	
+	if(!normalsAvailable)
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr pcWithoutNormals(new pcl::PointCloud<pcl::PointXYZ>());
+		
+		pcWithoutNormals->width = points.rows();
+		pcWithoutNormals->height = 1;
+		pcWithoutNormals->is_dense = false;
+		pcWithoutNormals->points.resize(points.rows());
+
+		for (int i = 0; i < points.rows(); ++i)
+		{
+			pcWithoutNormals->points[i].x = points.row(i).x();
+			pcWithoutNormals->points[i].y = points.row(i).y();
+			pcWithoutNormals->points[i].z = points.row(i).z();
+		}
+
+		pcl::NormalEstimation<pcl::PointXYZ, pcl::PointNormal> ne;
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_n(new pcl::search::KdTree<pcl::PointXYZ>());
+	
+		ne.setInputCloud(pcWithoutNormals);
+		ne.setSearchMethod(tree_n);
+		ne.setRadiusSearch(0.2);
+		ne.compute(*pcWithNormals);
+
+		for (int i = 0; i < points.rows(); ++i)
+		{
+			pcWithNormals->points[i].x = points.row(i).x();
+			pcWithNormals->points[i].y = points.row(i).y();
+			pcWithNormals->points[i].z = points.row(i).z();
+		}
+		
+	}
+	else
+	{
+
+		for (int i = 0; i < points.rows(); ++i)
+		{
+			pcWithNormals->points[i].x = points.row(i).x();
+			pcWithNormals->points[i].y = points.row(i).y();
+			pcWithNormals->points[i].z = points.row(i).z();
+
+			//... add copy of normal coordinates TODO
+		}
+	}
+
+	
+	pcl::SIFTKeypoint<pcl::PointNormal, pcl::PointWithScale> sift;
+
+	pcl::PointCloud<pcl::PointWithScale>::Ptr result(new pcl::PointCloud<pcl::PointWithScale>());
+
+
+	pcl::search::KdTree<pcl::PointNormal>::Ptr tree(new pcl::search::KdTree<pcl::PointNormal>());
+	sift.setSearchMethod(tree);
+	sift.setScales(minScale, numOctaves, numScalesPerOctave);	
+	sift.setMinimumContrast(minContrast);	
+	sift.setInputCloud(pcWithNormals);
+	
+	std::cout << "Compute" << std::endl;
+
+	sift.compute(*result);
+
+	std::cout << "Compute Done" << std::endl;
+
+	Eigen::MatrixXd resultMat;
+	resultMat.resize(result->size(), 3);
+	for (int i = 0; i < resultMat.rows(); i++)
+	{
+		resultMat.block<1, 3>(i, 0) << result->points[i].x, result->points[i].y, result->points[i].z;
+			//pcWithNormals->points[i].normal_x, pcWithNormals->points[i].normal_y, pcWithNormals->points[i].normal_z;
+	}
+
+	std::cout << "Copy Done" << std::endl;
+
+
+	return resultMat;
 }

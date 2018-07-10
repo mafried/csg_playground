@@ -12,6 +12,8 @@ namespace lmu
 	Eigen::MatrixXd readPointCloud(const std::string& file, double scaleFactor = 1.0);
 	Eigen::MatrixXd pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
 
+	Eigen::MatrixXd getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable);
+
 	
 }
 
