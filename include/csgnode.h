@@ -45,6 +45,7 @@ namespace lmu
 		virtual CSGNodePtr clone() const = 0;
 
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const = 0;
+		virtual double signedDistance(const Eigen::Vector3d& p) const = 0;
 
 		virtual std::string name() const = 0; 
 
@@ -165,6 +166,11 @@ namespace lmu
 			return _function->signedDistanceAndGradient(p);
 		}
 
+		virtual double signedDistance(const Eigen::Vector3d& p) const override
+		{
+			return _function->signedDistance(p);
+		}
+
 		virtual std::vector<CSGNode> childs() const override
 		{
 			return _childs;
@@ -249,6 +255,11 @@ namespace lmu
 		inline virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override final
 		{
 			return _node->signedDistanceAndGradient(p);
+		}
+
+		inline virtual double signedDistance(const Eigen::Vector3d& p) const override final
+		{
+			return _node->signedDistance(p);
 		}
 
 		inline virtual std::string name() const override final
@@ -341,6 +352,7 @@ namespace lmu
 
 		virtual CSGNodePtr clone() const override;
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
@@ -356,6 +368,7 @@ namespace lmu
 
 		virtual CSGNodePtr clone() const override;
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
@@ -371,6 +384,7 @@ namespace lmu
 
 		virtual CSGNodePtr clone() const override;
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
@@ -386,6 +400,7 @@ namespace lmu
 
 		virtual CSGNodePtr clone() const override;
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
@@ -475,6 +490,9 @@ namespace lmu
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
+
+	std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node);
+
 }
 
 #endif

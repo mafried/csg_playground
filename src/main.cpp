@@ -22,6 +22,8 @@
 
 #include "evolution.h"
 
+#include "curvature.h"
+
 enum class ApproachType
 {
 	None = 0,
@@ -32,7 +34,7 @@ enum class ApproachType
 ApproachType approachType = ApproachType::BaselineGA;
 ParallelismOptions paraOptions = ParallelismOptions::GAParallelism;
 int sampling = 30;//35;
-int nodeIdx = 3;
+int nodeIdx = 1;
 
 void update(igl::opengl::glfw::Viewer& viewer)
 {
@@ -206,6 +208,17 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+
+	//auto n1 = geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0,0,0),1.0, "Sphere_0");
+
+	//std::cout << n1.signedDistance(Eigen::Vector3d(3, 0, 0)) << " " << n1.signedDistanceAndGradient(Eigen::Vector3d(3, 0, 0)) << std::endl;
+
+	//auto curvature = lmu::curvature(Eigen::Vector3d(3,2,1), n1, 0.001);
+
+	//std::cout << "gauss: " << curvature.gaussCurv << " mean: " << curvature.meanCurv << std::endl;
+	//int i; 
+	//std::cin >> i;
+
 	//lmu::Mesh csgMesh = computeMesh(node, Eigen::Vector3i(50, 50, 50));
 	//viewer.data().set_mesh(csgMesh.vertices, csgMesh.indices);
 
@@ -214,12 +227,37 @@ int main(int argc, char *argv[])
 
 	//high: lmu::computePointCloud(node, Eigen::Vector3i(120, 120, 120), 0.05, 0.01);
 	//medium: lmu::computePointCloud(node, Eigen::Vector3i(75, 75, 75), 0.05, 0.01);
-	auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(50, 50, 50), 0.05, 0.01);
 
-	pointCloud = getSIFTKeypoints(pointCloud, 0.01, 0.001, 3, 4, false);
 
-	viewer.data().point_size = 2.0;
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	auto pointCloud = lmu::computePointCloud(node, Eigen::Vector3i(100, 100, 100), 0.05, 0.03);
+
+	std::vector<ImplicitFunctionPtr> shapes; 
+	for (const auto& geoNode : allGeometryNodePtrs(node))
+		shapes.push_back(geoNode->function());
+
+	auto dims = lmu::computeDimensions(node);
+
+	auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), 0.01);
+	auto graph2 = lmu::createConnectionGraph(shapes);
+
+	lmu::writeConnectionGraph("connectionGraph.dot", graph);
+	lmu::writeConnectionGraph("connectionGraph2.dot", graph2);
+
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+
+	std::cout << "Before: " << pointCloud.rows() << std::endl;
+
+
+	pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, 0.1);
+	
+	std::cout << "After: " << pointCloud.rows() << std::endl;
+
+	//pointCloud = getSIFTKeypoints(pointCloud, 0.01, 0.001, 3, 4, false);
+
+	//auto colors = lmu::computeCurvature(pointCloud.leftCols(3), node, 0.01, true);
+
+	viewer.data().point_size = 1.0;
+	viewer.data().set_points(pointCloud.leftCols(3), Eigen::MatrixXd()/*, colors*/);
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
 	viewer.launch();

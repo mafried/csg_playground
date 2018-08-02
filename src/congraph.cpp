@@ -6,6 +6,7 @@
 
 #include "boost/graph/graphviz.hpp"
 #include "boost/graph/bron_kerbosch_all_cliques.hpp"
+#include <boost/dynamic_bitset.hpp>
 
 std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
 {
@@ -54,6 +55,89 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 		i++;
 	}
 
+	return graph;
+}
+
+void createConnectionGraphRec(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs, const Eigen::Vector3d & min, const Eigen::Vector3d & max, double minCellSize, std::vector<boost::dynamic_bitset<>>& overlaps)
+{
+	//std::cout << "part: " << std::endl << min << std::endl << max << std::endl;
+
+	if ((max - min).norm() < minCellSize)
+		return;
+
+	Eigen::Vector3d s = (max - min);
+	Eigen::Vector3d p = min + 0.5 * s;
+	
+	boost::dynamic_bitset<> isIn(funcs.size());
+	
+	for (int i = 0; i < funcs.size(); ++i)	
+		isIn[i] = funcs[i]->signedDistance(p) < 0.0;	
+	
+	for (int i = 0; i < funcs.size(); ++i)
+		overlaps[i] = isIn[i] ? overlaps[i] | isIn : overlaps[i]; // overlaps[i] | isIn;
+		
+	createConnectionGraphRec(funcs, min, min + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(s.x() * 0.5, 0.0, 0.0),			min + Eigen::Vector3d(s.x() * 0.5, 0.0, 0.0) + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(0.0, s.y() * 0.5, 0.0),			min + Eigen::Vector3d(0.0, s.y() * 0.5, 0.0) + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(s.x() * 0.5, s.y() * 0.5, 0.0),	min + Eigen::Vector3d(s.x() * 0.5, s.y() * 0.5, 0.0) + 0.5 * s, minCellSize, overlaps);
+
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(0.0, 0.0, s.z() * 0.5),			min + Eigen::Vector3d(0.0, 0.0, s.z() * 0.5) + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(s.x() * 0.5, 0.0, s.z() * 0.5),	min + Eigen::Vector3d(s.x() * 0.5, 0.0, s.z() * 0.5) + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(0.0, s.y() * 0.5, s.z() * 0.5),	min + Eigen::Vector3d(0.0, s.y() * 0.5, s.z() * 0.5) + 0.5 * s, minCellSize, overlaps);
+	createConnectionGraphRec(funcs, min + Eigen::Vector3d(s.x() * 0.5, s.y() * 0.5, s.z() * 0.5), min + Eigen::Vector3d(s.x() * 0.5, s.y() * 0.5, s.z() * 0.5) + 0.5 * s, minCellSize, overlaps);
+		
+	//All bits are set.
+	if (isIn.count() == funcs.size())
+		return; 
+}
+
+lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, const Eigen::Vector3d & min, const Eigen::Vector3d & max, double minCellSize)
+{
+	lmu::Graph graph;
+	std::vector<boost::dynamic_bitset<>> overlaps(impFuncs.size());
+
+	int i = 0;
+	for (const auto& impFunc : impFuncs)
+	{
+		auto v = boost::add_vertex(graph);
+		graph[v] = impFunc;
+		graph.vertexLookup[impFunc] = v;
+
+		overlaps[i++] = boost::dynamic_bitset<>(impFuncs.size(), false);
+	}
+
+	createConnectionGraphRec(impFuncs, min, max, minCellSize, overlaps);
+
+	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;
+
+	i = 0;
+	for (boost::tie(vi1, vi1_end) = boost::vertices(graph); vi1 != vi1_end; ++vi1)
+	{
+		const auto& v1 = graph[*vi1];
+
+		boost::graph_traits<Graph>::vertex_iterator vi2, vi2_end;
+
+		int j = 0;
+		for (boost::tie(vi2, vi2_end) = boost::vertices(graph); vi2 != vi2_end; ++vi2)
+		{
+			std::cout << overlaps[i][j] << " ";
+
+			if (i == j)
+				break;
+			
+			const auto& v2 = graph[*vi2];
+
+			//Add an edge if both primitives collide.
+			if (v1 != v2 && overlaps[i][j])
+				boost::add_edge(*vi1, *vi2, graph);
+			j++;
+		}
+
+		std::cout << std::endl;
+
+		i++;
+	}
+	
 	return graph;
 }
 

@@ -30,6 +30,19 @@ Eigen::Vector4d UnionOperation::signedDistanceAndGradient(const Eigen::Vector3d&
 
 	return res;
 }
+double UnionOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	double res = 0.0;
+
+	res = std::numeric_limits<double>::max();
+	for (const auto& child : _childs)
+	{
+		auto childRes = child.signedDistance(p);
+		res = childRes < res ? childRes : res;
+	}
+
+	return res;
+}
 CSGNodeOperationType UnionOperation::operationType() const
 {
 	return CSGNodeOperationType::Union;
@@ -77,6 +90,19 @@ Eigen::Vector4d IntersectionOperation::signedDistanceAndGradient(const Eigen::Ve
 	{
 		auto childRes = child.signedDistanceAndGradient(p);
 		res = childRes[0] > res[0] ? childRes : res;
+	}
+
+	return res;
+}
+double IntersectionOperation::signedDistance(const Eigen::Vector3d & p) const
+{
+	double res = 0.0;
+
+	res = -std::numeric_limits<double>::max();
+	for (const auto& child : _childs)
+	{
+		auto childRes = child.signedDistance(p);
+		res = childRes > res ? childRes : res;
 	}
 
 	return res;
@@ -140,6 +166,26 @@ Eigen::Vector4d DifferenceOperation::signedDistanceAndGradient(const Eigen::Vect
 	
 	return Eigen::Vector4d(value, grad.x(), grad.y(), grad.z());
 }
+double DifferenceOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	auto left = _childs[0].signedDistance(p);
+	auto right = _childs[1].signedDistance(p);
+
+	Eigen::Vector3d grad;
+	double value;
+
+	if (left > -right)
+	{
+		value = left;
+		
+	}
+	else
+	{
+		value = -right;		
+	}
+
+	return value;
+}
 CSGNodeOperationType DifferenceOperation::operationType() const
 {
 	return CSGNodeOperationType::Difference;
@@ -173,6 +219,10 @@ CSGNodePtr ComplementOperation::clone() const
 Eigen::Vector4d ComplementOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
 {	
 	return _childs[0].signedDistanceAndGradient(p) * -1.0;
+}
+double ComplementOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	return _childs[0].signedDistance(p) * -1.0;
 }
 CSGNodeOperationType ComplementOperation::operationType() const
 {
@@ -316,7 +366,6 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 	return res;
 }
 
-std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node);
 
 /*double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs) 
 {
@@ -773,7 +822,7 @@ MergeResult lmu::mergeNodes(const CommonSubgraph& lcs, bool allowIntersections)
 	}
 }
 
-std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node)
+std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNode& node)
 {	
 	auto geos = allGeometryNodePtrs(node);
 
