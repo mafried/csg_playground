@@ -327,6 +327,8 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 		return "Cylinder";
 	case ImplicitFunctionType::Box:
 		return "Box";
+	case ImplicitFunctionType::Cone:
+		return "Cone";
 	case ImplicitFunctionType::Null:
 		return "Null";
 	default:

@@ -64,7 +64,15 @@ Eigen::MatrixXd getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& sha
 	return points;
 }
 
-std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals)
+Primitives lmu::operator&(Primitives lhs, Primitives rhs)
+{
+	return static_cast<Primitives> (
+		static_cast<std::underlying_type<Primitives>::type>(lhs) &
+		static_cast<std::underlying_type<Primitives>::type>(rhs)
+		);
+}
+
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, const RansacCGALParams& params)
 {
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
 
@@ -86,31 +94,30 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 	ransac.set_input(pointsWithNormals);
 
 	// Register shapes for detection
-	//ransac.add_shape_factory<Plane>();
+	if ((params.primitives & Primitives::SPHERE) == Primitives::SPHERE)  ransac.add_shape_factory<Sphere>();
+	if ((params.primitives & Primitives::CYLINDER) == Primitives::CYLINDER)  ransac.add_shape_factory<Cylinder>();
+	if ((params.primitives & Primitives::CONE) == Primitives::CONE)  ransac.add_shape_factory<Cone>();
+	if ((params.primitives & Primitives::TORUS) == Primitives::TORUS)  ransac.add_shape_factory<Torus>();
+	
 	ransac.add_shape_factory<Sphere>();
-	//ransac.add_shape_factory<Cylinder>();
-	//ransac.add_shape_factory<Cone>();
-	//ransac.add_shape_factory<Torus>();
-	
-	
+
 	// Sets parameters for shape detection.
 	Efficient_ransac::Parameters parameters;
 	// Sets probability to miss the largest primitive at each iteration.
-	parameters.probability = 0.01;
+	parameters.probability = params.probability;// 0.01;
 
 	// Detect shapes with at least 500 points.
-	parameters.min_points = 500;
+	parameters.min_points = params.min_points;
 
 	// Sets maximum Euclidean distance between a point and a shape.
-	parameters.epsilon = 0.02; //0.02
+	parameters.epsilon = params.epsilon; //0.02
 
 	// Sets maximum Euclidean distance between points to be clustered.
-	parameters.cluster_epsilon = 0.1; //0.1
+	parameters.cluster_epsilon = params.cluster_epsilon; //0.1
 
 	// Sets maximum normal deviation.
 	// 0.9 < dot(surface_normal, point_normal); 
-	parameters.normal_threshold = 0.9;
-	
+	parameters.normal_threshold = params.normal_threshold;	
 
 	ransac.preprocess();
 
@@ -123,42 +130,41 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 
 	int sphereCount = 0; 
 	int cylinderCount = 0; 
+	int coneCount = 0;
 
 	for (const auto& shape : ransac.shapes())
 	{	
-		// Get specific parameters depending on detected shape.
 		if (Sphere* sphere = dynamic_cast<Sphere*>(shape.get()))
 		{
-			Eigen::Affine3d translate(Eigen::Translation3d(sphere->center().x(), sphere->center().y(), sphere->center().z()));
-			auto func = std::make_shared<lmu::IFSphere>(translate, sphere->radius(), 
-				lmu::iFTypeToString(ImplicitFunctionType::Sphere) + "_" + std::to_string(sphereCount));			
+			std::cout << "Sphere detected" << std::endl;
+
+			auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(), sphere->radius(),
+				lmu::iFTypeToString(ImplicitFunctionType::Sphere) + "_" + std::to_string(sphereCount++));			
 			func->setPoints(getPoints(*shape, pointsWithNormals));
 			
-			//std::cout << "Sphere detected. Points: " << func->points().rows() << std::endl;
-
 			res.push_back(func);
-
-			sphereCount++;
 		}	
-		//else if (Cylinder* cylinder = dynamic_cast<Cylinder*>(shape.get()))
-		//{	
-			//imFunc = std::make_unique<lmu::IFCylinder>(Eigen::Affine3d::Identity(),cylinder->radius(), 0.0);
-			
-			//std::cout << "Cylinder detected." << std::endl;
+		else if (Cylinder* cylinder = dynamic_cast<Cylinder*>(shape.get()))
+		{	
+			std::cout << "Cylinder detected" << std::endl;
 
-		//	cylinderCount++;
-		//}
-		else
-		{
-			//Eigen::Affine3d translate(Eigen::Translation3d(sphere->center().x(), sphere->center().y(), sphere->center().z()));
-			auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(Eigen::Translation3d(0,0,0)), 0,
-				lmu::iFTypeToString(ImplicitFunctionType::Sphere) + "_" + std::to_string(sphereCount));
+			auto func = std::make_shared<lmu::IFCylinder>(Eigen::Affine3d(), cylinder->radius(), 1.0,
+				lmu::iFTypeToString(ImplicitFunctionType::Cylinder) + "_" + std::to_string(cylinderCount++));
 			func->setPoints(getPoints(*shape, pointsWithNormals));
-			res.push_back(func);
-			//std::cout << "Sphere detected. Points: " << func->points().rows() << std::endl;
 
 			res.push_back(func);
 		}
+		else if (Cone* cone = dynamic_cast<Cone*>(shape.get()))
+		{
+			std::cout << "Cone detected" << std::endl;
+
+			auto func = std::make_shared<lmu::IFCone>(Eigen::Affine3d(), Eigen::Vector3d(),
+				lmu::iFTypeToString(ImplicitFunctionType::Cone) + "_" + std::to_string(coneCount++));
+			func->setPoints(getPoints(*shape, pointsWithNormals));
+
+			res.push_back(func);
+		}	
+		
 	
 		// Prints the parameters of the detected shape.
 		// This function is available for any type of shape.
