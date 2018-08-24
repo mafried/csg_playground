@@ -38,12 +38,36 @@ lmu::Curvature lmu::curvature(const Eigen::Vector3d & ps, const CSGNode & node, 
 	return c;
 }
 
-Eigen::MatrixXd lmu::filterPrimitivePointsByCurvature(const std::vector<ImplicitFunctionPtr>& funcs, double h, double t)
+Eigen::MatrixXd lmu::filterPrimitivePointsByCurvature(const std::vector<ImplicitFunctionPtr>& funcs, double h, const std::unordered_map<lmu::ImplicitFunctionPtr, double>& outlierTestValues, FilterBehavior behavior, bool normalized)
 {
 	std::vector<Eigen::Matrix<double,1,6>> points; 
-		
+	
+	double min = std::numeric_limits<double>::max();
+	double max = -std::numeric_limits<double>::max();
+
+	if (normalized)
+	{
+		for (const auto& func : funcs)
+		{
+			for (int i = 0; i < func->pointsCRef().rows(); ++i)
+			{
+				Eigen::Matrix<double, 1, 6> point = func->pointsCRef().row(i);
+
+				Curvature c = curvature(point.leftCols(3), geometry(func), h);
+
+				double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+
+				min = deviationFromFlatness < min ? deviationFromFlatness : min; 
+				max = deviationFromFlatness > max ? deviationFromFlatness : max;
+			}
+		}
+	}
+
 	for (const auto& func : funcs)
 	{
+		double t = outlierTestValues.at(func);
+		std::cout << func->name() << ": " << t << std::endl;
+
 		for (int i = 0; i < func->pointsCRef().rows(); ++i)
 		{
 			Eigen::Matrix<double, 1, 6> point = func->pointsCRef().row(i); 
@@ -52,9 +76,20 @@ Eigen::MatrixXd lmu::filterPrimitivePointsByCurvature(const std::vector<Implicit
 
 			double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
 
-			if (deviationFromFlatness >= t)
+			deviationFromFlatness = normalized ? (deviationFromFlatness - min) / (max - min) : deviationFromFlatness; 
+
+			//std::cout << min << " " << max << " " <<  deviationFromFlatness << std::endl;
+
+			switch (behavior)
 			{
-				points.push_back(point);
+			case FilterBehavior::FILTER_FLAT_SURFACES:
+				if (deviationFromFlatness > t)
+					points.push_back(point);				
+				break;
+			case FilterBehavior::FILTER_CURVY_SURFACES:
+				if (deviationFromFlatness < t)
+					points.push_back(point);
+				break;
 			}
 		}
 	}

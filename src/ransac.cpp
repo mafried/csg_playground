@@ -1,4 +1,5 @@
 #include "..\include\ransac.h"
+#include "..\include\csgnode.h"
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/IO/read_xyz_points.h>
@@ -224,55 +225,55 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithPCL(const Eigen::M
 			break;
 		
 		pcl::PointCloud<Point> inlierCloud;
-		pcl::copyPointCloud<Point>(*pc, inliers, inlierCloud);
+pcl::copyPointCloud<Point>(*pc, inliers, inlierCloud);
 
-		Eigen::VectorXf coeffs;
-		method.getModelCoefficients(coeffs);
+Eigen::VectorXf coeffs;
+method.getModelCoefficients(coeffs);
 
-		auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(Eigen::Translation3d(coeffs.x(), coeffs.y(), coeffs.z())), coeffs.w(), "sphere_" + std::to_string(primitiveCounter));
+auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(Eigen::Translation3d(coeffs.x(), coeffs.y(), coeffs.z())), coeffs.w(), "sphere_" + std::to_string(primitiveCounter));
 
-		std::cout << points.rows() << " Inliers: " << inliers.size() << std::endl;
-		std::cout << "Coeffs: " << coeffs << std::endl;
-	
-		Eigen::MatrixXd m(inlierCloud.points.size(), 6);
-		int j = 0;
-		for (const auto& point : inlierCloud.points)
-		{
-			m.row(j)[0] = point.x;// << point.x, point.y, point.z;
-			m.row(j)[1] = point.y;
-			m.row(j)[2] = point.z;
-			j++;
-		}
-		func->setPoints(m);
-		res.push_back(func);
-		
-		Point specialPoint;
-		specialPoint.x = std::numeric_limits<float>::max();
+std::cout << points.rows() << " Inliers: " << inliers.size() << std::endl;
+std::cout << "Coeffs: " << coeffs << std::endl;
 
-		for (int idx : inliers)
-			pc->points[idx] = specialPoint;
-		
+Eigen::MatrixXd m(inlierCloud.points.size(), 6);
+int j = 0;
+for (const auto& point : inlierCloud.points)
+{
+	m.row(j)[0] = point.x;// << point.x, point.y, point.z;
+	m.row(j)[1] = point.y;
+	m.row(j)[2] = point.z;
+	j++;
+}
+func->setPoints(m);
+res.push_back(func);
 
-		pc->points.erase(remove_if(pc->points.begin(), pc->points.end(), [](Point p) { return p.x == std::numeric_limits<float>::max(); }), pc->points.end());
+Point specialPoint;
+specialPoint.x = std::numeric_limits<float>::max();
 
-		primitiveCounter++;
+for (int idx : inliers)
+pc->points[idx] = specialPoint;
 
 
-		if (points.rows() == inliers.size())
-			break;
-	} 
+pc->points.erase(remove_if(pc->points.begin(), pc->points.end(), [](Point p) { return p.x == std::numeric_limits<float>::max(); }), pc->points.end());
+
+primitiveCounter++;
+
+
+if (points.rows() == inliers.size())
+break;
+	}
 
 	return res;
 }
 
-void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
+void lmu::ransacWithSimMultiplePointOwners(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
 {
 	for (auto const& func : knownFunctions)
 	{
 		std::vector<Eigen::Matrix<double, 1, 6>> pointsAndNormals;
 
 		for (int i = 0; i < points.rows(); ++i)
-		{	
+		{
 			if (std::abs(func->signedDistanceAndGradient(points.row(i))[0]) <= maxDelta)
 			{
 				Eigen::Matrix<double, 1, 6> row;
@@ -280,14 +281,59 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 				pointsAndNormals.push_back(row);
 			}
 		}
-		
+
 		Eigen::MatrixXd points(pointsAndNormals.size(), 6);
 		int i = 0;
 		for (const auto& row : pointsAndNormals)
 			points.row(i++) = row;
-		
-	
+
+
 		func->setPoints(points);
 
+	}
+}
+
+void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
+{
+
+	std::unordered_map<lmu::ImplicitFunctionPtr, std::vector<Eigen::Matrix<double, 1, 6>>> pointsAndNormalsMap;
+
+	for (int i = 0; i < points.rows(); ++i)
+	{
+		lmu::ImplicitFunctionPtr curFunc = nullptr;
+		double curMaxDelta = std::numeric_limits<double>::max();
+
+		for (auto const& func : knownFunctions)
+		{
+			double d = std::abs(func->signedDistanceAndGradient(points.row(i))[0]);
+
+			if (d <= maxDelta && d < curMaxDelta)
+			{
+				curMaxDelta = d;
+				curFunc = func;
+			}
+		}
+
+		if (curFunc)
+		{
+			Eigen::Matrix<double, 1, 6> row;
+			row << points.row(i), normals.row(i);
+			pointsAndNormalsMap[curFunc].push_back(row);
+		}
+	}
+
+	for (auto const& func : knownFunctions)
+	{
+		if (pointsAndNormalsMap.find(func) != pointsAndNormalsMap.end())
+		{
+			const auto& pointsAndNormals = pointsAndNormalsMap[func];
+
+			Eigen::MatrixXd points(pointsAndNormals.size(), 6);
+			int i = 0;
+			for (const auto& row : pointsAndNormals)
+				points.row(i++) = row;
+
+			func->setPoints(points);
+		}		
 	}
 }

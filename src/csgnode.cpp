@@ -17,14 +17,14 @@ CSGNodePtr UnionOperation::clone() const
 {
 	return std::make_shared<UnionOperation>(*this);
 }
-Eigen::Vector4d UnionOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
+Eigen::Vector4d UnionOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
 {
 	Eigen::Vector4d res(0, 0, 0, 0);
 
 	res[0] = std::numeric_limits<double>::max();
 	for (const auto& child : _childs)
 	{
-		auto childRes = child.signedDistanceAndGradient(p);
+		auto childRes = child.signedDistanceAndGradient(p,h);
 		res = childRes[0] < res[0] ? childRes : res;
 	}
 
@@ -81,14 +81,14 @@ CSGNodePtr IntersectionOperation::clone() const
 {
 	return std::make_shared<IntersectionOperation>(*this);
 }
-Eigen::Vector4d IntersectionOperation::signedDistanceAndGradient(const Eigen::Vector3d & p) const
+Eigen::Vector4d IntersectionOperation::signedDistanceAndGradient(const Eigen::Vector3d & p, double h) const
 {
 	Eigen::Vector4d res(0, 0, 0, 0);
 
 	res[0] = -std::numeric_limits<double>::max();
 	for (const auto& child : _childs)
 	{
-		auto childRes = child.signedDistanceAndGradient(p);
+		auto childRes = child.signedDistanceAndGradient(p, h);
 		res = childRes[0] > res[0] ? childRes : res;
 	}
 
@@ -145,10 +145,10 @@ CSGNodePtr DifferenceOperation::clone() const
 {
 	return std::make_shared<DifferenceOperation>(*this);
 }
-Eigen::Vector4d DifferenceOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
+Eigen::Vector4d DifferenceOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
 {
-	auto left = _childs[0].signedDistanceAndGradient(p);
-	auto right = _childs[1].signedDistanceAndGradient(p);
+	auto left = _childs[0].signedDistanceAndGradient(p, h);
+	auto right = _childs[1].signedDistanceAndGradient(p, h);
 
 	Eigen::Vector3d grad;	
 	double value;
@@ -216,9 +216,9 @@ CSGNodePtr ComplementOperation::clone() const
 {
 	return std::make_shared<ComplementOperation>(*this);
 }
-Eigen::Vector4d ComplementOperation::signedDistanceAndGradient(const Eigen::Vector3d& p) const
+Eigen::Vector4d ComplementOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
 {	
-	return _childs[0].signedDistanceAndGradient(p) * -1.0;
+	return _childs[0].signedDistanceAndGradient(p,h) * -1.0;
 }
 double ComplementOperation::signedDistance(const Eigen::Vector3d& p) const
 {
@@ -822,6 +822,7 @@ MergeResult lmu::mergeNodes(const CommonSubgraph& lcs, bool allowIntersections)
 	}
 }
 
+//Note that this function assumes that a convex hull mesh exists for each function.
 std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNode& node)
 {	
 	auto geos = allGeometryNodePtrs(node);
@@ -834,6 +835,14 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 	
 	for (const auto& geo : geos)
 	{
+		//Transform vertices.
+		//auto vertices = geo->function()->meshCRef().vertices;
+		//for (int i = 0; i < vertices.rows(); i++) {
+		//	Eigen::Vector3d v = vertices.row(i);
+		//	v = geo->function()->transform() * v;
+		//	vertices.row(i) = v;
+		//}
+
 		Eigen::Vector3d minCandidate = geo->function()->meshCRef().vertices.colwise().minCoeff();
 		Eigen::Vector3d maxCandidate = geo->function()->meshCRef().vertices.colwise().maxCoeff();
 
@@ -1071,7 +1080,7 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 	}
 }
 
-Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector3i & numSamples, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
+Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
 {
 
 	Eigen::Vector3d min, max;
@@ -1089,10 +1098,13 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector
 	}
 
 	//Add a bit dimensions to avoid cuts (TODO: do it right with modulo stepSize).
-	min -= (max - min) * 0.05;
-	max += (max - min) * 0.05;
+	double extend = stepSize * 2.0;
+	min -= Eigen::Vector3d(extend, extend, extend);
+	max += Eigen::Vector3d(extend, extend, extend);
 
-	Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
+	//Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
+
+	Eigen::Vector3i numSamples((max(0) - min(0)) / stepSize, (max(1) - min(1)) / stepSize, (max(2) - min(2)) / stepSize);
 
 	std::vector<Eigen::Matrix<double,1,6>> samplingPoints;
 	
@@ -1109,7 +1121,7 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, const Eigen::Vector
 		{
 			for (int z = 0; z < numSamples(2); ++z)
 			{	
-				Eigen::Vector3d samplingPoint((double)x * stepSize(0) + min(0), (double)y * stepSize(1) + min(1), (double)z * stepSize(2) + min(2));
+				Eigen::Vector3d samplingPoint((double)x * stepSize + min(0), (double)y * stepSize + min(1), (double)z * stepSize + min(2));
 
 				auto samplingValue = node.signedDistanceAndGradient(samplingPoint);
 				

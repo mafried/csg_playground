@@ -405,19 +405,3 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 
 	return res;
 }
-
-Eigen::Vector4d lmu::IFMeshSupported::signedDistanceAndGradient(const Eigen::Vector3d & p)
-{
-	Eigen::MatrixXd points(1,3);
-	points.row(0) << p.x(), p.y(), p.z();
-
-	Eigen::VectorXd d;
-	Eigen::VectorXi i;
-	Eigen::MatrixXd n, c;
-
-	igl::signed_distance_pseudonormal(points, _mesh.vertices, _mesh.indices, _tree, _fn, _vn, _en, _emap, d, i, c, n);
-		
-	//std::cout << n.rows() << std::endl;
-
-	return Eigen::Vector4d(d(0), n.row(0).x(), n.row(0).y(), n.row(0).z());
-}

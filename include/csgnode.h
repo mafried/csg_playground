@@ -44,7 +44,7 @@ namespace lmu
 
 		virtual CSGNodePtr clone() const = 0;
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const = 0;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const = 0;
 		virtual double signedDistance(const Eigen::Vector3d& p) const = 0;
 
 		virtual std::string name() const = 0; 
@@ -146,7 +146,7 @@ namespace lmu
 	{
 	public:
 		explicit CSGNodeGeometry(ImplicitFunctionPtr function) :
-			CSGNodeBase(function->name(), CSGNodeType::Geometry),
+			CSGNodeBase(function ? function->name() : "NullFunction" , CSGNodeType::Geometry),
 			_function(function)
 		{
 		}
@@ -161,9 +161,9 @@ namespace lmu
 			return std::make_shared<CSGNodeGeometry>(_function/*->clone() <= We don't clone the function since its reference is later used as its id*/);
 		}
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override
 		{
-			return _function->signedDistanceAndGradient(p);
+			return _function->signedDistanceAndGradient(p, h);
 		}
 
 		virtual double signedDistance(const Eigen::Vector3d& p) const override
@@ -252,9 +252,9 @@ namespace lmu
 			return _node->clone();
 		}
 
-		inline virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override final
+		inline virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override final
 		{
-			return _node->signedDistanceAndGradient(p);
+			return _node->signedDistanceAndGradient(p, h);
 		}
 
 		inline virtual double signedDistance(const Eigen::Vector3d& p) const override final
@@ -351,7 +351,7 @@ namespace lmu
 		}
 
 		virtual CSGNodePtr clone() const override;
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
 		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
@@ -367,7 +367,7 @@ namespace lmu
 		}
 
 		virtual CSGNodePtr clone() const override;
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
 		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
@@ -383,7 +383,7 @@ namespace lmu
 		}
 
 		virtual CSGNodePtr clone() const override;
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
 		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
@@ -399,7 +399,7 @@ namespace lmu
 		}
 
 		virtual CSGNodePtr clone() const override;
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
 		virtual double signedDistance(const Eigen::Vector3d& p) const override;
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
@@ -486,7 +486,7 @@ namespace lmu
 
 	void optimizeCSGNode(CSGNode& node, double tolerance);
 
-	Eigen::MatrixXd computePointCloud(const CSGNode& node, const Eigen::Vector3i& numSamples, double maxDistance, double errorSigma,
+	Eigen::MatrixXd computePointCloud(const CSGNode& node, double stepSize, double maxDistance, double errorSigma,
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);

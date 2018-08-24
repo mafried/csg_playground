@@ -3,7 +3,7 @@
 using namespace lmu;
 
 CSGNode lmu::geometry(ImplicitFunctionPtr function)
-{
+{	
 	return CSGNode(std::make_shared<CSGNodeGeometry>(function));
 }
 CSGNode lmu::opUnion(const std::vector<CSGNode>& childs)

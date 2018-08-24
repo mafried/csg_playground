@@ -56,8 +56,8 @@ namespace lmu
 	};
 
 	std::string iFTypeToString(ImplicitFunctionType type);
-	
-	struct ImplicitFunction
+
+	struct ImplicitFunction 
 	{
 		ImplicitFunction(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
 			_transform(transform),
@@ -66,12 +66,34 @@ namespace lmu
 			_name(name)
 		{
 			_pos = _transform * _pos;
+			_invTrans = transform.inverse();
 		}
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) = 0;
+		Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& worldP, double h = 0.001)
+		{
+			//world -> local
+			auto pLocal = _invTrans * worldP;
 
-		virtual double signedDistance(const Eigen::Vector3d& p) = 0;
-		
+			double d = signedDistanceLocal(pLocal);
+					
+			Eigen::Vector3d gLocal = gradientLocal(pLocal, h);
+
+			//See also : https://math.stackexchange.com/questions/767369/how-does-the-transformation-on-a-point-affect-the-normal-at-that-point
+			auto transposedTrans = _invTrans.matrix().block<3, 3>(0, 0).transpose();
+			auto gWorld = transposedTrans * gLocal;//(_transform * (pLocal + gLocal) - p).normalized();
+
+			Eigen::Vector4d res;
+			res << (d), gWorld;
+
+			return res;
+		}
+
+		double signedDistance(const Eigen::Vector3d& worldP)
+		{
+			auto localP = _invTrans * worldP;
+			return signedDistanceLocal(localP);
+		}
+
 		Mesh& meshRef()
 		{
 			return _mesh;
@@ -109,10 +131,20 @@ namespace lmu
 			return _name;
 		}
 
+		Eigen::Affine3d transform() const
+		{
+			return _transform;
+		}
+
 		virtual std::shared_ptr<ImplicitFunction> clone() const = 0;
 
 	protected: 
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) = 0;
+
 		Eigen::Affine3d _transform;
+		Eigen::Affine3d _invTrans;
+
 		Eigen::Vector3d _pos;
 		Mesh _mesh;
 		Eigen::MatrixXd _points;
@@ -127,38 +159,7 @@ namespace lmu
 			_displacement(displacement)
 		{
 		}
-
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
-		{
-			double d = signedDistance(p);
-			
-			Eigen::Vector3d gradient = (2.0 * (p - _pos));
-			//gradient.normalize();
-
-			Eigen::Vector4d res;
-			res << (d), gradient;
-
-			return res;
-		}
-
-		virtual double signedDistance(const Eigen::Vector3d& p) override 
-		{
-			double d = (p - _pos).norm() - _radius;
-				//std::sqrt(
-				//    ((p(0) - _pos(0)) * (p(0) - _pos(0)) +
-  				//    (p(1) - _pos(1)) * (p(1) - _pos(1)) +
-				//	(p(2) - _pos(2)) * (p(2) - _pos(2)))) -
-				//_radius;
-
-			double d2 = std::sin(_displacement * p.x())*sin(_displacement * p.y())*sin(_displacement * p.z());
-
-			//std::cout << "p: " << p << std::endl << " pos: " << _pos << std::endl;
-			//std::cout << (d + d2) << std::endl;
-
-			return d + d2;
-		}
-
-
+	
 		virtual ImplicitFunctionType type() const override
 		{
 			return ImplicitFunctionType::Sphere;
@@ -169,9 +170,25 @@ namespace lmu
 			return _radius; 
 		}
 
-		std::shared_ptr<ImplicitFunction> clone() const override
+		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFSphere>(*this);
+		}
+
+	protected:
+
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
+		{
+			double d = localP.norm() - _radius;
+			
+			double d2 = std::sin(_displacement * localP.x())*sin(_displacement * localP.y())*sin(_displacement * localP.z());
+
+			return d + d2;
+		}
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
+		{
+			return localP.normalized();
 		}
 
 	private: 
@@ -179,33 +196,11 @@ namespace lmu
 		double _displacement;
 	};
 
-	class IFMeshSupported : public ImplicitFunction
-	{
-	public: 
-		IFMeshSupported(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
-			ImplicitFunction(transform, mesh, name)
-		{
-			_tree.init(_mesh.vertices, _mesh.indices);
 
-			igl::per_face_normals(_mesh.vertices, _mesh.indices, _fn);
-			igl::per_vertex_normals(_mesh.vertices, _mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, _fn, _vn);
-			igl::per_edge_normals(_mesh.vertices, _mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, _fn, _en, _e, _emap);
-		}
-
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override;
-
-	private: 
-		//We need all this stuff (especially the AABB tree for accelerating distance lookups.
-		igl::AABB<Eigen::MatrixXd, 3> _tree;
-		Eigen::MatrixXd _fn, _vn, _en; //note that _vn is the same as mesh's _normals. TODO
-		Eigen::MatrixXi _e;
-		Eigen::VectorXi _emap;
-	};
-
-	struct IFCylinder : public IFMeshSupported
+	struct IFCylinder : ImplicitFunction
 	{
 		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name) :
-			IFMeshSupported(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
+			ImplicitFunction(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
 			_radius(radius),
 			_height(height)
 		{
@@ -217,62 +212,48 @@ namespace lmu
 			return ImplicitFunctionType::Cylinder;
 		}
 
-		std::shared_ptr<ImplicitFunction> clone() const override
+		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFCylinder>(*this);
 		}
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
-		{				
-			auto ps = _invTrans * p;
+	protected:
 
-			double d = distance(ps);
-			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
-			gradient.normalize();
-
-			Eigen::Vector4d res;
-			res << (d), gradient;
-
-			return res;
-		}
-
-		virtual double signedDistance(const Eigen::Vector3d& p) override
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
 		{
-			auto ps = _invTrans * p;
-			return distance(ps);
-		}
-
-		inline double distance(const Eigen::Vector3d& ps)
-		{
-			double l = Eigen::Vector2d(ps.x(), ps.z()).norm();
-			double dx = std::abs(l) - _height;
-			double dy = std::abs(ps.y()) - _height;
-			return std::max(l - _radius, abs(ps.y()) - _height / 2.0);// std::min(std::max(dx, dy), 0.0) + Eigen::Vector2d(std::max(dx, 0.0), std::max(dy, 0.0)).norm();
-		}
-
-		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
-		{
-			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
-			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
-			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+			double dx = (signedDistanceLocalInline(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+			double dy = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+			double dz = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
 
 			return Eigen::Vector3d(dx, dy, dz);
 		}
 
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
+		{
+			return signedDistanceLocalInline(localP);
+		}
+	
 	private:
+
+		inline double signedDistanceLocalInline(const Eigen::Vector3d& localP)
+		{
+			double l = Eigen::Vector2d(localP.x(), localP.z()).norm();
+			double dx = std::abs(l) - _height;
+			double dy = std::abs(localP.y()) - _height;
+			return std::max(l - _radius, abs(localP.y()) - _height / 2.0);// std::min(std::max(dx, dy), 0.0) + Eigen::Vector2d(std::max(dx, 0.0), std::max(dy, 0.0)).norm();
+		}
+
 		double _radius;
 		double _height;
-		Eigen::Affine3d _invTrans;
 	};
 
-	struct IFBox : public IFMeshSupported
+	struct IFBox : public ImplicitFunction
 	{
 		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name, double displacement = 0.0) :
-			IFMeshSupported(transform, createBox(transform, size, numSubdivisions), name),
+			ImplicitFunction(transform, createBox(transform, size, numSubdivisions), name),
 			_size(size),
 			_displacement(displacement)
 		{
-			_invTrans = transform.inverse();
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -280,53 +261,39 @@ namespace lmu
 			return ImplicitFunctionType::Box;
 		}
 
-		std::shared_ptr<ImplicitFunction> clone() const override
+		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFBox>(*this);
 		}
+				
+	protected:
 
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
 		{
-			auto ps = _invTrans * p;
-
-			double d = distance(ps);
-		
-			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
-			gradient.normalize();
-
-			Eigen::Vector4d res;
-			res << (d), gradient;
-
-			return res;
-		}
-
-		virtual double signedDistance(const Eigen::Vector3d& p) override
-		{
-			auto ps = _invTrans * p;
-			return distance(ps);
-		}
-
-		inline double distance(const Eigen::Vector3d& ps)
-		{
-			double d1 = std::max(abs(ps.x()) - _size.x() / 2.0, std::max(abs(ps.y()) - _size.y() / 2.0, abs(ps.z()) - _size.z() / 2.0));
-
-			double d2 = std::sin(_displacement * ps.x())*sin(_displacement * ps.y())*sin(_displacement * ps.z());
-
-			return d1 + d2;			
-		}
-
-		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
-		{
-			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
-			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
-			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
+			double dx = (signedDistanceLocalInline(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+			double dy = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+			double dz = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
 
 			return Eigen::Vector3d(dx, dy, dz);
 		}
 
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
+		{
+			return signedDistanceLocalInline(localP);
+		}
+
 	private:
+
+		inline double signedDistanceLocalInline(const Eigen::Vector3d& localP)
+		{
+			double d1 = std::max(abs(localP.x()) - _size.x() / 2.0, std::max(abs(localP.y()) - _size.y() / 2.0, abs(localP.z()) - _size.z() / 2.0));
+
+			double d2 = std::sin(_displacement * localP.x())*sin(_displacement * localP.y())*sin(_displacement * localP.z());
+
+			return d1 + d2;			
+		}
+
 		Eigen::Vector3d _size;
-		Eigen::Affine3d _invTrans;
 		float _displacement;
 	};
 
@@ -335,16 +302,6 @@ namespace lmu
 		IFNull(const std::string& name) :
 			ImplicitFunction(Eigen::Affine3d::Identity(), lmu::Mesh(), name)
 		{
-		}
-
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
-		{
-			return Eigen::Vector4d(0,0,0,0);
-		}
-
-		virtual double signedDistance(const Eigen::Vector3d& p) override
-		{
-			return 0.0;
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -357,26 +314,25 @@ namespace lmu
 			return std::make_shared<IFNull>(*this);
 		}
 
-	private:
-		double _radius;
-		double _height;
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
+		{
+			return Eigen::Vector3d(0, 0, 0);
+		}
+
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
+		{
+			return 0.0;
+		}
 	};
 
-	static double compute_dot_product(double v1[], double v2[]) {
-		return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-	}
-
-	static double compute_norm2(double v[]) {
-		return sqrt(compute_dot_product(v, v));
-	}
-
-	struct IFCone : public IFMeshSupported
+	struct IFCone : public ImplicitFunction
 	{
 		IFCone(const Eigen::Affine3d& transform, const Eigen::Vector3d& c, const std::string& name) :
-			IFMeshSupported(transform, createCylinder(transform, c.x(), c.y(), c.z(), 200, 200), name),
+			ImplicitFunction(transform, createCylinder(transform, c.x(), c.y(), c.z(), 200, 200), name),
 			_c(c)
 		{
-			_invTrans = transform.inverse();
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -384,40 +340,9 @@ namespace lmu
 			return ImplicitFunctionType::Cone;
 		}
 
-		std::shared_ptr<ImplicitFunction> clone() const override
+		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFCone>(*this);
-		}
-
-		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p) override
-		{
-
-			auto ps = _invTrans * p;
-
-			double delta = 0.001;
-
-			double d = distance(ps);
-			//double d1 = distance(Eigen::Vector3d(ps.x() + delta, ps.y(), ps.z()));
-			//double d2 = distance(Eigen::Vector3d(ps.x(), ps.y() + delta, ps.z()));
-
-			//Eigen::Vector3d v1(ps.x()) + delta, d1
-
-
-			//std::cout << _name << " distance to " << p << ": " << d << std::endl;
-
-			Eigen::Vector3d gradient = gradientPerCentralDifferences(ps, 0.001);
-			gradient.normalize();
-
-			Eigen::Vector4d res;
-			res << (d), gradient;
-
-			return res;
-		}
-
-		virtual double signedDistance(const Eigen::Vector3d& p) override
-		{
-			auto ps = _invTrans * p;
-			return distance(ps);
 		}
 
 		inline double sign(double v)
@@ -430,9 +355,27 @@ namespace lmu
 				return 0.0;
 		}
 
-		inline double distance(const Eigen::Vector3d& ps)
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
 		{
-			Eigen::Vector2d q = Eigen::Vector2d(Eigen::Vector2d(ps.x(), ps.z()).norm(), ps.y());
+			double dx = (signedDistanceLocalInline(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+			double dy = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+			double dz = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
+
+			return Eigen::Vector3d(dx, dy, dz);
+		}
+
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
+		{
+			return signedDistanceLocalInline(localP);
+		}
+
+	private:
+
+		inline double signedDistanceLocalInline(const Eigen::Vector3d& localP) 
+		{
+			Eigen::Vector2d q = Eigen::Vector2d(Eigen::Vector2d(localP.x(), localP.z()).norm(), localP.y());
 			Eigen::Vector2d v = Eigen::Vector2d(_c.z()*_c.y() / _c.x(), -_c.z());
 			Eigen::Vector2d w = v - q;
 			Eigen::Vector2d vv = Eigen::Vector2d(v.dot(v), v.x()*v.x());
@@ -444,19 +387,7 @@ namespace lmu
 			return sqrt(w.dot(w) - std::max(d.x(), d.y())) * sign(std::max(q.y()*v.x() - q.x()*v.y(), w.y()));
 		}
 
-		inline Eigen::Vector3d gradientPerCentralDifferences(const Eigen::Vector3d& ps, double h)
-		{
-			double dx = (distance(Eigen::Vector3d(ps.x() + h, ps.y(), ps.z())) - distance(Eigen::Vector3d(ps.x() - h, ps.y(), ps.z()))) / (2.0 * h);
-			double dy = (distance(Eigen::Vector3d(ps.x(), ps.y() + h, ps.z())) - distance(Eigen::Vector3d(ps.x(), ps.y() - h, ps.z()))) / (2.0 * h);
-			double dz = (distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() + h)) - distance(Eigen::Vector3d(ps.x(), ps.y(), ps.z() - h))) / (2.0 * h);
-
-			return Eigen::Vector3d(dx, dy, dz);
-		}
-
-	private:
 		Eigen::Vector3d _c;
-
-		Eigen::Affine3d _invTrans;
 	};
 	
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);

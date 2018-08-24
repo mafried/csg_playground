@@ -122,7 +122,13 @@ namespace lmu
 
 	Curvature curvature(const Eigen::Vector3d& ps, const CSGNode& node, double h);
 
-	Eigen::MatrixXd filterPrimitivePointsByCurvature(const std::vector<ImplicitFunctionPtr>& funcs, double h, double t);
+	enum class FilterBehavior
+	{
+		FILTER_FLAT_SURFACES,
+		FILTER_CURVY_SURFACES
+	};
+
+	Eigen::MatrixXd filterPrimitivePointsByCurvature(const std::vector<ImplicitFunctionPtr>& funcs, double h, const std::unordered_map<lmu::ImplicitFunctionPtr, double>& outlierTestValues, FilterBehavior behavior, bool normalized);
 
 	Eigen::VectorXd computeCurvature(const Eigen::MatrixXd & samplePoints, const CSGNode & node, double h, bool normalize);
 
