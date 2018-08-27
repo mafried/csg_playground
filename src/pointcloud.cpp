@@ -34,32 +34,62 @@ void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 	}
 }
 
-Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
+Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor, bool readHeader)
 {
 	std::ifstream s(file);
 	
 	size_t numRows; 
 	size_t numCols;
 
-	s >> numRows; 
-	s >> numCols; 
+	if (readHeader)
+	{
+		s >> numRows;
+		s >> numCols;
+	}
+	else
+	{
+		numCols = 6; 
+		numRows = 1;
+	}
 
 	std::cout << numRows << " " << numCols << std::endl;
 
 	Eigen::MatrixXd points(numRows, numCols);
 
-
-	for (int i = 0; i < points.rows(); i++)
+	if (readHeader)
 	{
-		for (int j = 0; j < points.cols(); j++)
+		for (int i = 0; i < points.rows(); i++)
 		{
-			double v; 
-			s >> v;
+			for (int j = 0; j < points.cols(); j++)
+			{
+				double v;
+				s >> v;
 
-			if (j < 3)
-				v = v * scaleFactor;
+				if (j < 3)
+					v = v * scaleFactor;
 
-			points(i,j) = v;
+				points(i, j) = v;
+			}
+		}
+	}
+	else
+	{
+		int i = 0;
+		while (!s.eof())
+		{
+			for (int j = 0; j < points.cols(); j++)
+			{
+				double v;
+				s >> v;
+
+				if (j < 3)
+					v = v * scaleFactor;
+							
+				points(i, j) = v;				
+			}
+
+			points.conservativeResize(points.rows() + 1, points.cols());
+			i++;
 		}
 	}
 
