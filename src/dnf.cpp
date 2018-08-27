@@ -8,6 +8,9 @@
 
 #include <boost/math/special_functions/erf.hpp>
 
+Eigen::MatrixXd lmu::g_testPoints;
+lmu::Clause lmu::g_clause;
+
 
 lmu::CSGNode lmu::DNFtoCSGNode(const DNF& dnf)
 {
@@ -116,7 +119,14 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 	int numTotalSamples = 0;
 	int numConsideredSamples = 0;
 
-	double h = 0.0001;
+	double h = 0.001;
+
+
+	//if (clause.literals[0])
+	//	return false;
+
+	std::cout << "ITERATION" << std::endl;
+	std::vector<Eigen::Matrix<double, 1, 2>> consideredPoints;
 
 	for (int i = 0; i < functions.size(); ++i)
 	{	
@@ -124,6 +134,9 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 		//	continue;
 
 		lmu::ImplicitFunctionPtr func = functions[i];
+
+		//if (i == 0)
+		//	continue;
 
 		double outlierTestValue = outlierTestValues.at(func);
 
@@ -141,7 +154,7 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);			
 			
 			//Move sample position back on the function's implied surface.			
-			sampleP = sampleP - sampleGradFunction.cwiseProduct(Eigen::Vector3d(sampleDistFunction, sampleDistFunction, sampleDistFunction));
+			//sampleP = sampleP - sampleGradFunction.cwiseProduct(Eigen::Vector3d(sampleDistFunction, sampleDistFunction, sampleDistFunction));
 
 			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
 			double sampleDistNode = sampleDistGradNode[0];
@@ -150,68 +163,80 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 			//if(abs(func->signedDistanceAndGradient(sampleP)[0]) > h*h / 2.0)
 			//	std::cout << sampleDistFunction << " " << func->signedDistanceAndGradient(sampleP)[0] << std::endl;
 
+			const double smallestDelta = 0.000000001;
 
-			if (sampleDistNode > h*h / 2.0)
-			{
-				continue;
-			}
-
-			numConsideredSamples++; 
-
-			if (sampleDistNode < -(h*h) / 2.0) //TODO
-			{
-				//std::cout << "0: " << sampleDistNode << std::endl;
-				continue;
-			}
+			if (sampleDistNode - sampleDistFunction > smallestDelta)
+			{			
 			
+				continue;
+			}
+			else
+			{
+			}
+						
+			//Curvature c = curvature(sampleP, geometry(func), h);
+			//double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+			//if (deviationFromFlatness > outlierTestValue)
+			//{				
+			//	continue;
+			//}
+		
+			numConsideredSamples++;
+
+			if (sampleDistNode - sampleDistFunction < -smallestDelta)
+			{
+				//std::cout << "D: " << (sampleDistNode - sampleDistFunction) << std::endl;
+
+				//Eigen::Matrix<double, 1, 6> m;
+				//m << sampleP.transpose(), Eigen::Vector3d(1, 0, 0).transpose();
+				//consideredPoints.push_back(m);
+			
+				continue;
+			}
+
 			if (sampleGradNode.dot(sampleN) <= 0.0)
 			{
-				//std::cout << "1: " << sampleDistNode << std::endl;
+				//Eigen::Matrix<double, 1, 6> m;
+				//m << sampleP.transpose(), Eigen::Vector3d(0, 1, 1).transpose();
+				//consideredPoints.push_back(m);
+
 				continue;
 			}
-
-
-			//std::cout << sampleGradNode.dot(sampleGradFunction) << std::endl;
-
-			numCorrectSamples++;
-			//if (std::abs(fp[0] - distToFunc) > 0.0001)
-			//	continue;
-
-			//std::cout << fp[0] << std::endl;
-
-			//if (std::abs(fp[0]) > params.maxDistDelta)
-			//	continue;
 			
-			//double h = 0.01;
-			//Curvature c = curvature(p, node, h);
-			//double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
-
-			//if (deviationFromFlatness - outlierTestValue > 0.0001)
-			//	continue;
-
-			//Eigen::Vector3d g(fp[1], fp[2], fp[3]);
-						
-			//bool isInSameDirection = g.dot(n) > 0.0;
-
-			//numSameDir += isInSameDirection;			
-			//numOtherDir += !isInSameDirection;	
+			numCorrectSamples++;
 		}
 	}
+
+	
+	
+	/*g_testPoints = Eigen::MatrixXd(consideredPoints.size(), 6);
+	int i = 0;
+	for (const auto& p : consideredPoints)
+		g_testPoints.row(i++) = p;
+	g_clause = clause;
+	*/
 
 	//if (numSameDir + numOtherDir == 0)
 	//	return false;
 
-	//double consideredSamples = (double)(numSameDir + numOtherDir) / (double)totalNumSamples;
+	double consideredSamples = (double)(numConsideredSamples) / (double)numTotalSamples;
 	double correctSamples = numConsideredSamples == 0.0 ? 0.0 : (double)numCorrectSamples / (double)(numConsideredSamples);
 
 	std::cout << "Clause: ";
 	print(std::cout, clause, functions, false);
 	std::cout << std::endl;
-	//std::cout << "Considered Samples: " << consideredSamples << std::endl;
+	std::cout << "Considered Samples: " << consideredSamples << std::endl;
 	std::cout << "Correct Samples: " << correctSamples << std::endl;
+
+	Eigen::Matrix<double, 1, 2> m;
+	m << consideredSamples, correctSamples;
+    g_testPoints.conservativeResize(g_testPoints.rows()+1,2);
+    g_testPoints.row(g_testPoints.rows() - 1) = m;
+
+	//std::cout << g_testPoints << std::endl;
 	
-	return correctSamples >= params.requiredCorrectSamples; //&&
-		//consideredSamples >= params.requiredConsideredSamples;
+	return correctSamples >= params.requiredCorrectSamples &&
+		consideredSamples >= params.requiredConsideredSamples;
 }
 
 bool lmu::isPrime(const ImplicitFunctionPtr& testFunc, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params)
@@ -376,4 +401,64 @@ lmu::DNF lmu::mergeDNFs(const std::vector<DNF>& dnfs)
 	}
 		
 	return mergedDNF;
+}
+
+std::string lmu::espressoExpression(const DNF& dnf)
+{
+	std::stringstream ss;
+
+	std::stringstream literalsS;
+	for (const auto& func : dnf.functions)
+	{
+		literalsS << func->name() << ",";
+	}
+	std::string literals = literalsS.str();
+	literals = literals.substr(0, literals.size() - 1);
+
+	ss << literals << "= map(exprvar, '" << literals << "'.split(','))" << std::endl;
+
+	ss << "expr = ";
+
+	bool firstClause = true;
+
+	for (const auto& clause : dnf.clauses)
+	{
+		
+		if (!firstClause)
+		{
+			ss << "| ";
+		}
+		else
+		{
+			firstClause = false;
+		}
+
+		bool firstLiteral = true;
+
+		for (int i = 0; i < clause.size(); ++i)
+		{
+
+			if (clause.literals[i])
+			{
+				if (!firstLiteral)
+				{
+					ss << "& ";
+				}
+				else
+				{
+					firstLiteral = false;
+				}
+
+				if (clause.negated[i])
+					ss << "~";
+
+				ss << dnf.functions[i]->name() << " ";
+			}
+		}
+	}
+
+	ss << std::endl;
+	ss << "dnf = expr.to_dnf()";
+	
+	return ss.str();
 }

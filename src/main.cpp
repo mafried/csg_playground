@@ -311,26 +311,42 @@ int main(int argc, char *argv[])
 	})
 	});*/
 
-	/*
-node = op<Union>({
+/*node = op<Union>({
 	geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5) *rot90x), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_3"),
 	geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_2"),
-});
+});*/
 
 
-node = op<Difference>({
+/*node = op<Difference>({
 	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.2, 0.8, "Cylinder_2"),
 	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.1, 2, "Cylinder_3")
 });
+*/
 
-node = op<Difference>(
+/*node = op<Difference>(
 {
 	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
 	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
-});
-*/
+});*/
 
-	auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.00);
+
+/*node = op<Union>(
+{
+	geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1"),
+	
+
+
+	op<Union>(
+	{
+		op<Difference>(
+		{
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+		})
+
+	})
+});*/
+	auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.01);
 
 	std::vector<ImplicitFunctionPtr> shapes; 
 	for (const auto& geoNode : allGeometryNodePtrs(node))
@@ -353,7 +369,7 @@ node = op<Difference>(
 	//shapes.clear();
 	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
 
-	auto dnf = lmu::computeShapiro(shapes, true, { 0.05, 0.9, 0.0 });
+	auto dnf = lmu::computeShapiro(shapes, true, { 0.05, 0.70, 0.05 });
 
 	auto res = lmu::DNFtoCSGNode(dnf);
 
@@ -366,7 +382,7 @@ node = op<Difference>(
 
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 	
-	
+	std::cout << lmu::espressoExpression(dnf) << std::endl;
 
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
 
@@ -379,7 +395,7 @@ node = op<Difference>(
 
 	//auto colors = lmu::computeCurvature(pointCloud.leftCols(3), node, 0.01, true);
 
-	viewer.data().point_size = 2.0;
+	viewer.data().point_size = 4.0;
 	
 	Eigen::MatrixX3d colors = pointCloud.rightCols(3);
 	//colors.transpose() =  ((colors.transpose() + Eigen::Vector3d(1.0,1.0,1.0)).cwiseProduct(Eigen::Vector3d(0.5, 0.5, 0.5)));
@@ -390,13 +406,23 @@ node = op<Difference>(
 		colors.row(r) = v;
 	}
 
-	viewer.data().set_points(pointCloud.leftCols(3), colors);
+	std::cout << "Considered Clause " << g_clause << std::endl;
+	//viewer.data().set_points(g_testPoints.leftCols(3), g_testPoints.rightCols(3));
+	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+
 	//viewer.data().set_mesh(node.function
-	//for (const auto& shape : allGeometryNodePtrs(res))
+	//for (const auto& shape : allGeometryNodePtrs(node))
 	//{
-	//	viewer.data().add_points(shape->function()->pointsCRef().leftCols(3), shape->function()->pointsCRef().rightCols(3));
-	//
+		//if (shape->name() == "Cylinder_2")
+	//		viewer.data().add_points(shape->function()->pointsCRef().leftCols(3), shape->function()->pointsCRef().rightCols(3));
+	
 	//}
+
+	std::cout << "TEST: " << g_testPoints;
+
+	std::ofstream fs("output.dat");
+	fs << g_testPoints;
+	fs.close();
 	
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 

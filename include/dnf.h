@@ -17,15 +17,28 @@ namespace lmu
 		{
 		}
 
+		Clause()
+		{
+		}
+
 		void clearAll()
 		{
 			literals = boost::container::vector<bool>(literals.size(), false);
 			negated = boost::container::vector<bool>(negated.size(), false);
 		}
 
+		size_t size() const
+		{
+			return literals.size();
+		}
+
 		boost::container::vector<bool> literals; 
 		boost::container::vector<bool> negated;
 	};
+
+	extern Eigen::MatrixXd g_testPoints;
+	extern Clause g_clause;
+
 
 	struct DNF
 	{
@@ -55,6 +68,8 @@ namespace lmu
 
 	DNF computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const SampleParams& params);
 	DNF mergeDNFs(const std::vector<DNF>& dnfs);
+
+	std::string espressoExpression(const DNF& dnf);
 }
 
 #endif
