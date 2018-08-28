@@ -8,6 +8,8 @@
 
 #include <boost/math/special_functions/erf.hpp>
 
+#include "statistics.h"
+
 Eigen::MatrixXd lmu::g_testPoints;
 lmu::Clause lmu::g_clause;
 
@@ -111,7 +113,64 @@ std::unordered_map<lmu::ImplicitFunctionPtr, double> lmu::computeOutlierTestValu
 }
 
 
-bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params)
+double getInOutThreshold(const std::vector<double>& qualityValues)
+{
+	const int k = 2;
+
+	auto res = lmu::k_means(qualityValues, k , 300);
+	std::cout << "Means: " << std::endl;
+	for (auto m : res.means)
+		std::cout << m << std::endl;
+
+	std::vector<double> min( k, std::numeric_limits<double>::max());
+	size_t i = 0;
+	for (auto t : res.assignments)
+	{
+		min[t] = qualityValues[i] < min[t] ? qualityValues[i] : min[t];
+		i++;
+	}
+
+	std::sort(min.begin(), min.end());
+
+	for(auto m : min)
+		std::cout << "Min: " << m << std::endl;
+
+	
+	return min.back();
+	/*ValueCountPairContainer sortedUniqueValueCounts;
+	GetValueCountPairs(sortedUniqueValueCounts, &qualityValues[0], qualityValues.size());
+
+	std::cout << "Finding Jenks ClassBreaks..." << std::endl;
+	LimitsContainer resultingbreaksArray;
+	ClassifyJenksFisherFromValueCountPairs(resultingbreaksArray, k, sortedUniqueValueCounts);
+
+	std::cout << "Breaks: " << std::endl;
+	for (const auto& b : resultingbreaksArray)
+		std::cout << b << std::endl;
+
+	return resultingbreaksArray[1];*/
+}
+
+std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<std::tuple<lmu::Clause, double>>& clauseQualityPairs)
+{
+	std::vector<double> qualityValues; 
+	std::transform(clauseQualityPairs.begin(), clauseQualityPairs.end(), std::back_inserter(qualityValues), 
+		[](auto p) { return std::get<1>(p); });
+
+	double t = getInOutThreshold(qualityValues);
+
+	std::vector<std::tuple<lmu::Clause, size_t>> validClauses;
+
+	for (size_t i = 0; i < clauseQualityPairs.size(); ++i)
+	{
+		if (std::get<1>(clauseQualityPairs[i]) >= t)		
+			validClauses.push_back(std::make_tuple(std::get<0>(clauseQualityPairs[i]), i));
+	}
+
+	return validClauses; 
+}
+
+std::tuple<lmu::Clause, double> lmu::scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params)
 {
 	lmu::CSGNode node = clauseToCSGNode(clause, functions);
 
@@ -120,12 +179,7 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 	int numConsideredSamples = 0;
 
 	double h = 0.001;
-
-
-	//if (clause.literals[0])
-	//	return false;
-
-	std::cout << "ITERATION" << std::endl;
+	
 	std::vector<Eigen::Matrix<double, 1, 2>> consideredPoints;
 
 	for (int i = 0; i < functions.size(); ++i)
@@ -235,99 +289,75 @@ bool lmu::isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& fun
 
 	//std::cout << g_testPoints << std::endl;
 	
-	return correctSamples >= params.requiredCorrectSamples &&
-		consideredSamples >= params.requiredConsideredSamples;
+	//return correctSamples >= params.requiredCorrectSamples &&
+	//	consideredSamples >= params.requiredConsideredSamples;
+
+	return std::make_tuple(clause, correctSamples);	
 }
 
-bool lmu::isPrime(const ImplicitFunctionPtr& testFunc, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params)
-{
-	std::cout << testFunc->name() << std::endl;
+std::vector<std::tuple<lmu::Clause, double>>  permutateAllPossibleFPs(lmu::Clause clause /*copy necessary*/, lmu::DNF& dnf, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::SampleParams& params, int& iterationCounter)
+{	
+	std::vector<std::tuple<lmu::Clause, double>> clauses;
 
-	int numConsideredSamples = 0;
-	int numCorrectSamples = 0;
-
-	for (int i = 0; i < functions.size(); ++i)
-	{
-		if (functions[i] == testFunc)
-			continue;
-
-		double outlierTestValue = outlierTestValues.at(testFunc);
-
-		for (int j = 0; j < functions[i]->pointsCRef().rows(); ++j)
-		{			
-			Eigen::Matrix<double, 1, 6> pn = functions[i]->pointsCRef().row(j);
-
-			Eigen::Vector3d p = pn.leftCols(3);
-			Eigen::Vector3d n = pn.rightCols(3);
-
-			Eigen::Vector4d fp = testFunc->signedDistanceAndGradient(p);
-
-			if (fp[0] > 0.1)
-				continue;
-
-			numConsideredSamples++;
-
-			if (fp[0] > 0.0)
-				numCorrectSamples++;
-		}
-	}
-
-	double correctSamples = (double)numCorrectSamples / (double)numConsideredSamples;
-		
-	std::cout << "Correct Samples: " << correctSamples << std::endl;
-
-	return correctSamples >= params.requiredCorrectSamples;		
-}
-
-void permutate(lmu::Clause clause /*copy necessary*/, lmu::DNF& dnf, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::SampleParams& params, int& iterationCounter)
-{			
 	std::sort(clause.negated.begin(), clause.negated.end());
+	do {							
+		clauses.push_back(lmu::scoreClause(clause, dnf.functions, outlierTestValues, params));
 
-	do {
-							
-		if (lmu::isIn(clause, dnf.functions, outlierTestValues, params))
-			dnf.clauses.push_back(clause);				
-
-		iterationCounter++;
-		
+		iterationCounter++;		
 		std::cout << "Ready: " << (double)iterationCounter / std::pow(2, clause.negated.size()) * 100.0 << "%" << std::endl;
 
 	} while (std::next_permutation(clause.negated.begin(), clause.negated.end()));
+
+	return clauses;
 }
 
 std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplicants(const std::vector<lmu::ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::SampleParams& params)
 {
-	std::vector<lmu::ImplicitFunctionPtr> restFuncs;
-	std::vector<lmu::ImplicitFunctionPtr> dnfFuncs;
-
 	//Check which primitive is completely inside the geometry.
+	std::vector<std::tuple<lmu::Clause, double>> clauses;
 	for (int i = 0; i < functions.size(); ++i)
 	{
 		//Defining a clause representing a single primitive.
 		lmu::Clause clause(functions.size());
 		clause.literals[i] = true;
+
 		print(std::cout, clause, functions, false);
-		 
-		if (/*lmu::isPrime(functions[i], functions, outlierTestValues, params)*/ lmu::isIn(clause, functions, outlierTestValues, params))
-		{
-			dnfFuncs.push_back(functions[i]);
-			std::cout << "Prime implicant: " << functions[i]->name() << std::endl;
-		}
-		else
-			restFuncs.push_back(functions[i]);
+		
+		auto c = lmu::scoreClause(clause, functions, outlierTestValues, params);	
+			clauses.push_back(c);			
 	}
 
 	//Create a DNF that contains a clause for each primitive.
-	lmu::DNF dnf; 	
-	for (int i = 0; i < dnfFuncs.size(); ++i)
+	lmu::DNF dnf; 
+	std::vector<int> functionDeleteMarker(functions.size(),0);
+	auto validClauses = getValidClauses(clauses);
+	int i = 0; //New index.
+	for (const auto& validClause :validClauses)
 	{
-		lmu::Clause clause(dnfFuncs.size());
+		lmu::Clause clause(validClauses.size());
+			
 		clause.literals[i] = true;
-		dnf.clauses.push_back(clause);
-	}
-	dnf.functions = dnfFuncs;
 
-	return std::make_tuple(dnf, restFuncs);
+		//Index in vector that contains all clauses (valid and non-valid).
+		auto idx = std::get<1>(validClause);
+		dnf.functions.push_back(functions[idx]); //Add function to the dnf's functions
+		
+		functionDeleteMarker[idx] = 1;
+	
+		dnf.clauses.push_back(clause);
+
+		i++;
+	}
+
+	//Create set of non PI functions.
+	std::vector<lmu::ImplicitFunctionPtr> nonPIs;
+	for (int i = 0; i < functionDeleteMarker.size(); ++i)
+	{
+		if (functionDeleteMarker[i] != 1)
+			nonPIs.push_back(functions[i]);
+	}
+		
+	return std::make_tuple(dnf, nonPIs);
 }
 
 lmu::DNF lmu::computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const SampleParams& params)
@@ -353,16 +383,23 @@ lmu::DNF lmu::computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, 
 		
 	std::cout << "Do Shapiro..." << std::endl;
 	//return primeImplicantsDNF;
-
+	
 	int iterationCounter = 0;
+
+	std::vector<std::tuple<lmu::Clause, double>> clauses;
 
 	for (int i = 0; i <= dnf.functions.size(); i++)
 	{	
-		permutate(clause, dnf, outlierTestValues, params, iterationCounter);
-		
+		auto newClauses = permutateAllPossibleFPs(clause, dnf, outlierTestValues, params, iterationCounter);
+		clauses.insert(clauses.end(), newClauses.begin(), newClauses.end());
+				
 		if(i < dnf.functions.size())
 			clause.negated[i] = true;
 	}
+
+	//Check for validity of all found clauses
+	for (const auto& validClause : getValidClauses(clauses))
+		dnf.clauses.push_back(std::get<0>(validClause));
 
 	std::cout << "Done Shapiro." << std::endl;
 

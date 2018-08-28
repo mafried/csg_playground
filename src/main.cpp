@@ -26,6 +26,8 @@
 
 #include "dnf.h"
 
+#include "statistics.h"
+
 enum class ApproachType
 {
 	None = 0,
@@ -346,7 +348,18 @@ int main(int argc, char *argv[])
 
 	})
 });*/
-	auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.01);
+	
+   
+node = op<Union>(
+{
+	op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.0), 0.5, "Sphere_6"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 1.5), 0.5, "Sphere_7")
+})
+});
+
+    auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.01);
 
 	std::vector<ImplicitFunctionPtr> shapes; 
 	for (const auto& geoNode : allGeometryNodePtrs(node))
@@ -369,7 +382,7 @@ int main(int argc, char *argv[])
 	//shapes.clear();
 	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
 
-	auto dnf = lmu::computeShapiro(shapes, true, { 0.05, 0.70, 0.05 });
+	/*auto dnf = lmu::computeShapiro(shapes, true, { 0.05, 0.70, 0.05 });
 
 	auto res = lmu::DNFtoCSGNode(dnf);
 
@@ -378,11 +391,12 @@ int main(int argc, char *argv[])
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
 	pointCloud = lmu::computePointCloud(res, 0.03, 0.06, 0.00);
-	
+	*/
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
 
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 	
-	std::cout << lmu::espressoExpression(dnf) << std::endl;
+	//std::cout << lmu::espressoExpression(dnf) << std::endl;
 
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
 
@@ -424,6 +438,51 @@ int main(int argc, char *argv[])
 	fs << g_testPoints;
 	fs.close();
 	
+
+
+
+	/*double lower_bound = 0;
+	double upper_bound = 1;
+	std::uniform_real_distribution<double> unif(lower_bound, upper_bound);
+	std::default_random_engine re;
+	double a_random_double = unif(re);
+
+	lmu::DataFrame<Eigen::Vector3d> data(100000);
+	for (int i = 0; i < data.size(); ++i)
+	{
+		
+		if (i > data.size() / 2)
+			data[i] = Eigen::Vector3d(2.0 + unif(re), 2.0 + unif(re), 2.0 + unif(re));
+		else 
+			data[i] = Eigen::Vector3d(unif(re), unif(re), unif(re));
+
+	}
+
+	auto d = lmu::k_means(data, 2, 30);
+
+	for (const auto& i : d.means)
+		std::cout << i << std::endl;
+
+
+	Eigen::MatrixX3d points; 
+	points.resize(data.size(), Eigen::NoChange_t::NoChange);
+	Eigen::MatrixX3d colors;
+	colors.resize(data.size(), Eigen::NoChange_t::NoChange);
+
+	for (int i = 0; i < data.size(); ++i)
+	{
+		points.row(i) = data[i];
+
+		if (d.assignments[i] == 1)
+			colors.row(i) << 1.0, 0.0, 0.0;
+		else
+			colors.row(i) << 0.0, 1.0, 0.0;		
+	}
+
+
+	viewer.data().set_points(points, colors);
+	*/
+
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
 	viewer.launch();

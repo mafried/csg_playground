@@ -60,9 +60,8 @@ namespace lmu
 	CSGNode DNFtoCSGNode(const DNF& dnf);
 	CSGNode clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions);
 	
-	bool isIn(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params);
-	bool isPrime(const ImplicitFunctionPtr& func, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params);
-
+	std::tuple<Clause, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params);
+	
 	std::unordered_map<lmu::ImplicitFunctionPtr, double> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions);
 
 
