@@ -391,6 +391,8 @@ namespace lmu
 	};
 	
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);
+
+	void movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter = false, double threshold = 0.0);
 }
 
 #endif

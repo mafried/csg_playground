@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 {
 	using namespace Eigen;
 	using namespace std;
-	
+
 	//RUN_TEST(CSGNodeTest);
 
 
@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 					op<Union>(
 					{
 						geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
-						geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1")
+						geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1") //Box close to spheres
 					})
 				})
 
@@ -313,51 +313,82 @@ int main(int argc, char *argv[])
 	})
 	});*/
 
-/*node = op<Union>({
-	geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5) *rot90x), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_3"),
-	geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_2"),
-});*/
+	/*node = op<Union>({
+		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5) *rot90x), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_3"),
+		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2, 0.8, 0.9), 2, "Box_2"),
+	});*/
 
 
-/*node = op<Difference>({
-	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.2, 0.8, "Cylinder_2"),
-	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.1, 2, "Cylinder_3")
-});
-*/
+	/*node = op<Difference>({
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.2, 0.8, "Cylinder_2"),
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)), 0.1, 2, "Cylinder_3")
+	});
+	*/
 
-/*node = op<Difference>(
-{
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
-});*/
-
-
-/*node = op<Union>(
-{
-	geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1"),
-	
-
-
-	op<Union>(
+	/*node = op<Difference>(
 	{
-		op<Difference>(
-		{
-			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
-			geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
-		})
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
+	});*/
 
-	})
-});*/
-	
-   
+
+	/*node = op<Union>(
+	{
+		geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.1),2, "Box_1"),
+
+
+
+		op<Union>(
+		{
+			op<Difference>(
+			{
+				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+				geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+			})
+
+		})
+	});*/
+
 node = op<Union>(
 {
-	op<Union>(
-{
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.0), 0.5, "Sphere_6"),
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 1.5), 0.5, "Sphere_7")
-})
+	geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
+	
+	
+	op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_0"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_1")
+	}),
+	
+	op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_3")
+	}),
+
+	op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
+	}),
+	op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+	})
+	
 });
+
+
+//node = geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0, 2.0, 0.2), 2, "Box_1");
+
+//node = op<Difference>(
+//{
+//	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+//	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+//});
+
+//geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6");
 
     auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.01);
 
@@ -370,19 +401,20 @@ node = op<Union>(
 	auto dims = lmu::computeDimensions(node);
 
 	//auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), 0.01);
-	//auto graph2 = lmu::createConnectionGraph(shapes);
+	//auto graph = lmu::createConnectionGraph(shapes);
 
 	//lmu::writeConnectionGraph("connectionGraph.dot", graph);
 	//lmu::writeConnectionGraph("connectionGraph2.dot", graph2);
 
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.06, shapes);
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.01, shapes);
 	
 	//pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
 
 	//shapes.clear();
 	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
 
-	/*auto dnf = lmu::computeShapiro(shapes, true, { 0.05, 0.70, 0.05 });
+	
+	/*auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.05, 0.70, 0.05 });
 
 	auto res = lmu::DNFtoCSGNode(dnf);
 
@@ -391,11 +423,11 @@ node = op<Union>(
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
 	pointCloud = lmu::computePointCloud(res, 0.03, 0.06, 0.00);
-	*/
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
-
+		
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
-	
+	*/
+
+
 	//std::cout << lmu::espressoExpression(dnf) << std::endl;
 
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
@@ -422,17 +454,19 @@ node = op<Union>(
 
 	std::cout << "Considered Clause " << g_clause << std::endl;
 	//viewer.data().set_points(g_testPoints.leftCols(3), g_testPoints.rightCols(3));
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	
+	//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 	//viewer.data().set_mesh(node.function
-	//for (const auto& shape : allGeometryNodePtrs(node))
-	//{
-		//if (shape->name() == "Cylinder_2")
-	//		viewer.data().add_points(shape->function()->pointsCRef().leftCols(3), shape->function()->pointsCRef().rightCols(3));
-	
-	//}
 
-	std::cout << "TEST: " << g_testPoints;
+	lmu::movePointsToSurface(shapes, false, 0.0001);
+	for (const auto& shape : allGeometryNodePtrs(node))
+	{
+		//if (shape->name() == "Sphere_1")
+			viewer.data().add_points(shape->function()->pointsCRef().leftCols(3), shape->function()->pointsCRef().rightCols(3));
+	}
+	
+	//std::cout << "TEST: " << g_testPoints;
 
 	std::ofstream fs("output.dat");
 	fs << g_testPoints;

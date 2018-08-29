@@ -17,6 +17,11 @@ std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
 	return os;
 }
 
+bool lmu::areConnected(const lmu::Graph & g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2)
+{
+	return boost::edge(g.vertexLookup.at(f1), g.vertexLookup.at(f2), g).second;
+}
+
 lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs)
 {
 	Graph graph;

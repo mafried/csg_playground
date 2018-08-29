@@ -32,6 +32,9 @@ namespace lmu
 		std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, vertex_descriptor> vertexLookup;
 	};
 			
+
+	bool areConnected(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2);
+
 	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs);
 
 	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, const Eigen::Vector3d& min, const Eigen::Vector3d& max, double minCellSize);

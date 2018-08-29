@@ -274,8 +274,15 @@ void lmu::ransacWithSimMultiplePointOwners(const Eigen::MatrixXd & points, const
 
 		for (int i = 0; i < points.rows(); ++i)
 		{
-			if (std::abs(func->signedDistanceAndGradient(points.row(i))[0]) <= maxDelta)
+			Eigen::Vector4d dg = func->signedDistanceAndGradient(points.row(i));
+
+			if (std::abs(dg[0]) <= maxDelta)
 			{
+				//Eigen::Vector3d g = dg.bottomRows(3);
+
+				//if (normals.row(i).transpose().dot(g) <= 0.0)
+				//	continue;
+
 				Eigen::Matrix<double, 1, 6> row;
 				row << points.row(i), normals.row(i);
 				pointsAndNormals.push_back(row);
@@ -316,8 +323,17 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 
 		if (curFunc)
 		{
+			Eigen::Vector3d p = points.row(i).transpose();
+			Eigen::Vector3d n = normals.row(i).rightCols(3).transpose();
+
+			Eigen::Vector3d g = curFunc->signedDistanceAndGradient(p).bottomRows(3);
+
+			//if (n.dot(g) <= 0.0)
+			//	continue;
+
 			Eigen::Matrix<double, 1, 6> row;
 			row << points.row(i), normals.row(i);
+
 			pointsAndNormalsMap[curFunc].push_back(row);
 		}
 	}
@@ -331,7 +347,9 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 			Eigen::MatrixXd points(pointsAndNormals.size(), 6);
 			int i = 0;
 			for (const auto& row : pointsAndNormals)
+			{
 				points.row(i++) = row;
+			}
 
 			func->setPoints(points);
 		}		

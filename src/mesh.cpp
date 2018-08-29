@@ -86,8 +86,8 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	mesh.transform = transform;
 
-	std::cout << "Before:" << std::endl;
-	std::cout << mesh.vertices << std::endl;
+	//std::cout << "Before:" << std::endl;
+	//std::cout << mesh.vertices << std::endl;
 
 	lmu::transform(mesh);
 
@@ -95,8 +95,8 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	igl::upsample(mesh.vertices, mesh.indices, upsampledMesh.vertices, upsampledMesh.indices, numSubdivisions);
 
-	std::cout << "After:" << std::endl;
-	std::cout << mesh.vertices << std::endl;
+	//std::cout << "After:" << std::endl;
+	//std::cout << mesh.vertices << std::endl;
 
 	//Eigen::MatrixXd fn; 
 	//igl::per_face_normals(upsampledMesh.vertices, upsampledMesh.indices, fn);
@@ -404,4 +404,57 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 	}
 
 	return res;
+}
+
+void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter, double threshold)
+{
+	
+	for (auto& func : functions)
+	{
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+
+		for (int j = 0; j < func->pointsCRef().rows(); ++j)
+		{
+			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(j);
+			Eigen::Vector3d sampleP = pn.leftCols(3);
+			Eigen::Vector3d sampleN = pn.rightCols(3);
+
+			Eigen::Vector4d sampleDistGradFunction = func->signedDistanceAndGradient(sampleP);
+
+			double sampleDistFunction = sampleDistGradFunction[0];
+			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);
+
+			//std::cout << sampleP << std::endl << (sampleP - (sampleGradFunction * sampleDistFunction)) << std::endl;
+			//std::cout << sampleGradFunction << std::endl;
+			//std::cout << "----------" << std::endl;
+
+			Eigen::Matrix<double, 1, 6> newPN;
+
+			Eigen::Vector3d newP = (sampleP - (sampleDistFunction * sampleGradFunction));
+
+			newPN << newP.transpose() , sampleN.transpose();
+								
+			double distAfter = func->signedDistance(sampleP - (sampleDistFunction * sampleGradFunction));
+
+			if (filter && std::abs(distAfter) <  threshold)
+			{
+				points.push_back(newPN);
+			}
+			else
+			{
+				func->points().row(j) = newPN;
+			}
+		}
+
+		if (filter)
+		{
+			Eigen::MatrixXd m(points.size(), 6); 
+
+			int i = 0;
+			for (const auto& point : points)
+				m.row(i++) = point;
+				
+			func->points() = m;
+		}
+	}
 }

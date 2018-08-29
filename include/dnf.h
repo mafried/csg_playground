@@ -55,17 +55,17 @@ namespace lmu
 
 	std::ostream& operator <<(std::ostream& stream, const Clause& c);
 
-
+	struct Graph;
 	
 	CSGNode DNFtoCSGNode(const DNF& dnf);
 	CSGNode clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions);
 	
-	std::tuple<Clause, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const SampleParams& params);
+	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
 	
 	std::unordered_map<lmu::ImplicitFunctionPtr, double> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions);
 
 
-	DNF computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const SampleParams& params);
+	DNF computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const lmu::Graph& conGraph, const SampleParams& params);
 	DNF mergeDNFs(const std::vector<DNF>& dnfs);
 
 	std::string espressoExpression(const DNF& dnf);
