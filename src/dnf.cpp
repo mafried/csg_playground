@@ -74,7 +74,7 @@ inline double median(std::vector<double> v)
 }
 
 //https://www.mathworks.com/help/matlab/ref/isoutlier.html
-double scaledMAD(const lmu::ImplicitFunctionPtr& func)
+std::tuple<double,double> scaled3MADAndMedian(const lmu::ImplicitFunctionPtr& func, double h)
 {	
 	lmu::CSGNode node = lmu::geometry(func);
 
@@ -87,9 +87,7 @@ double scaledMAD(const lmu::ImplicitFunctionPtr& func)
 
 		Eigen::Vector3d p = pn.leftCols(3);
 		Eigen::Vector3d n = pn.rightCols(3);
-
-		double h = 0.01;
-
+			
 		lmu::Curvature c = curvature(p, node, h);
 
 		values[j] = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
@@ -100,15 +98,22 @@ double scaledMAD(const lmu::ImplicitFunctionPtr& func)
 
 	const double c = -1.0 / (std::sqrt(2.0)*boost::math::erfc_inv(3.0 / 2.0));
 	
-	return c * median(values);	
+	return std::make_tuple(c * median(values) * 3.0, med);
 }
 
-std::unordered_map<lmu::ImplicitFunctionPtr, double> lmu::computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions)
+std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> lmu::computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions, double h)
 {
-	std::unordered_map<lmu::ImplicitFunctionPtr, double> map;
+	std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> map;
 
+	std::cout << "----------------------------" << std::endl;
+	std::cout << "Deviation from flatness outliers: " << std::endl;
 	for (const auto& func : functions)
-		map[func] = scaledMAD(func) * 3.0;
+	{
+		map[func] = scaled3MADAndMedian(func, h);
+		std::cout << func->name() << ": " << std::get<0>(map[func]) << " Mean: " << std::get<1>(map[func]) << std::endl;
+	}
+	std::cout << "----------------------------" << std::endl;
+
 
 	return map;
 }
@@ -118,6 +123,7 @@ double getInOutThreshold(const std::vector<double>& qualityValues)
 {
 	const int k = 2;
 
+	//K-MEANS
 	auto res = lmu::k_means(qualityValues, k , 300);
 	std::cout << "Means: " << std::endl;
 	for (auto m : res.means)
@@ -138,7 +144,10 @@ double getInOutThreshold(const std::vector<double>& qualityValues)
 			return m;
 
 	return -1.0;
-	/*ValueCountPairContainer sortedUniqueValueCounts;
+
+	/*
+	//JENKS BREAKS
+	ValueCountPairContainer sortedUniqueValueCounts;
 	GetValueCountPairs(sortedUniqueValueCounts, &qualityValues[0], qualityValues.size());
 
 	std::cout << "Finding Jenks ClassBreaks..." << std::endl;
@@ -164,10 +173,9 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 		[](auto p) { return std::get<2>(p); });
 
 
-	double distT = 0.8; //getInOutThreshold(distQualityValues);
-	double angleT = 0.8; // getInOutThreshold(angleQualityValues);
-
-
+	double distT = 0.9; //getInOutThreshold(distQualityValues);
+	double angleT = 0.9; // getInOutThreshold(angleQualityValues);
+	
 
 	std::cout << "DIST T: " << distT << " ANGLE T: " << angleT;
 	
@@ -183,14 +191,13 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 }
 
 std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, 
-	const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params)
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params)
 {
 	lmu::CSGNode node = clauseToCSGNode(clause, functions);
 
 	int totalNumCorrectSamples = 0;
 	int totalNumConsideredSamples = 0;
 
-	const double h = 0.001;
 	const double smallestDelta = 0.000000001;
 
 	std::vector<Eigen::Matrix<double, 1, 2>> consideredPoints;
@@ -201,6 +208,8 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 	print(std::cout, clause, functions, false);
 	std::cout << std::endl;
 
+	int numConsideredFunctions = 0;
+
 	//Point position violation check.
 	for (int i = 0; i < functions.size(); ++i)
 	{	
@@ -210,12 +219,13 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		int numConsideredSamples = 0;
 
 		//function should not be a literal of the clause to test.
-		//if (clause.literals[i])
-		//	continue;
+		if (clause.literals[i])
+			continue;
+
+		numConsideredFunctions++;
 
 		lmu::ImplicitFunctionPtr currentFunc = functions[i];		
-		double outlierTestValue = outlierTestValues.at(currentFunc);
-
+	
 		//Test if points of are inside the volume (if so => wrong node).
 		for (int j = 0; j < currentFunc->pointsCRef().rows(); ++j)
 		{
@@ -225,63 +235,38 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 			Eigen::Vector3d sampleN = pn.rightCols(3);
 
 			Eigen::Vector4d sampleDistGradFunction = currentFunc->signedDistanceAndGradient(sampleP);
-			double sampleDistFunction = clause.negated[i] ? -sampleDistGradFunction[0] : sampleDistGradFunction[0];
+			double sampleDistFunction = sampleDistGradFunction[0];
 			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);			
 	
-			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
+			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, params.h);
 			double sampleDistNode = sampleDistGradNode[0];
 			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
 			
-			//Do not consider points that are far away from the node's surface.
-			/*if (sampleDistNode - sampleDistFunction > smallestDelta)
-			{
-				continue;
-			}
-			else
-			{
-			}*/
-					
 			numConsideredSamples++;
 
 			//If points are inside the node's volume, consider them as indicator of a wrong node.
 			if (sampleDistNode < -smallestDelta)
 			{	
-				//insideSamples++;				
 			}
 			else
 			{
 				numCorrectSamples++;
-
-				//if(sampleDistNode - sampleDistFunction > 0.10)
-				//	outsideSamples++;
 			}
 		}
+				
+		totalNumConsideredSamples += numConsideredSamples;
+		totalNumCorrectSamples += numCorrectSamples;
 
-		//std::cout << currentFunc->name() + " Inside %: " << ((double)outsideSamples / (double)(numConsideredSamples)) << std::endl;
 
-		//if (outsideSamples < numConsideredSamples)
-		//{
-			totalNumConsideredSamples += numConsideredSamples;
-			totalNumCorrectSamples += numCorrectSamples;
-
-		//	std::cout << currentFunc->name() << " is inside. " << std::endl;
-		//}
-		//else
-		//{
-		//	std::cout << currentFunc->name() << " is outside. " << std::endl;
-		//}
-
-		double score = numConsideredSamples == 0 ? 0.0 : (double)numCorrectSamples / (double)numConsideredSamples;
+		double score = numConsideredSamples == 0 ? 1.0 : (double)numCorrectSamples / (double)numConsideredSamples;
 		std::cout << currentFunc->name() << ": " << score << std::endl;
-		correctSamplesPointCheck = score < correctSamplesPointCheck ? score : correctSamplesPointCheck;
-
-		
+		correctSamplesPointCheck = score < correctSamplesPointCheck ? score : correctSamplesPointCheck;		
 	}
 
-	//correctSamplesPointCheck > 1.0 ? 0.0 : correctSamplesPointCheck;
-
-
-	//double correctSamplesPointCheck = totalNumConsideredSamples == 0 ? 0.0 : (double)totalNumCorrectSamples / (double)(totalNumConsideredSamples);
+	//If no function was considered then all functions are literals.
+	//In that case, point check is pointless.
+	if (numConsideredFunctions == 0)
+		correctSamplesPointCheck = 1.0;
 
 	totalNumConsideredSamples = 0;
 	totalNumCorrectSamples = 0;
@@ -295,14 +280,13 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 	{
 		int numCorrectSamples = 0;
 		int numConsideredSamples = 0;
-
-
+		
 		//function must be a literal of the clause to test.
-		//if (!clause.literals[i])
-		//	continue;
+		if (!clause.literals[i])
+			continue;
 
 		lmu::ImplicitFunctionPtr currentFunc = functions[i];
-		double outlierTestValue = outlierTestValues.at(currentFunc);
+		std::tuple<double, double> outlierTestValue = outlierTestValues.at(currentFunc);
 
 		for (int j = 0; j < currentFunc->pointsCRef().rows(); ++j)
 		{
@@ -316,7 +300,7 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 
 			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);
 
-			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
+			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, params.h);
 			double sampleDistNode = sampleDistGradNode[0];
 			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
 
@@ -327,24 +311,44 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 			}
 			else
 			{
-				//std::cout << "D" << std::endl;
+			}
+
+			//Normals close to edges tend to be brittle. 
+			//We try to filter normals that are located close to curvature outliers (== edges).
+			Curvature c = curvature(sampleP, geometry(currentFunc), params.h);
+			double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+			double median = std::get<1>(outlierTestValue);
+			double maxDelta = std::get<0>(outlierTestValue);
+			if (std::abs(deviationFromFlatness - median) > maxDelta)
+			{	
+				//std::cout << deviationFromFlatness << " ";
+
+				//Eigen::Matrix<double, 1, 6> m;
+				//m << sampleP.transpose(), sampleN.transpose();
+				//g_testPoints.conservativeResize(g_testPoints.rows() + 1, 6);
+				//g_testPoints.row(g_testPoints.rows() - 1) = m;
+
+				continue;
+			}
+			else
+			{
 			}
 
 			numConsideredSamples++;
 
+			//Check if normals point in the correct direction.
 			if (sampleGradNode.dot(sampleN) <= 0.0)
 			{
 				continue;
 			}
 			else
 			{
-
 			}
 
 			numCorrectSamples++;
 		}
 
-		double score = numConsideredSamples == 0 ? 0.0 : (double)numCorrectSamples / (double)numConsideredSamples;
+		double score = numConsideredSamples == 0 ? 1.0 : (double)numCorrectSamples / (double)numConsideredSamples;
 		std::cout << currentFunc->name() << ": " << score  << std::endl;
 		correctSamplesAngleCheck = score < correctSamplesAngleCheck ? score: correctSamplesAngleCheck;
 
@@ -352,32 +356,15 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		totalNumCorrectSamples += numCorrectSamples;
 	}
 
-	//correctSamplesAngleCheck > 1.0 ? 0.0 : correctSamplesAngleCheck;
+	if (totalNumConsideredSamples == 0)
+		correctSamplesAngleCheck = 0.0;
 
-
-	//double correctSamplesAngleCheck = totalNumConsideredSamples == 0.0 ? 0.0 : (double)totalNumCorrectSamples / (double)(totalNumConsideredSamples);
-
-	//std::cout << std::endl;
-	//std::cout << "PointCheck:" << std::endl;
-	//std::cout << "Correct Samples: " << correctSamplesPointCheck << std::endl;
-	//std::cout << "AngleCheck:" << std::endl;
-	//std::cout << "Correct Samples: " << correctSamplesAngleCheck << std::endl;
 	std::cout << "---------------------------------" << std::endl;
-
-	Eigen::Matrix<double, 1, 2> m;
-	m << correctSamplesPointCheck, correctSamplesAngleCheck;
-    g_testPoints.conservativeResize(g_testPoints.rows()+1,2);
-    g_testPoints.row(g_testPoints.rows() - 1) = m;
-
-	//std::cout << g_testPoints << std::endl;
-	
-	//return correctSamples >= params.requiredCorrectSamples &&
-	//	consideredSamples >= params.requiredConsideredSamples;
-
+		
 	return std::make_tuple(clause, correctSamplesPointCheck, correctSamplesAngleCheck);
 }
 
-std::vector<std::tuple<lmu::Clause, double, double>>  permutateAllPossibleFPs(lmu::Clause clause /*copy necessary*/, lmu::DNF& dnf, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, 
+std::vector<std::tuple<lmu::Clause, double, double>>  permutateAllPossibleFPs(lmu::Clause clause /*copy necessary*/, lmu::DNF& dnf, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double,double>> outlierTestValues, 
 	const lmu::Graph& conGraph, const lmu::SampleParams& params, int& iterationCounter)
 {	
 	std::vector<std::tuple<lmu::Clause, double, double>> clauses;
@@ -395,7 +382,7 @@ std::vector<std::tuple<lmu::Clause, double, double>>  permutateAllPossibleFPs(lm
 }
 
 std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplicants(const std::vector<lmu::ImplicitFunctionPtr>& functions, 
-	const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::Graph& conGraph, const lmu::SampleParams& params)
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const lmu::SampleParams& params)
 {
 	//Check which primitive is completely inside the geometry.
 	std::vector<std::tuple<lmu::Clause, double, double>> clauses;
@@ -450,7 +437,7 @@ lmu::DNF lmu::computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, 
 	DNF primeImplicantsDNF;
 	DNF dnf;
 
-	auto outlierTestValues = computeOutlierTestValues(functions);
+	auto outlierTestValues = computeOutlierTestValues(functions, params.h);
 	
 	if (usePrimeImplicantOptimization)
 	{

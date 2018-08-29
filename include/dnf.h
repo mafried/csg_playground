@@ -48,9 +48,7 @@ namespace lmu
 
 	struct SampleParams
 	{
-		double maxDistDelta;
-		double requiredCorrectSamples;
-		double requiredConsideredSamples;
+		double h;
 	};
 
 	std::ostream& operator <<(std::ostream& stream, const Clause& c);
@@ -60,9 +58,9 @@ namespace lmu
 	CSGNode DNFtoCSGNode(const DNF& dnf);
 	CSGNode clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions);
 	
-	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, double> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
+	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
 	
-	std::unordered_map<lmu::ImplicitFunctionPtr, double> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions);
+	std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions, double h);
 
 
 	DNF computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const lmu::Graph& conGraph, const SampleParams& params);
