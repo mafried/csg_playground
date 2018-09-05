@@ -442,6 +442,23 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 	return /*1.0 / score*/ score;
 }
 
+double lmu::computeRawDistanceScore(const CSGNode & node, const Eigen::MatrixXd & points)
+{
+	double d = d;
+
+	for (int i = 0; i < points.rows(); ++i)
+	{
+		auto row = points.row(i);
+
+		Eigen::Vector3d p = row.head<3>();
+		Eigen::Vector3d n = row.tail<3>();
+
+		d += std::abs(node.signedDistance(p));
+	}
+
+	return d;
+}
+
 int lmu::numNodes(const CSGNode & node)
 {
 	int num = 1;

@@ -14,9 +14,9 @@
 #include <iostream>
 #include <fstream>
 
-#include "csgtree.h"
-
 #include <omp.h>
+
+#include "helper.h"
 
 namespace lmu
 {
@@ -518,55 +518,7 @@ namespace lmu
 
 	struct ImplicitFunction;
 
-	struct CSGTreeCreator
-	{
-		CSGTreeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb = 0.5, double subtreeProb = 0.7, int maxTreeDepth = 10, const lmu::Graph& connectionGraph = lmu::Graph());
-
-		CSGTree mutate(const CSGTree& tree) const;
-		std::vector<CSGTree> crossover(const CSGTree& tree1, const CSGTree& tree2) const;
-		CSGTree create() const;
-		CSGTree create(int maxDepth) const;
-
-		std::string info() const; 
-
-	private: 
-
-		void create(CSGTree& tree, int maxDepth, int curDepth) const;
-
-		int getRndFuncIndex(const std::vector<int>& usedFuncIndices, const lmu::CSGTree& tree) const;
-
-		double _createNewRandomProb;
-		double _subtreeProb; 
-		int _maxTreeDepth;
-		std::vector<std::shared_ptr<ImplicitFunction>> _functions;
-		mutable std::default_random_engine _rndEngine;
-		mutable std::random_device _rndDevice;
-
-		lmu::Graph _connectionGraph;
-	};
-
-	struct CSGTreeRanker
-	{
-		CSGTreeRanker(double lambda, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
-
-		double rank(const CSGTree& tree) const;
-		std::string info() const;
-
-		bool treeIsInvalid(const lmu::CSGTree& tree) const;
-
-	private:
-		double _lambda;
-		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
-		bool _earlyOutTest;
-		lmu::Graph _connectionGraph;
-	};
-
-	using CSGTreeTournamentSelector = TournamentSelector<RankedCreature<CSGTree>>;
-
-	using CSGTreeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGTree>>;
-	using CSGTreeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGTree>>;
-
-	using CSGTreeGA = GeneticAlgorithm<CSGTree, CSGTreeCreator, CSGTreeRanker, CSGTreeTournamentSelector, CSGTreeNoFitnessIncreaseStopCriterion>;
+	
 }
 
 #endif 

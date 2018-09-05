@@ -10,7 +10,7 @@ using namespace lmu;
 lmu::CSGNodeRanker::CSGNodeRanker(double lambda, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph) :
 	_lambda(lambda),
 	_functions(functions),
-	_earlyOutTest(!connectionGraph.m_vertices.empty()),
+	_earlyOutTest(!connectionGraph.structure.m_vertices.empty()),
 	_connectionGraph(connectionGraph)
 {
 }
@@ -43,9 +43,9 @@ boost::dynamic_bitset<> getFunctionConnectionBitfield(const std::shared_ptr<lmu:
 	boost::dynamic_bitset<> bf(bitfieldSize);
 
 	//Go through all adjacent nodes of the node holding func and mark them in the bitfield as connected.
-	boost::graph_traits<Graph>::adjacency_iterator  neighbour, neighbourEnd;
-	for (boost::tie(neighbour, neighbourEnd) = boost::adjacent_vertices(connectionGraph.vertexLookup.at(func), connectionGraph); neighbour != neighbourEnd; ++neighbour)	
-		bf.set(funcToIdx.at(connectionGraph[*neighbour]), true);	
+	boost::graph_traits<GraphStructure>::adjacency_iterator  neighbour, neighbourEnd;
+	for (boost::tie(neighbour, neighbourEnd) = boost::adjacent_vertices(connectionGraph.vertexLookup.at(func), connectionGraph.structure); neighbour != neighbourEnd; ++neighbour)	
+		bf.set(funcToIdx.at(connectionGraph.structure[*neighbour]), true);	
 
 	return bf;
 }
@@ -326,7 +326,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
 	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(100, 0.01,1000);
 
-	int maxDepth =(int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph) > 0 ? boost::num_edges(connectionGraph) : binom(shapes.size(),2)) * M_PI));
+	int maxDepth =(int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph.structure) > 0 ? boost::num_edges(connectionGraph.structure) : binom(shapes.size(),2)) * M_PI));
 	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
 
 	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, maxDepth, connectionGraph);

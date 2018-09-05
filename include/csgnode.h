@@ -410,6 +410,9 @@ namespace lmu
 
 	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
 
+	double computeRawDistanceScore(const CSGNode& node, const Eigen::MatrixXd& points);
+
+
 	void writeNode(const CSGNode& node, const std::string& file);
 
 	enum class NodePartType

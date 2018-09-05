@@ -58,15 +58,23 @@ namespace lmu
 	CSGNode DNFtoCSGNode(const DNF& dnf);
 	CSGNode clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions);
 	
-	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
+	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, int numClauseFunctions, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
 	
 	std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions, double h);
 
+	//Clause computeDNFForPivotalFunction(const lmu::ImplicitFunctionPtr& pivotal, const std::vector<ImplicitFunctionPtr>& functions, double h);
+	
+	CSGNode computeCSGNode(const std::vector<ImplicitFunctionPtr>& functions, const Graph& conGraph, const SampleParams& params);
 
 	DNF computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, bool usePrimeImplicantOptimization, const lmu::Graph& conGraph, const SampleParams& params);
 	DNF mergeDNFs(const std::vector<DNF>& dnfs);
 
 	std::string espressoExpression(const DNF& dnf);
+
+	CSGNode computeShapiroWithPartitions(const std::tuple < std::vector<Graph>, std::vector<ImplicitFunctionPtr>>& partition, const SampleParams& params);
+
+	std::tuple < std::vector<Graph>, std::vector<ImplicitFunctionPtr>> partitionByPrimeImplicants(const Graph& graph, const SampleParams& params);
+
 }
 
 #endif

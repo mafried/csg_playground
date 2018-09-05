@@ -6,6 +6,8 @@
 
 #include "boost/graph/graphviz.hpp"
 #include "boost/graph/bron_kerbosch_all_cliques.hpp"
+#include "boost/graph/copy.hpp"
+
 #include <boost/dynamic_bitset.hpp>
 
 std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
@@ -19,7 +21,7 @@ std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
 
 bool lmu::areConnected(const lmu::Graph & g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2)
 {
-	return boost::edge(g.vertexLookup.at(f1), g.vertexLookup.at(f2), g).second;
+	return boost::edge(g.vertexLookup.at(f1), g.vertexLookup.at(f2), g.structure).second;
 }
 
 lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs)
@@ -28,31 +30,31 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 	for (const auto& impFunc : impFuncs)
 	{
-		auto v = boost::add_vertex(graph);
-		graph[v] = impFunc;
+		auto v = boost::add_vertex(graph.structure);
+		graph.structure[v] = impFunc;
 		graph.vertexLookup[impFunc] = v;
 	}
 	
-	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;
+	boost::graph_traits<GraphStructure>::vertex_iterator vi1, vi1_end;
 
 	int i = 0; 
-	for (boost::tie(vi1, vi1_end) = boost::vertices(graph); vi1 != vi1_end; ++vi1)
+	for (boost::tie(vi1, vi1_end) = boost::vertices(graph.structure); vi1 != vi1_end; ++vi1)
 	{
-		const auto& v1 = graph[*vi1];
+		const auto& v1 = graph.structure[*vi1];
 		
-		boost::graph_traits<Graph>::vertex_iterator vi2, vi2_end;
+		boost::graph_traits<GraphStructure>::vertex_iterator vi2, vi2_end;
 
 		int j = 0; 
-		for (boost::tie(vi2, vi2_end) = boost::vertices(graph); vi2 != vi2_end; ++vi2)
+		for (boost::tie(vi2, vi2_end) = boost::vertices(graph.structure); vi2 != vi2_end; ++vi2)
 		{
 			if (i == j)
 				break;
 
-			const auto& v2 = graph[*vi2];
+			const auto& v2 = graph.structure[*vi2];
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && lmu::collides(*v1, *v2))			
-				boost::add_edge(*vi1, *vi2, graph);		
+				boost::add_edge(*vi1, *vi2, graph.structure);
 
 			j++;
 		}
@@ -104,8 +106,8 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 	int i = 0;
 	for (const auto& impFunc : impFuncs)
 	{
-		auto v = boost::add_vertex(graph);
-		graph[v] = impFunc;
+		auto v = boost::add_vertex(graph.structure);
+		graph.structure[v] = impFunc;
 		graph.vertexLookup[impFunc] = v;
 
 		overlaps[i++] = boost::dynamic_bitset<>(impFuncs.size(), false);
@@ -113,28 +115,28 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 	createConnectionGraphRec(impFuncs, min, max, minCellSize, overlaps);
 
-	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;
+	boost::graph_traits<GraphStructure>::vertex_iterator vi1, vi1_end;
 
 	i = 0;
-	for (boost::tie(vi1, vi1_end) = boost::vertices(graph); vi1 != vi1_end; ++vi1)
+	for (boost::tie(vi1, vi1_end) = boost::vertices(graph.structure); vi1 != vi1_end; ++vi1)
 	{
-		const auto& v1 = graph[*vi1];
+		const auto& v1 = graph.structure[*vi1];
 
-		boost::graph_traits<Graph>::vertex_iterator vi2, vi2_end;
+		boost::graph_traits<GraphStructure>::vertex_iterator vi2, vi2_end;
 
 		int j = 0;
-		for (boost::tie(vi2, vi2_end) = boost::vertices(graph); vi2 != vi2_end; ++vi2)
+		for (boost::tie(vi2, vi2_end) = boost::vertices(graph.structure); vi2 != vi2_end; ++vi2)
 		{
 			std::cout << overlaps[i][j] << " ";
 
 			if (i == j)
 				break;
 			
-			const auto& v2 = graph[*vi2];
+			const auto& v2 = graph.structure[*vi2];
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && overlaps[i][j])
-				boost::add_edge(*vi1, *vi2, graph);
+				boost::add_edge(*vi1, *vi2, graph.structure);
 			j++;
 		}
 
@@ -152,27 +154,27 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 
 	for (int i = 0; i < numVertices; ++i)
 	{
-		auto v = boost::add_vertex(graph);
-		graph[v] = std::make_shared<IFNull>("Null_" + std::to_string(i));
-		graph.vertexLookup[graph[v]] = v;
+		auto v = boost::add_vertex(graph.structure);
+		graph.structure[v] = std::make_shared<IFNull>("Null_" + std::to_string(i));
+		graph.vertexLookup[graph.structure[v]] = v;
 	}
 
-	boost::graph_traits<Graph>::vertex_iterator vi1, vi1_end;
+	boost::graph_traits<GraphStructure>::vertex_iterator vi1, vi1_end;
 
 	int i = 0;
-	for (boost::tie(vi1, vi1_end) = boost::vertices(graph); vi1 != vi1_end; ++vi1)
+	for (boost::tie(vi1, vi1_end) = boost::vertices(graph.structure); vi1 != vi1_end; ++vi1)
 	{
-		const auto& v1 = graph[*vi1];
+		const auto& v1 = graph.structure[*vi1];
 
-		boost::graph_traits<Graph>::vertex_iterator vi2, vi2_end;
+		boost::graph_traits<GraphStructure>::vertex_iterator vi2, vi2_end;
 
 		int j = 0;
-		for (boost::tie(vi2, vi2_end) = boost::vertices(graph); vi2 != vi2_end; ++vi2)
+		for (boost::tie(vi2, vi2_end) = boost::vertices(graph.structure); vi2 != vi2_end; ++vi2)
 		{
 			if (i == j)
 				break;
 
-			const auto& v2 = graph[*vi2];
+			const auto& v2 = graph.structure[*vi2];
 
 			std::random_device rd;
 			std::mt19937 mt(rd());
@@ -180,7 +182,7 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && dist(mt) <= edgePropability)
-				boost::add_edge(*vi1, *vi2, graph);
+				boost::add_edge(*vi1, *vi2, graph.structure);
 
 			j++;
 		}
@@ -207,7 +209,7 @@ void lmu::writeConnectionGraph(const std::string& file, lmu::Graph & graph)
 {	
 
 	std::ofstream f(file);
-	boost::write_graphviz(f, graph, VertexWriter<Graph>(graph));
+	boost::write_graphviz(f, graph.structure, VertexWriter<GraphStructure>(graph.structure));
 	f.close();
 }
 
@@ -242,7 +244,88 @@ std::vector<lmu::Clique> lmu::getCliques(const lmu::Graph & graph)
 	CliqueCollector cc(cliques);
 
 	// Use the Bron-Kerbosch algorithm to find all cliques.
-	boost::bron_kerbosch_all_cliques(graph, cc);
+	boost::bron_kerbosch_all_cliques(graph.structure, cc);
 
 	return cliques;
+}
+
+std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::getImplicitFunctions(const lmu::Graph & graph)
+{
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> res;
+	res.reserve(graph.vertexLookup.size());
+
+	for (const auto& pair : graph.vertexLookup)
+	{
+		res.push_back(pair.first);
+	}
+
+	return res;
+}
+
+void lmu::recreateVertexLookup(lmu::Graph& graph)
+{
+	boost::graph_traits<lmu::GraphStructure>::vertex_iterator vi1, vi1_end;
+
+	int i = 0;
+	for (boost::tie(vi1, vi1_end) = boost::vertices(graph.structure); vi1 != vi1_end; ++vi1)
+	{
+		const auto& v1 = graph.structure[*vi1];
+
+		graph.vertexLookup[v1] = *vi1;
+	}
+}
+
+//From https://stackoverflow.com/questions/26763193/return-a-list-of-connected-component-subgraphs-in-boost-graph
+std::vector<lmu::Graph> lmu::getConnectedComponents(lmu::Graph const & g)
+{
+	using cid = lmu::GraphStructure::vertices_size_type;
+	std::map<lmu::GraphStructure::vertex_descriptor, cid> mapping;
+	//std::map<Graph::vertex_descriptor, default_color_type> colors;
+
+	cid num = boost::connected_components(
+		g.structure,
+		boost::make_assoc_property_map(mapping)//,
+		//color_map(make_assoc_property_map(colors))
+	);
+
+	std::vector<lmu::GraphStructure> componentGraphs(num);
+
+	std::map<lmu::GraphStructure::vertex_descriptor, int> vim;
+	for (auto const& vd : boost::make_iterator_range(vertices(g.structure)))
+		vim.emplace(vd, vim.size());
+
+	for (cid i = 0; i < num; i++)
+	{
+		typedef boost::filtered_graph<
+			GraphStructure,
+			std::function<bool(GraphStructure::edge_descriptor)>,
+			std::function<bool(GraphStructure::vertex_descriptor)>
+		> FilteredView;
+
+		boost::copy_graph(FilteredView(g.structure,
+			[&](GraphStructure::edge_descriptor e) {
+			return mapping[source(e, g.structure)] == i
+				|| mapping[target(e, g.structure)] == i;
+		},
+			[&](GraphStructure::vertex_descriptor v) {
+			return mapping[v] == i;
+		}
+			),
+			componentGraphs[i],
+			vertex_index_map(boost::make_assoc_property_map(vim)));
+	}
+
+	std::vector<lmu::Graph> res;
+	res.reserve(componentGraphs.size());
+
+	for (const auto& componentGraph : componentGraphs)
+	{
+		lmu::Graph g;
+		g.structure = componentGraph; 
+		recreateVertexLookup(g);
+		res.push_back(g);
+	}
+
+	return res;
+	
 }

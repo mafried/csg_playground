@@ -14,7 +14,6 @@
 #include "pointcloud.h"
 #include "collision.h"
 #include "congraph.h"
-#include "csgtree.h"
 #include "tests.h"
 
 #include "csgnode_evo.h"
@@ -436,9 +435,25 @@ node = op<Union>(
 	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
 });
 
+
 //node = geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2");
 
-    auto pointCloud = lmu::computePointCloud(node, 0.01, 0.01, 0.01);
+/*node =
+op<Difference>(
+{
+	op<Union>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.0, 0), 0.25, "Sphere_1"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.3, 0), 0.25, "Sphere_2"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.6, 0), 0.25, "Sphere_3"),
+	}),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.5, 0), 0.25, "Sphere_4")
+});*/
+	double samplingStepSize = 0.03; 
+	double maxDistance = 0.01;
+	double noiseSigma = 0.03;
+
+    auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
 
 	std::vector<ImplicitFunctionPtr> shapes; 
 	for (const auto& geoNode : allGeometryNodePtrs(node))
@@ -448,40 +463,52 @@ node = op<Union>(
 	}
 	auto dims = lmu::computeDimensions(node);
 
-	//auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), 0.01);
+	auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), samplingStepSize);
+		
 	//auto graph = lmu::createConnectionGraph(shapes);
 
-	//lmu::writeConnectionGraph("connectionGraph.dot", graph);
+	lmu::writeConnectionGraph("connectionGraph.dot", graph);
 	//lmu::writeConnectionGraph("connectionGraph2.dot", graph2);
 
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.01, shapes);
+	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
 	
 	//pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
 
 	//shapes.clear();
 	//lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
 
+
+
 	lmu::movePointsToSurface(shapes, false, 0.0001);
 
-	auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.001 });
+	//auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.001 });
 
-	auto res = lmu::DNFtoCSGNode(dnf);
+	//auto res = lmu::computeCSGNode(shapes, graph, { 0.001 });//lmu::DNFtoCSGNode(dnf);
 
+	CSGNode res = op<Union>();
+
+	SampleParams p{ 0.001 };
+
+	auto partitions = lmu::partitionByPrimeImplicants(graph, p);
+
+	res = lmu::computeShapiroWithPartitions(partitions, p);
+		
 	lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
-	pointCloud = lmu::computePointCloud(res, 0.03, 0.06, 0.00);
-		
+	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, noiseSigma);
+
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
+	
+	//std::cout << lmu::espressoExpression(dnf) << std::endl;
+
 	
 
 
-	std::cout << lmu::espressoExpression(dnf) << std::endl;
-
+	
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
-
-
+	
 	//pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, 7 , FilterBehavior::FILTER_CURVY_SURFACES), true;
 	
 	//std::cout << "After: " << pointCloud.rows() << std::endl;
@@ -508,11 +535,11 @@ node = op<Union>(
 
 	//viewer.data().set_mesh(node.function
 
-	for (const auto& shape : allGeometryNodePtrs(node))
-	{
+	//for (const auto& shape : allGeometryNodePtrs(node))
+	//{
 		//if (shape->name() == "Sphere_1")
 		//	viewer.data().add_points(shape->function()->pointsCRef().leftCols(3), shape->function()->pointsCRef().rightCols(3));
-	}
+	//}
 	
 	//std::cout << "TEST: " << g_testPoints;
 

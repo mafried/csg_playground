@@ -8,8 +8,11 @@
 #include <Eigen/Core>
 
 #include <boost/math/special_functions/erf.hpp>
+#include <boost/graph/connected_components.hpp>
+#include <boost/graph/copy.hpp>
 
 #include "statistics.h"
+#include "helper.h"
 
 Eigen::MatrixXd lmu::g_testPoints;
 lmu::Clause lmu::g_clause;
@@ -118,7 +121,6 @@ std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> lmu::co
 	return map;
 }
 
-
 double getInOutThreshold(const std::vector<double>& qualityValues)
 {
 	const int k = 2;
@@ -173,8 +175,8 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 		[](auto p) { return std::get<2>(p); });
 
 
-	double distT = 0.9; //getInOutThreshold(distQualityValues);
-	double angleT = 0.9; // getInOutThreshold(angleQualityValues);
+	double distT = 0.6; //getInOutThreshold(distQualityValues);
+	double angleT = 0.6; // getInOutThreshold(angleQualityValues);
 	
 
 	std::cout << "DIST T: " << distT << " ANGLE T: " << angleT;
@@ -190,8 +192,8 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 	return validClauses; 
 }
 
-std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, 
-	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params)
+std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, int numClauseFunctions,
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params)
 {
 	lmu::CSGNode node = clauseToCSGNode(clause, functions);
 
@@ -219,7 +221,7 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		int numConsideredSamples = 0;
 
 		//function should not be a literal of the clause to test.
-		if (clause.literals[i])
+		if (i < numClauseFunctions && clause.literals[i])
 			continue;
 
 		numConsideredFunctions++;
@@ -282,7 +284,7 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		int numConsideredSamples = 0;
 		
 		//function must be a literal of the clause to test.
-		if (!clause.literals[i])
+		if (i >= numClauseFunctions || !clause.literals[i])
 			continue;
 
 		lmu::ImplicitFunctionPtr currentFunc = functions[i];
@@ -371,7 +373,7 @@ std::vector<std::tuple<lmu::Clause, double, double>>  permutateAllPossibleFPs(lm
 
 	std::sort(clause.negated.begin(), clause.negated.end());
 	do {							
-		clauses.push_back(lmu::scoreClause(clause, dnf.functions, outlierTestValues, conGraph, params));
+		clauses.push_back(lmu::scoreClause(clause, dnf.functions, dnf.functions.size(), outlierTestValues, conGraph, params));
 
 		iterationCounter++;		
 		std::cout << "Ready: " << (double)iterationCounter / std::pow(2, clause.negated.size()) * 100.0 << "%" << std::endl;
@@ -395,7 +397,7 @@ std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplica
 		print(std::cout, clause, functions, false);
 		std::cout << std::endl;
 		
-		auto c = lmu::scoreClause(clause, functions, outlierTestValues, conGraph, params);	
+		auto c = lmu::scoreClause(clause, functions, functions.size(), outlierTestValues, conGraph, params);	
 			clauses.push_back(c);			
 	}
 
@@ -570,4 +572,238 @@ std::string lmu::espressoExpression(const DNF& dnf)
 	ss << "dnf = expr.to_dnf()";
 	
 	return ss.str();
+}
+
+lmu::CSGNode lmu::computeShapiroWithPartitions(const std::tuple<std::vector<Graph>, std::vector<ImplicitFunctionPtr>>& partition, const SampleParams& params)
+{
+	lmu::CSGNode res = lmu::op<Union>();
+
+	for (const auto& pi : get<1>(partition))
+	{
+		std::cout << "Add to node " << pi->name() << std::endl;
+		res.addChild(geometry(pi));
+	}
+
+	for (const auto& graph : get<0>(partition))
+	{
+		std::cout << "component functions: " << std::endl;
+		for (const auto& f : lmu::getImplicitFunctions(graph))
+		{
+			std::cout << "f: " << f->name() << std::endl;
+		}
+		std::cout << "----" << std::endl;
+
+		auto dnf = lmu::computeShapiro(lmu::getImplicitFunctions(graph), false, graph, params);
+		for (auto& const clause : dnf.clauses)
+		{
+			res.addChild(lmu::clauseToCSGNode(clause, dnf.functions));
+		}
+	}
+
+	return res;
+}
+
+
+std::tuple <std::vector<lmu::Graph>, std::vector<lmu::ImplicitFunctionPtr>> lmu::partitionByPrimeImplicants(const lmu::Graph& graph, const SampleParams& params)
+{
+	auto functions = lmu::getImplicitFunctions(graph);
+	
+	auto outlierTestValues = computeOutlierTestValues(functions, params.h);
+
+	//Get prime implicants.
+	auto res = identifyPrimeImplicants(functions, outlierTestValues, graph, params);	
+	auto primeImplicants = std::get<0>(res).functions;
+
+	std::cout << "Found " << primeImplicants.size() << " prime implicants." << std::endl;
+
+	//Remove prime implicants from graph.	
+	struct Predicate 
+	{
+		bool operator()(GraphStructure::edge_descriptor) const 
+		{ 
+			return true; 
+		}
+		bool operator()(GraphStructure::vertex_descriptor vd) const 
+		{ 
+			return std::find(pis->begin(), pis->end(), g->structure[vd]) == pis->end(); 
+		}
+
+		const Graph* g;
+		const std::vector<lmu::ImplicitFunctionPtr>* pis;
+
+	} predicate{ &graph, &primeImplicants };
+
+	boost::filtered_graph<GraphStructure, Predicate, Predicate> fg(graph.structure, predicate, predicate);
+	
+	lmu::Graph newGraph;
+	boost::copy_graph(fg, newGraph.structure);
+	lmu::recreateVertexLookup(newGraph);
+
+	//std::cout << "New graph created." << std::endl;
+	//lmu::writeConnectionGraph("connectionGraph.dot", newGraph);
+
+	//Get connected components. 
+	auto partitionedGraphs = lmu::getConnectedComponents(newGraph);
+	return std::make_tuple(partitionedGraphs, primeImplicants);
+}
+
+
+
+//////////////////////////////////////////////////////////////////////
+// Old optimization code
+//////////////////////////////////////////////////////////////////////
+
+bool isIn(const lmu::Clause& clause, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions, const std::unordered_map<lmu::ImplicitFunctionPtr,
+	std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const lmu::SampleParams& params)
+{
+	//std::tuple<lmu::Clause, double, double> 
+	auto clauseQuality = lmu::scoreClause(clause, functions, numClauseFunctions, outlierTestValues, conGraph, params);
+	
+	const double distT = 0.9;
+	const double angleT = 0.9; 
+
+	return (std::get<1>(clauseQuality) >= distT && std::get<2>(clauseQuality) >= angleT);
+}
+
+
+void computeClauseForPivotalFunction(const lmu::Clause& pivotal, int pivotalLiteral, int currentLiteral, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions,
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::SampleParams& params, std::vector<lmu::Clause>& resultClauses)
+{
+	if (isIn(pivotal, functions, numClauseFunctions, outlierTestValues, lmu::Graph() /*currently not used for overlap calculation*/, params))
+	{
+		resultClauses.push_back(pivotal);
+		return;
+	}
+
+	std::vector<lmu::ImplicitFunctionPtr> candidateFunctions;
+
+	for (int i = 0; i < numClauseFunctions; ++i)
+	{
+		if (i == pivotalLiteral)
+			continue; 
+
+		candidateFunctions.push_back(functions[i]);
+		candidateFunctions.push_back(functions[i]);
+	}
+
+	for (size_t k = 1; k <= candidateFunctions.size(); ++k)
+	{
+		do
+		{
+
+
+		
+
+		} while (lmu::next_combination(candidateFunctions.begin(), candidateFunctions.begin() + k, candidateFunctions.end()));
+
+		//Remove all functions 
+	}
+	
+	
+	/*for (int i = currentLiteral; i < numClauseFunctions; ++i)
+	{
+		if (i == pivotalLiteral)
+			continue;
+
+		auto c = pivotal;
+
+		//TODO: Check if non negated pivotal was already considered => lookup 
+
+		c.literals[i] = true;
+
+		computeClauseForPivotalFunction(c, pivotalLiteral, i+1, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
+
+		c.negated[i] = true; 
+
+		computeClauseForPivotalFunction(c, pivotalLiteral, i+1, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
+
+		//TODO: Think about lookup for avoiding double cover of regions e.g. ABC | AB instead of AB
+	}*/
+}
+
+std::vector<lmu::Clause> computeClauseForPivotalFunction(int pivotalLiteral, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions,
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::SampleParams& params)
+{
+	lmu::Clause pivotal(numClauseFunctions);
+	pivotal.literals[pivotalLiteral] = true;
+	
+	std::vector<lmu::Clause> resultClauses;
+
+	computeClauseForPivotalFunction(pivotal, pivotalLiteral, 0, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
+
+	return resultClauses;
+}
+
+std::vector<std::tuple<lmu::Clique, int>> getAllCliquesContainingFunction(const lmu::ImplicitFunctionPtr& func, const std::vector<lmu::Clique>& allCliques)
+{
+	std::vector<std::tuple<lmu::Clique, int>> cliques;
+
+	for (const auto& clique : allCliques)
+	{
+		auto it = std::find(clique.functions.begin(), clique.functions.end(), func);
+		if(it != clique.functions.end())
+			cliques.push_back(std::make_tuple(clique, it - clique.functions.begin()));
+	}
+
+	return cliques; 
+}
+
+std::unordered_set<lmu::ImplicitFunctionPtr> getAllIntersectingFunctions(const std::vector<std::tuple<lmu::Clique, int>>& cliques)
+{
+	std::unordered_set<lmu::ImplicitFunctionPtr> res; 
+
+	for (const auto& clique : cliques)	
+		res.insert(std::get<0>(clique).functions.begin(), std::get<0>(clique).functions.end());
+		
+	return res;
+}
+
+//Horrible 
+std::vector<lmu::ImplicitFunctionPtr> getAllCliqueFunctionsWithAppendedRest(const std::vector<lmu::ImplicitFunctionPtr>& cliqueFunctions, const std::unordered_set<lmu::ImplicitFunctionPtr>& intersectingFunctions)
+{
+	std::vector<lmu::ImplicitFunctionPtr> res; 
+
+	res.insert(res.end(), cliqueFunctions.begin(), cliqueFunctions.end());
+
+	for (const auto& intersectingFunction : intersectingFunctions)
+	{
+		if (std::find(cliqueFunctions.begin(), cliqueFunctions.end(), intersectingFunction) == cliqueFunctions.end())
+			res.push_back(intersectingFunction);
+	}
+
+	return res;
+}
+
+lmu::CSGNode lmu::computeCSGNode(const std::vector<lmu::ImplicitFunctionPtr>& functions, const lmu::Graph& conGraph, const lmu::SampleParams& params)
+{
+	lmu::CSGNode node = lmu::opUnion();
+	
+	auto allCliques = getCliques(conGraph);
+
+	auto outlierTestValues = computeOutlierTestValues(functions, params.h);
+
+	for (const auto& f : functions)
+	{
+		std::cout << "Compute for " << f->name() << std::endl;
+
+		auto cliquesForFunc = getAllCliquesContainingFunction(f, allCliques);
+
+		auto intersectingFunctions = getAllIntersectingFunctions(cliquesForFunc);
+
+		for (const auto& cliqueForFunc : cliquesForFunc)
+		{		
+			auto cliqueFunctions = getAllCliqueFunctionsWithAppendedRest(std::get<0>(cliqueForFunc).functions, intersectingFunctions);
+
+			int numClauseFunctions = std::get<0>(cliqueForFunc).functions.size();
+
+			auto clauses = computeClauseForPivotalFunction(std::get<1>(cliqueForFunc), cliqueFunctions, numClauseFunctions, outlierTestValues, params);
+
+			for (const auto& clause : clauses)
+			{
+				node.addChild(lmu::clauseToCSGNode(clause, cliqueFunctions));
+			}
+		}
+	}
+
+	return node;
 }

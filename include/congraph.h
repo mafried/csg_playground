@@ -6,6 +6,11 @@
 
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/filtered_graph.hpp>
+#include <boost/graph/connected_components.hpp>
+#include <boost/graph/filtered_graph.hpp>
+#include "boost/graph/copy.hpp"
+
 
 namespace lmu
 {	
@@ -27,9 +32,32 @@ namespace lmu
 
 	std::ostream& operator<<(std::ostream& os, const Clique& c);
 
-	struct  Graph : public boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, std::shared_ptr<lmu::ImplicitFunction>>
+	typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, std::shared_ptr<lmu::ImplicitFunction>> GraphStructure;
+
+	struct Graph 
 	{
-		std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, vertex_descriptor> vertexLookup;
+		GraphStructure structure;
+		std::unordered_map<std::shared_ptr<lmu::ImplicitFunction>, GraphStructure::vertex_descriptor> vertexLookup;
+
+		Graph& operator= (const Graph& other)
+		{
+			if (this != &other)
+			{
+				vertexLookup = other.vertexLookup; 
+				boost::copy_graph(other.structure, structure);
+			}
+			return *this;
+		}
+
+		Graph()
+		{
+		}
+
+		Graph(const Graph& other) : 
+			vertexLookup(other.vertexLookup)
+		{	
+				boost::copy_graph(other.structure, structure);
+		}
 	};
 			
 
@@ -44,6 +72,13 @@ namespace lmu
 	void writeConnectionGraph(const std::string& file, lmu::Graph& graph);
 
 	std::vector<lmu::Clique> getCliques(const lmu::Graph& graph);	
+
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> getImplicitFunctions(const lmu::Graph& graph);
+
+	std::vector<lmu::Graph> getConnectedComponents(Graph const&g);
+	
+	void recreateVertexLookup(Graph& graph);
+
 }
 
 #endif

@@ -6,6 +6,7 @@
 
 #include "csgnode.h"
 #include "evolution.h"
+#include "congraph.h"
 
 #include <Eigen/Core>
 
