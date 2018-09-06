@@ -33,7 +33,7 @@ namespace lmu
 		Primitives primitives;
 	};
 
-	std::vector<std::shared_ptr<ImplicitFunction>> ransacWithCGAL(const Eigen::MatrixXd& points, const Eigen::MatrixXd& normals, const RansacCGALParams& params);
+	std::vector<std::shared_ptr<ImplicitFunction>> ransacWithCGAL(const Eigen::MatrixXd& points, const Eigen::MatrixXd& normals, std::vector<int>& indices, const RansacCGALParams& params);
 
 	std::vector<std::shared_ptr<ImplicitFunction>> ransacWithPCL(const Eigen::MatrixXd& points, const Eigen::MatrixXd& normals);
 

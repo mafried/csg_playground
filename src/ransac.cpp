@@ -64,6 +64,25 @@ Eigen::MatrixXd getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& sha
 	return points;
 }
 
+void setPrimitiveType(CGAL::Shape_detection_3::Shape_base<Traits>& shape, std::vector<int>& indices)
+{
+	for (const auto& index : shape.indices_of_assigned_points())
+	{
+		if (auto sphere = dynamic_cast<Sphere*>(&shape))
+		{
+			indices[index] = (int)Primitives::SPHERE;
+		}
+		else if (auto cylinder = dynamic_cast<Cylinder*>(&shape))
+		{
+			indices[index] = (int)Primitives::CYLINDER;
+		}
+		else if (auto cone = dynamic_cast<Cone*>(&shape))
+		{
+			indices[index] = (int)Primitives::CONE;
+		}
+	}
+}
+
 Primitives lmu::operator&(Primitives lhs, Primitives rhs)
 {
 	return static_cast<Primitives> (
@@ -72,9 +91,10 @@ Primitives lmu::operator&(Primitives lhs, Primitives rhs)
 		);
 }
 
-std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, const RansacCGALParams& params)
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, std::vector<int>& indices, const RansacCGALParams& params)
 {
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
+	indices = std::vector<int>(points.rows(), 0);
 
 	// Add points and normals to the correct structure.
 	Pwn_vector pointsWithNormals;
@@ -134,18 +154,20 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 
 	for (const auto& shape : ransac.shapes())
 	{	
+		setPrimitiveType(*shape, indices);
+			
 		if (Sphere* sphere = dynamic_cast<Sphere*>(shape.get()))
 		{
 			std::cout << "Sphere detected" << std::endl;
 
 			auto func = std::make_shared<lmu::IFSphere>(Eigen::Affine3d(), sphere->radius(),
-				lmu::iFTypeToString(ImplicitFunctionType::Sphere) + "_" + std::to_string(sphereCount++));			
+				lmu::iFTypeToString(ImplicitFunctionType::Sphere) + "_" + std::to_string(sphereCount++));
 			func->setPoints(getPoints(*shape, pointsWithNormals));
-			
+
 			res.push_back(func);
-		}	
+		}
 		else if (Cylinder* cylinder = dynamic_cast<Cylinder*>(shape.get()))
-		{	
+		{
 			std::cout << "Cylinder detected" << std::endl;
 
 			auto func = std::make_shared<lmu::IFCylinder>(Eigen::Affine3d(), cylinder->radius(), 1.0,
@@ -163,9 +185,8 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 			func->setPoints(getPoints(*shape, pointsWithNormals));
 
 			res.push_back(func);
-		}	
-		
-	
+		}
+
 		// Prints the parameters of the detected shape.
 		// This function is available for any type of shape.
 		std::cout << shape->info() << std::endl;

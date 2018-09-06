@@ -60,12 +60,24 @@ int main(int argc, char *argv[])
 
 void ransac(const Eigen::MatrixXd& inputPointCloud, const RansacCGALParams& params, bool interactive)
 {
-	auto shapes = lmu::ransacWithCGAL(inputPointCloud.leftCols(3), inputPointCloud.rightCols(3), params);
+	std::vector<int> types; 
+
+	auto shapes = lmu::ransacWithCGAL(inputPointCloud.leftCols(3), inputPointCloud.rightCols(3), types, params);
 
 	for (const auto& shape : shapes)
 	{
 		lmu::writePointCloud("pc_" + shape->name() + ".dat", shape->points());
 	}
+
+	std::ofstream s("res.dat");
+
+
+	for (int type : types)
+	{
+		s << type << std::endl;
+	}
+
+	s.close();
 
 	if (!interactive)
 		return;
@@ -122,7 +134,7 @@ void ransac(const Eigen::MatrixXd& inputPointCloud, const RansacCGALParams& para
 	}
 
 	viewer.data().add_points(points.leftCols(3), points.rightCols(3));
-	viewer.data().add_points(inputPointCloud.leftCols(3), Eigen::Vector3d(0.1,0.1,0.1));
+	//viewer.data().add_points(inputPointCloud.leftCols(3), Eigen::Vector3d(0.1,0.1,0.1));
 
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
