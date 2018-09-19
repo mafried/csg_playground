@@ -11,6 +11,10 @@
 #include <iostream>
 #include <memory>
 
+#include <string>
+#include <vector>
+
+
 namespace lmu
 {
 	struct Mesh
@@ -136,7 +140,36 @@ namespace lmu
 			return _transform;
 		}
 
-		virtual std::shared_ptr<ImplicitFunction> clone() const = 0;
+	  // row-order: row1 " " row2 " " row3 " " row4
+	  std::string serializeTransform() const {
+	    std::string row1 = std::to_string(_transform(0,0)) + " " 
+	      + std::to_string(_transform(0,1)) + " " 
+	      + std::to_string(_transform(0,2)) + " " 
+	      + std::to_string(_transform(0,3));
+	    
+	    std::string row2 = std::to_string(_transform(1,0)) + " " 
+	      + std::to_string(_transform(1,1)) + " " 
+	      + std::to_string(_transform(1,2)) + " " 
+	      + std::to_string(_transform(1,3));
+	    
+	    std::string row3 = std::to_string(_transform(2,0)) + " " 
+	      + std::to_string(_transform(2,1)) + " " 
+	      + std::to_string(_transform(2,2)) + " " 
+	      + std::to_string(_transform(2,3));
+	    
+	    std::string row4 = std::to_string(_transform(3,0)) + " " 
+	      + std::to_string(_transform(3,1)) + " " 
+	      + std::to_string(_transform(3,2)) + " " 
+	      + std::to_string(_transform(3,3));
+	    
+
+	    return row1 + " " + row2 + " " + row3 + " " + row4;
+	  }
+
+	  virtual std::shared_ptr<ImplicitFunction> clone() const = 0;
+
+	  virtual std::string serializeParameters() const = 0;
+
 
 	protected: 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
@@ -170,9 +203,18 @@ namespace lmu
 			return _radius; 
 		}
 
+		double displacement() const 
+		{
+		  return _displacement;
+		}
+
 		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFSphere>(*this);
+		}
+
+		virtual std::string serializeParameters() const {
+		  return std::to_string(_radius) + " " + std::to_string(_displacement);
 		}
 
 	protected:
@@ -215,6 +257,20 @@ namespace lmu
 		virtual std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFCylinder>(*this);
+		}
+
+		double radius() const 
+		{
+		  return _radius;
+		}
+
+		double height() const 
+		{
+		  return _height;
+		}
+
+		virtual std::string serializeParameters() const {
+		  return std::to_string(_radius) + " " + std::to_string(_height);
 		}
 
 	protected:
@@ -265,6 +321,21 @@ namespace lmu
 		{
 			return std::make_shared<IFBox>(*this);
 		}
+
+		Eigen::Vector3d size() const {
+		  return _size;
+		}
+
+		double displacement() const {
+		  return _displacement;
+		}
+
+		virtual std::string serializeParameters() const {
+		  return std::to_string(_size[0]) + " " 
+		    + std::to_string(_size[1]) + " "
+		    + std::to_string(_size[2]) + " "
+		    + std::to_string(_displacement);
+		}
 				
 	protected:
 
@@ -294,7 +365,7 @@ namespace lmu
 		}
 
 		Eigen::Vector3d _size;
-		float _displacement;
+		double _displacement;
 	};
 
 	struct IFNull : public ImplicitFunction
@@ -312,6 +383,11 @@ namespace lmu
 		std::shared_ptr<ImplicitFunction> clone() const override
 		{
 			return std::make_shared<IFNull>(*this);
+		}
+		
+		virtual std::string serializeParameters() const 
+		{
+		  return "";
 		}
 
 	protected:
@@ -355,6 +431,16 @@ namespace lmu
 				return 0.0;
 		}
 
+		Eigen::Vector3d c() const {
+		  return _c;
+		}
+
+		virtual std::string serializeParameters() const {
+		  return std::to_string(_c[0]) + " " 
+		    + std::to_string(_c[1]) + " "
+		    + std::to_string(_c[2]);
+		}
+
 	protected:
 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
@@ -390,9 +476,18 @@ namespace lmu
 		Eigen::Vector3d _c;
 	};
 	
+	// Read primitives saved with the .FIT file format
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);
 
 	void movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter = false, double threshold = 0.0);
+
+
+	// Save primitives with the .PRIM file format
+	void writePrimitives(const std::string& filename, 
+			     const std::vector<std::shared_ptr<ImplicitFunction>>& shapes);
+
+	// Read primitives saved with the .PRIM file format
+	std::vector<std::shared_ptr<ImplicitFunction>> fromFilePRIM(const std::string& file);
 }
 
 #endif

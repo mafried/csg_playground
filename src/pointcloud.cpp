@@ -10,10 +10,6 @@
 #include "..\include\pointcloud.h"
 #include "..\include\mesh.h"
 
-#include <pcl/point_types.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/keypoints/sift_keypoint.h>
-#include <pcl/features/normal_3d.h>
 
 void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 {
@@ -33,6 +29,22 @@ void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 		s << std::endl;
 	}
 }
+
+
+void lmu::writePointCloudXYZ(const std::string& file, Eigen::MatrixXd& points)
+{
+  std::ofstream s(file); 
+
+  for (int i = 0; i < points.rows(); i++)
+    {
+      for (int j = 0; j < points.cols(); j++)
+	{
+	  s << points.row(i).col(j) << " ";
+	}
+      s << std::endl;
+    }
+}
+
 
 Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
 {
@@ -65,6 +77,44 @@ Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
 
 	return points;
 }
+
+
+// Assume each line contains
+// x y z nx ny nz
+Eigen::MatrixXd lmu::readPointCloudXYZ(const std::string& file, double scaleFactor)
+{
+  std::ifstream s(file);
+
+  std::vector<std::vector<double>> pwn;
+  while (!s.eof()) {
+    std::vector<double> tmp(6);
+    s >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3] >> tmp[4] >> tmp[5];
+    pwn.push_back(tmp);
+  }
+
+  size_t numRows = pwn.size(); 
+  size_t numCols = 6;
+
+  std::cout << numRows << " " << numCols << std::endl;
+
+  Eigen::MatrixXd points(numRows, numCols);
+
+  for (int i = 0; i < points.rows(); i++)
+    {
+      for (int j = 0; j < points.cols(); j++)
+	{
+	  double v = pwn[i][j]; 
+
+	  if (j < 3)
+	    v = v * scaleFactor;
+
+	  points(i,j) = v;
+	}
+    }
+
+  return points;
+}
+
 
 Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, double samplingRate, double errorSigma)
 {
@@ -162,14 +212,24 @@ Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	return res;
 }
 
-Eigen::MatrixXd lmu::getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable)
-{
-	pcl::PointCloud<pcl::PointNormal>::Ptr pcWithNormals(new pcl::PointCloud<pcl::PointNormal>());
+
+double computeAABBLength(Eigen::MatrixXd& points) {
+  Eigen::VectorXd min = points.colwise().minCoeff();
+  Eigen::VectorXd max = points.colwise().maxCoeff();
+  Eigen::VectorXd diag = max - min;
+  return diag.norm();
+}
+
+
+/*
+  Eigen::MatrixXd lmu::getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable)
+  {
+  pcl::PointCloud<pcl::PointNormal>::Ptr pcWithNormals(new pcl::PointCloud<pcl::PointNormal>());
 		
-	pcWithNormals->width = points.rows();
-	pcWithNormals->height = 1;
-	pcWithNormals->is_dense = false;
-	pcWithNormals->points.resize(points.rows());
+  pcWithNormals->width = points.rows();
+  pcWithNormals->height = 1;
+  pcWithNormals->is_dense = false;
+  pcWithNormals->points.resize(points.rows());
 
 	
 	if(!normalsAvailable)
@@ -247,4 +307,4 @@ Eigen::MatrixXd lmu::getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, 
 
 
 	return resultMat;
-}
+}*/

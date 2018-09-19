@@ -7,6 +7,8 @@
 #include "boost/graph/graphviz.hpp"
 #include "boost/graph/bron_kerbosch_all_cliques.hpp"
 #include "boost/graph/copy.hpp"
+#include <boost/graph/biconnected_components.hpp>
+
 
 #include <boost/dynamic_bitset.hpp>
 
@@ -19,9 +21,46 @@ std::ostream& lmu::operator<<(std::ostream& os, const lmu::Clique& c)
 	return os;
 }
 
-bool lmu::areConnected(const lmu::Graph & g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2)
+lmu::VertexDescriptor lmu::addVertex(lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f)
+{
+	auto v = boost::add_vertex(g.structure);
+	g.structure[v] = f;
+	g.vertexLookup[f] = v;
+
+	return v;
+}
+
+lmu::EdgeDescriptor lmu::addEdge(lmu::Graph &g, const VertexDescriptor & v1, const VertexDescriptor & v2)
+{
+	return std::get<0>(boost::add_edge(v1, v2, g.structure));
+}
+
+bool lmu::areConnected(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2)
 {
 	return boost::edge(g.vertexLookup.at(f1), g.vertexLookup.at(f2), g.structure).second;
+}
+
+bool lmu::wasPruned(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f)
+{
+	if (numEdges(g) == 0)
+		return false;
+
+	auto v = g.vertexLookup.at(f);
+
+	typename boost::graph_traits < lmu::GraphStructure >::out_edge_iterator ei, ei_end;
+	
+	//Get pruned property map 
+	boost::property_map <GraphStructure, boost::edge_pruned_t >::const_type
+		pruned = boost::get(boost::edge_pruned_t(), g.structure);
+	
+	//A pruned vertex is a vertex with all edges being pruned.
+	for (boost::tie(ei, ei_end) = boost::out_edges(v, g.structure); ei != ei_end; ++ei)
+	{		
+		if (!pruned[*ei])
+			return false;
+	}
+
+	return true;
 }
 
 lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs)
@@ -30,9 +69,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 	for (const auto& impFunc : impFuncs)
 	{
-		auto v = boost::add_vertex(graph.structure);
-		graph.structure[v] = impFunc;
-		graph.vertexLookup[impFunc] = v;
+		addVertex(graph, impFunc);
 	}
 	
 	boost::graph_traits<GraphStructure>::vertex_iterator vi1, vi1_end;
@@ -54,7 +91,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && lmu::collides(*v1, *v2))			
-				boost::add_edge(*vi1, *vi2, graph.structure);
+				addEdge(graph, *vi1, *vi2);
 
 			j++;
 		}
@@ -106,10 +143,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 	int i = 0;
 	for (const auto& impFunc : impFuncs)
 	{
-		auto v = boost::add_vertex(graph.structure);
-		graph.structure[v] = impFunc;
-		graph.vertexLookup[impFunc] = v;
-
+		addVertex(graph, impFunc);
 		overlaps[i++] = boost::dynamic_bitset<>(impFuncs.size(), false);
 	}
 
@@ -136,7 +170,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && overlaps[i][j])
-				boost::add_edge(*vi1, *vi2, graph.structure);
+				addEdge(graph, *vi1, *vi2);
 			j++;
 		}
 
@@ -154,9 +188,7 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 
 	for (int i = 0; i < numVertices; ++i)
 	{
-		auto v = boost::add_vertex(graph.structure);
-		graph.structure[v] = std::make_shared<IFNull>("Null_" + std::to_string(i));
-		graph.vertexLookup[graph.structure[v]] = v;
+		addVertex(graph, std::make_shared<IFNull>("Null_" + std::to_string(i)));
 	}
 
 	boost::graph_traits<GraphStructure>::vertex_iterator vi1, vi1_end;
@@ -182,7 +214,7 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 
 			//Add an edge if both primitives collide.
 			if (v1 != v2 && dist(mt) <= edgePropability)
-				boost::add_edge(*vi1, *vi2, graph.structure);
+				addEdge(graph, *vi1, *vi2);
 
 			j++;
 		}
@@ -194,22 +226,26 @@ lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropabil
 }
 
 template <class Name>
-class VertexWriter {
+class VertexWriter 
+{
 public:
 	VertexWriter(Name _name) : name(_name) {}
 	template <class VertexOrEdge>
-	void operator()(std::ostream& out, const VertexOrEdge& v) const {
-		out << "[label=\"" << name[v]->name() << "\"]";
+	void operator()(std::ostream& out, const VertexOrEdge& v) const 
+	{
+		auto wasPruned = lmu::wasPruned(name, name.structure[v]);
+		
+		out << "[label=\"" << name.structure[v]->name() << (wasPruned ? "_PRUNED" : "") << "\"]";
 	}
 private:
 	Name name;
 };
 
-void lmu::writeConnectionGraph(const std::string& file, lmu::Graph & graph)
+void lmu::writeConnectionGraph(const std::string& file, const lmu::Graph & graph)
 {	
 
 	std::ofstream f(file);
-	boost::write_graphviz(f, graph.structure, VertexWriter<GraphStructure>(graph.structure));
+	boost::write_graphviz(f, graph.structure, VertexWriter<lmu::Graph>(graph));
 	f.close();
 }
 
@@ -298,16 +334,16 @@ std::vector<lmu::Graph> lmu::getConnectedComponents(lmu::Graph const & g)
 	{
 		typedef boost::filtered_graph<
 			GraphStructure,
-			std::function<bool(GraphStructure::edge_descriptor)>,
-			std::function<bool(GraphStructure::vertex_descriptor)>
+			std::function<bool(EdgeDescriptor)>,
+			std::function<bool(VertexDescriptor)>
 		> FilteredView;
 
 		boost::copy_graph(FilteredView(g.structure,
-			[&](GraphStructure::edge_descriptor e) {
+			[&](EdgeDescriptor e) {
 			return mapping[source(e, g.structure)] == i
 				|| mapping[target(e, g.structure)] == i;
 		},
-			[&](GraphStructure::vertex_descriptor v) {
+			[&](VertexDescriptor v) {
 			return mapping[v] == i;
 		}
 			),
@@ -328,4 +364,247 @@ std::vector<lmu::Graph> lmu::getConnectedComponents(lmu::Graph const & g)
 
 	return res;
 	
+}
+
+/*
+- Pruning has no impact on found bridges (pruned edges are always bridges)
+
+1. Pruning 
+2. Prime implicant partitioning 
+   (simple: PIs with no pruned connection => simply remove it and later union, complex: PIs => remove together with all connected pruned and later union 
+3. Per partition: bridge partitioning
+
+*/
+
+std::vector<lmu::Graph> lmu::getBridgeSeparatedConnectedComponents(const Graph& g)
+{	
+	/*
+		Find bridges.
+		From https://stackoverflow.com/questions/27105367/finding-bridges-in-a-graph-c-boost:
+		1. Calculate the biconnected components
+		2. Create a edge counter for each component. Iteratate over all edge and increase the coresponding edge counter of the respective component
+		3. Iterate again over all edges and check if the edge counter of the corresponding component is 1, if so this edge is a bridge
+	*/
+
+	lmu::Graph res = g;
+
+	//Get component property map 
+	boost::property_map <GraphStructure, boost::edge_component_t >::type
+		component = boost::get(boost::edge_component_t(), res.structure);
+
+	//Get pruned property map
+	//boost::property_map <GraphStructure, boost::edge_pruned_t >::type
+	//	pruned = boost::get(boost::edge_pruned_t(), res.structure);
+
+
+	//1
+	auto numComponents = biconnected_components(res.structure, component);
+
+	//2
+	std::vector<size_t> edgeCounter (numComponents, 0);
+	boost::graph_traits <GraphStructure>::edge_iterator ei, ei_end;
+	for (boost::tie(ei, ei_end) = boost::edges(res.structure); ei != ei_end; ++ei)
+			edgeCounter[component[*ei]]++;
+
+	//3 + remove all bridges
+	res = filterGraph(res, [&edgeCounter, &component](const EdgeDescriptor& edge)
+	{
+		return edgeCounter[component[edge]] != 1; // || pruned[edge];
+	});
+	
+	//
+	return getConnectedComponents(res);
+}
+
+std::vector<lmu::Graph> lmu::getArticulationPointSeparatedConnectedComponents(const Graph& g)
+{
+	auto gCopy = g;
+	std::vector<lmu::Graph> res;
+
+	//Get component property map 
+	boost::property_map <GraphStructure, boost::edge_component_t >::type
+		component = boost::get(boost::edge_component_t(), gCopy.structure);
+
+	auto numComponents = biconnected_components(gCopy.structure, component);
+
+	std::cout << "Num Components: " << numComponents << std::endl;
+
+	std::vector<VertexDescriptor> artPoints;
+	boost::articulation_points(gCopy.structure, std::back_inserter(artPoints));
+
+	std::unordered_map<VertexDescriptor, std::unordered_set<size_t>> componentIds;
+	std::unordered_map<VertexDescriptor, std::vector<size_t>> sortedComponentIds;
+
+	//Iterate over all neighboring edges of all vertices to get components that a certain vertex is part of.
+	boost::graph_traits<GraphStructure>::vertex_iterator vi, vi_end;
+	for (boost::tie(vi, vi_end) = boost::vertices(gCopy.structure); vi != vi_end; ++vi)
+	{
+		typename boost::graph_traits <lmu::GraphStructure>::out_edge_iterator ei, ei_end;
+		for (boost::tie(ei, ei_end) = boost::out_edges(*vi, gCopy.structure); ei != ei_end; ++ei)
+		{
+			componentIds[*vi].insert(component[*ei]);
+		}
+
+		sortedComponentIds[*vi].insert(sortedComponentIds[*vi].end(), componentIds[*vi].begin(), componentIds[*vi].end());
+		std::sort(sortedComponentIds[*vi].begin(), sortedComponentIds[*vi].end());
+	}
+
+
+	
+	for (auto ap : artPoints)
+	{
+		std::cout << "ART POINT " << gCopy.structure[ap]->name() << std::endl;
+		for (size_t c : componentIds[ap])
+			std::cout << c << std::endl;
+
+		auto pGraph = lmu::filterGraph(gCopy,
+			[&gCopy, &ap, &artPoints, &sortedComponentIds](const VertexDescriptor& v)
+		{ 
+			if (v == ap)
+				return true;
+
+			//Vertex must not be an articulation point itself.
+			bool isArticulationPoint = std::find(artPoints.begin(), artPoints.end(), v) != artPoints.end();
+			if (isArticulationPoint)
+				return false; 
+
+			//Vertex must belong to one of the ap's components
+			std::vector<size_t> intersection;
+			std::set_intersection(sortedComponentIds[v].begin(), sortedComponentIds[v].end(), sortedComponentIds[ap].begin(), sortedComponentIds[ap].end(), std::back_inserter(intersection));
+			bool shareComponents = !intersection.empty();
+
+			/*std::cout << "   SHARED COMPONENT " << gCopy.structure[v]->name() << ": " << shareComponents << std::endl;
+			for (size_t c : sortedComponentIds[v])
+				std::cout << "   "<< c << std::endl;
+			std::cout << "    ---" << std::endl;
+			for (size_t c : sortedComponentIds[ap])
+				std::cout << "   " << c << std::endl;
+			*/
+
+			return shareComponents;
+		},
+			[&ap, &component, &componentIds](const EdgeDescriptor& e)
+		{ 
+			return componentIds[ap].find(component[e]) != componentIds[ap].end(); 
+		});
+		
+		res.push_back(pGraph);
+	}
+
+	return res;
+}
+
+bool shouldBePruned(const lmu::Graph& g, const lmu::EdgeDescriptor& ed)
+{
+	// Get the two vertices that are joined by this edge...
+	auto u = boost::source(ed, g.structure);
+	auto v = boost::target(ed, g.structure);
+
+	return boost::in_degree(u, g.structure) == 1 || boost::in_degree(v, g.structure) == 1;
+}
+
+lmu::Graph lmu::pruneGraph(const Graph& g)
+{
+	//lmu::Graph res = g;
+
+	//Get pruned property map 
+	//boost::property_map <GraphStructure, boost::edge_pruned_t>::type
+	//	pruned = boost::get(boost::edge_pruned_t(), res.structure);
+
+	//boost::graph_traits <GraphStructure>::edge_iterator ei, ei_end;
+	//for (boost::tie(ei, ei_end) = boost::edges(res.structure); ei != ei_end; ++ei)
+	//{
+		//pruned[*ei] = shouldBePruned(res, *ei);
+	//}
+
+	auto g1 = lmu::filterGraph(g, [](const VertexDescriptor& v) {return true; }, [&g](const EdgeDescriptor& e) { return !shouldBePruned(g, e); });
+
+	auto g2 = lmu::filterGraph(g1, [&g1](const VertexDescriptor& v) {return boost::in_degree(v, g1.structure) > 0;  }, [](const EdgeDescriptor& e) { return true; });
+	
+	return g2;
+}
+
+size_t lmu::numVertices(const lmu::Graph & g)
+{
+	return boost::num_vertices(g.structure);
+}
+
+size_t lmu::numEdges(const lmu::Graph & g)
+{
+	return boost::num_edges(g.structure);
+}
+
+lmu::Graph lmu::getGraphWithPrunedVertices(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f)
+{	
+	auto v = g.vertexLookup.at(f);
+
+	typename boost::graph_traits <lmu::GraphStructure>::out_edge_iterator ei, ei_end;
+
+	//Get pruned property map. 
+	boost::property_map <GraphStructure, boost::edge_pruned_t >::const_type
+		pruned = boost::get(boost::edge_pruned_t(), g.structure);
+
+	//Iterate through all neighbor vertices, check if they were pruned and add them to new graph.
+	lmu::Graph res;
+	auto fVertex = addVertex(res, f);
+	for (boost::tie(ei, ei_end) = boost::out_edges(v, g.structure); ei != ei_end; ++ei)
+	{
+		if (shouldBePruned(g, *ei))
+		{
+			auto neighborVertex = boost::target(*ei, g.structure);
+			auto neighborFunc = g.structure[neighborVertex];
+
+			auto neighborFuncVertex = addVertex(res, neighborFunc);
+			addEdge(res, fVertex, neighborFuncVertex);
+		}
+	}
+
+	return res;
+}
+
+namespace boost
+{
+	struct EdgeFilterPredicateObj
+	{
+		EdgeFilterPredicateObj(const lmu::EdgeFilterPredicate& p) : p(p)
+		{
+		}
+
+		bool operator()(const lmu::EdgeDescriptor& e)
+		{
+			return !p(e);
+		}
+
+		const lmu::EdgeFilterPredicate& p;
+	};
+
+	
+}
+
+lmu::Graph lmu::filterGraph(const lmu::Graph& g, const EdgeFilterPredicate& predicate)
+{
+	auto res = g;
+
+	boost::remove_edge_if(boost::EdgeFilterPredicateObj(predicate), res.structure);
+
+	recreateVertexLookup(res);
+
+	return res;
+}
+
+lmu::Graph lmu::filterGraph(const lmu::Graph& g, const VertexFilterPredicate& vp, const EdgeFilterPredicate& ep)
+{	
+	typedef boost::filtered_graph<
+		GraphStructure,
+		EdgeFilterPredicate,
+		VertexFilterPredicate
+	> FilteredView;
+	
+	lmu::Graph res; 
+
+	boost::copy_graph(FilteredView(g.structure, ep, vp), res.structure);
+
+	recreateVertexLookup(res);
+
+	return res;
 }

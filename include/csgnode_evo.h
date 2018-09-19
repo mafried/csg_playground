@@ -83,6 +83,13 @@ namespace lmu
 
 	CSGNode mergeCSGNodeCliqueSimple(CSGNodeClique& clique);
 	void optimizeCSGNodeClique(CSGNodeClique& clique, float tolerance);
+  
+  // 
+  CSGNode 
+  computeGAWithPartitions
+  (const std::vector<Graph>& partitions,
+   bool inParallel = false, 
+   const std::string& statsFile = std::string("stats.dat"));
 }
 
 #endif

@@ -3,6 +3,10 @@
 #include <limits>
 #include <fstream>
 #include <random>
+#include <iostream>
+
+#include <vector>
+#include <memory>
 
 #include "boost/graph/graphviz.hpp"
 
@@ -10,6 +14,10 @@
 #include <boost/graph/adjacency_list.hpp>
 
 #include <igl/copyleft/marching_cubes.h>
+
+
+#include "../include/constants.h"
+
 
 using namespace lmu;
 
@@ -840,6 +848,32 @@ MergeResult lmu::mergeNodes(const CommonSubgraph& lcs, bool allowIntersections)
 }
 
 //Note that this function assumes that a convex hull mesh exists for each function.
+std::tuple<Eigen::Vector3d, Eigen::Vector3d> 
+lmu::computeDimensions(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes)
+{
+  double minS = std::numeric_limits<double>::max();
+  double maxS = -std::numeric_limits<double>::max();
+
+  Eigen::Vector3d min(minS, minS, minS);
+  Eigen::Vector3d max(maxS, maxS, maxS);
+	
+  for (const auto& shape : shapes) {    
+    Eigen::Vector3d minCandidate = shape->meshCRef().vertices.colwise().minCoeff();
+    Eigen::Vector3d maxCandidate = shape->meshCRef().vertices.colwise().maxCoeff();
+    
+    min(0) = min(0) < minCandidate(0) ? min(0) : minCandidate(0);
+    min(1) = min(1) < minCandidate(1) ? min(1) : minCandidate(1);
+    min(2) = min(2) < minCandidate(2) ? min(2) : minCandidate(2);
+    
+    max(0) = max(0) > maxCandidate(0) ? max(0) : maxCandidate(0);
+    max(1) = max(1) > maxCandidate(1) ? max(1) : maxCandidate(1);
+    max(2) = max(2) > maxCandidate(2) ? max(2) : maxCandidate(2);
+  }
+  
+  return std::make_tuple(min, max);
+}
+
+//Note that this function assumes that a convex hull mesh exists for each function.
 std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNode& node)
 {	
 	auto geos = allGeometryNodePtrs(node);
@@ -1084,7 +1118,10 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 		std::cout << "optimized node. Delta: " << closestScoreDelta << std::endl;
 				
 		std::cout << "  from " << serializeNode(node) << std::endl;
-		std::cout << "  to   " << serializeNode(CSGNode(closestScoreFuncNode)) << std::endl;
+		CSGNode closest(closestScoreFuncNode);
+		//std::cout << "  to   " << serializeNode(CSGNode(closestScoreFuncNode)) << std::endl;
+		std::cout << "  to   " << serializeNode(closest) << std::endl;
+
 
 		node = CSGNode(closestScoreFuncNode);		
 	}
@@ -1123,6 +1160,10 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 
 	Eigen::Vector3i numSamples((max(0) - min(0)) / stepSize, (max(1) - min(1)) / stepSize, (max(2) - min(2)) / stepSize);
 
+	std::cout << "Number of samples: " << numSamples(0) 
+		  << " " << numSamples(1) 
+		  << " " << numSamples(2) << std::endl;
+
 	std::vector<Eigen::Matrix<double,1,6>> samplingPoints;
 	
 	std::random_device rd{};
@@ -1156,7 +1197,9 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 	Eigen::MatrixXd res(samplingPoints.size(), 6);
 	for (int i = 0; i < samplingPoints.size(); ++i)
 		res.row(i) = samplingPoints[i].row(0);
-	
+
+	std::cout << "Point-cloud size: " << samplingPoints.size() << std::endl;
+
 	return res;
 }
 

@@ -192,6 +192,15 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 	return validClauses; 
 }
 
+bool isConnected(const lmu::Clause& c, const std::vector<lmu::ImplicitFunctionPtr>& functions, const lmu::Graph& g, const lmu::ImplicitFunctionPtr& func)
+{
+	for (int i = 0; i < c.literals.size(); ++i)
+		if (c.literals[i] && func != functions[i] && lmu::areConnected(g, func, functions[i]))
+			return true;
+
+	return false;
+}
+
 std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, int numClauseFunctions,
 	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params)
 {
@@ -223,6 +232,14 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		//function should not be a literal of the clause to test.
 		if (i < numClauseFunctions && clause.literals[i])
 			continue;
+
+		//If current primitive is not connected with primitives in clause, continue.
+		if (!isConnected(clause, functions, conGraph, functions[i]))
+			continue;
+
+		//If pruned vertices should not be considered, test for it.
+		//if (ignorePrunedVertices && lmu::wasPruned(conGraph, functions[i]))
+		//	continue;
 
 		numConsideredFunctions++;
 
@@ -384,7 +401,8 @@ std::vector<std::tuple<lmu::Clause, double, double>>  permutateAllPossibleFPs(lm
 }
 
 std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplicants(const std::vector<lmu::ImplicitFunctionPtr>& functions, 
-	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph, const lmu::SampleParams& params)
+	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> outlierTestValues, const lmu::Graph& conGraph,
+	const lmu::SampleParams& params)
 {
 	//Check which primitive is completely inside the geometry.
 	std::vector<std::tuple<lmu::Clause, double, double>> clauses;
@@ -394,10 +412,10 @@ std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplica
 		lmu::Clause clause(functions.size());
 		clause.literals[i] = true;
 
-		print(std::cout, clause, functions, false);
-		std::cout << std::endl;
+		//print(std::cout, clause, functions, false);
+		//std::cout << std::endl;
 		
-		auto c = lmu::scoreClause(clause, functions, functions.size(), outlierTestValues, conGraph, params);	
+		auto c = lmu::scoreClause(clause, functions, functions.size(), outlierTestValues, conGraph, params);
 			clauses.push_back(c);			
 	}
 
@@ -574,26 +592,20 @@ std::string lmu::espressoExpression(const DNF& dnf)
 	return ss.str();
 }
 
-lmu::CSGNode lmu::computeShapiroWithPartitions(const std::tuple<std::vector<Graph>, std::vector<ImplicitFunctionPtr>>& partition, const SampleParams& params)
+lmu::CSGNode lmu::computeShapiroWithPartitions(const std::vector<Graph>& partitions, const SampleParams& params)
 {
 	lmu::CSGNode res = lmu::op<Union>();
 
-	for (const auto& pi : get<1>(partition))
-	{
-		std::cout << "Add to node " << pi->name() << std::endl;
-		res.addChild(geometry(pi));
-	}
-
-	for (const auto& graph : get<0>(partition))
+	for (const auto& p : partitions)
 	{
 		std::cout << "component functions: " << std::endl;
-		for (const auto& f : lmu::getImplicitFunctions(graph))
+		for (const auto& f : lmu::getImplicitFunctions(p))
 		{
 			std::cout << "f: " << f->name() << std::endl;
 		}
 		std::cout << "----" << std::endl;
 
-		auto dnf = lmu::computeShapiro(lmu::getImplicitFunctions(graph), false, graph, params);
+		auto dnf = lmu::computeShapiro(lmu::getImplicitFunctions(p), true, p, params);
 		for (auto& const clause : dnf.clauses)
 		{
 			res.addChild(lmu::clauseToCSGNode(clause, dnf.functions));
@@ -604,17 +616,23 @@ lmu::CSGNode lmu::computeShapiroWithPartitions(const std::tuple<std::vector<Grap
 }
 
 
-std::tuple <std::vector<lmu::Graph>, std::vector<lmu::ImplicitFunctionPtr>> lmu::partitionByPrimeImplicants(const lmu::Graph& graph, const SampleParams& params)
+std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicants(const lmu::Graph& graph, const SampleParams& params)
 {
 	auto functions = lmu::getImplicitFunctions(graph);
 	
 	auto outlierTestValues = computeOutlierTestValues(functions, params.h);
 
+	std::cout << "PARTITION BY PIs" << std::endl;
+
 	//Get prime implicants.
-	auto res = identifyPrimeImplicants(functions, outlierTestValues, graph, params);	
+	auto res = identifyPrimeImplicants(functions, outlierTestValues, graph, params);
 	auto primeImplicants = std::get<0>(res).functions;
 
 	std::cout << "Found " << primeImplicants.size() << " prime implicants." << std::endl;
+	for (const auto& f : primeImplicants)
+	{
+		std::cout << f->name() << std::endl;
+	}
 
 	//Remove prime implicants from graph.	
 	struct Predicate 
@@ -625,13 +643,15 @@ std::tuple <std::vector<lmu::Graph>, std::vector<lmu::ImplicitFunctionPtr>> lmu:
 		}
 		bool operator()(GraphStructure::vertex_descriptor vd) const 
 		{ 
+			//std::cout << g->structure[vd]->name() << ": Pruned: " << wasPruned(*g, g->structure[vd]) << " PI: " << (std::find(pis->begin(), pis->end(), g->structure[vd]) != pis->end())  << std::endl;
+
 			return std::find(pis->begin(), pis->end(), g->structure[vd]) == pis->end(); 
 		}
 
 		const Graph* g;
-		const std::vector<lmu::ImplicitFunctionPtr>* pis;
+		const std::vector<lmu::ImplicitFunctionPtr>* pis;		
 
-	} predicate{ &graph, &primeImplicants };
+	} predicate{ &graph, &primeImplicants};
 
 	boost::filtered_graph<GraphStructure, Predicate, Predicate> fg(graph.structure, predicate, predicate);
 	
@@ -643,8 +663,67 @@ std::tuple <std::vector<lmu::Graph>, std::vector<lmu::ImplicitFunctionPtr>> lmu:
 	//lmu::writeConnectionGraph("connectionGraph.dot", newGraph);
 
 	//Get connected components. 
-	auto partitionedGraphs = lmu::getConnectedComponents(newGraph);
-	return std::make_tuple(partitionedGraphs, primeImplicants);
+	auto partitions = lmu::getConnectedComponents(newGraph);
+
+	//Add prime implicants as nodes 
+	for (const auto& pi : primeImplicants)
+	{
+		lmu::Graph piGraph;
+		lmu::addVertex(piGraph, pi);
+
+		partitions.push_back(piGraph);
+	}
+
+	return partitions;
+}
+
+std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(const Graph& graph, const SampleParams& params)
+{
+	if (numVertices(graph) <= 2)
+		return { graph };
+		
+	//Prune graph.
+	auto prunedGraph = lmu::pruneGraph(graph);
+	//lmu::writeConnectionGraph("pgraph.dot", prunedGraph);
+	//=> Tested, works.
+	
+	if (numVertices(prunedGraph) < 2)
+	{
+		//TODO;
+	}
+
+	//Get components separated by prime implicants.
+	std::vector<lmu::Graph> partitions;
+
+	auto components = getUnionPartitionsByPrimeImplicants(prunedGraph, params);
+	//auto components = std::get<0>(componentsAndPIs);
+
+	for (const auto& c : components)
+	{
+		//Only search for bridges if component has more than 2 vertices.
+		if (numVertices(c) > 2)
+		{
+			auto bridgeComponents = getBridgeSeparatedConnectedComponents(c);
+			partitions.insert(partitions.end(), bridgeComponents.begin(), bridgeComponents.end());
+		}
+		else if(numVertices(c) == 2)
+		{
+			partitions.push_back(c);
+		}
+		else if(numVertices(c) == 1) //components of size 1 are prime implicants. 
+		{
+			//Create graphs for PIs + pruned vertices.
+			auto piGraph = getGraphWithPrunedVertices(graph, lmu::getImplicitFunctions(c).front());
+			partitions.push_back(piGraph);
+		}
+	}
+
+	return partitions;
+}
+
+std::vector<lmu::Graph> lmu::getUnionPartitionsByArticulationPoints(const Graph& graph)
+{
+	return getArticulationPointSeparatedConnectedComponents(graph);
 }
 
 

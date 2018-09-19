@@ -433,6 +433,7 @@ node = op<Union>(
 	geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
 
 	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
+	
 });
 
 
@@ -489,10 +490,20 @@ op<Difference>(
 
 	SampleParams p{ 0.001 };
 
-	auto partitions = lmu::partitionByPrimeImplicants(graph, p);
+	//auto partitions = lmu::partitionByPrimeImplicants(graph, p, true);
 
-	res = lmu::computeShapiroWithPartitions(partitions, p);
+	//res = lmu::computeShapiroWithPartitions(partitions, p);
 		
+	auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, { 0.001 });
+	int i = 0;
+	for (const auto& p : partitions)
+	{
+		std::cout << "partition" << std::endl;
+		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
+	}
+
+	res = computeGAWithPartitions(partitions);//lmu::computeShapiroWithPartitions(partitions, p);
+
 	lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));

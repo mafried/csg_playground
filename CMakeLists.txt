@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.1)
 project(csg_playground)
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # libigl
@@ -14,14 +19,14 @@ option(LIBIGL_WITH_LIM              "Use LIM"            OFF)
 option(LIBIGL_WITH_MATLAB           "Use Matlab"         OFF)
 option(LIBIGL_WITH_MOSEK            "Use MOSEK"          OFF)
 option(LIBIGL_WITH_NANOGUI          "Use Nanogui menu"   OFF)
-option(LIBIGL_WITH_OPENGL           "Use OpenGL"         ON)
-option(LIBIGL_WITH_OPENGL_GLFW      "Use GLFW"           ON)
 option(LIBIGL_WITH_PNG              "Use PNG"            OFF)
 option(LIBIGL_WITH_PYTHON           "Use Python"         OFF)
 option(LIBIGL_WITH_TETGEN           "Use Tetgen"         OFF)
 option(LIBIGL_WITH_TRIANGLE         "Use Triangle"       OFF)
-option(LIBIGL_WITH_VIEWER           "Use OpenGL viewer"  ON)
 option(LIBIGL_WITH_XML              "Use XML"            OFF)
+option(LIBIGL_WITH_VIEWER           "Use OpenGL viewer"  ON)
+option(LIBIGL_WITH_OPENGL           "Use OpenGL"         ON)
+option(LIBIGL_WITH_OPENGL_GLFW      "Use GLFW"           ON)
 
 find_package(LIBIGL REQUIRED QUIET)
 
@@ -30,10 +35,10 @@ include_directories(${PROJECT_SOURCE_DIR}/third_party/json/src)
 include_directories(${PROJECT_SOURCE_DIR}/include/) 
 
 #PCL
-find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus keypoints)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+#find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus keypoints)
+#include_directories(${PCL_INCLUDE_DIRS})
+#link_directories(${PCL_LIBRARY_DIRS})
+#add_definitions(${PCL_DEFINITIONS})
 
 #OpenMP
 find_package(OpenMP)
@@ -44,19 +49,45 @@ if (OPENMP_FOUND)
 endif()
 
 # Add your project files
-file(GLOB SRCFILES *.cpp)
+#file(GLOB SRCFILES *.cpp)
 
-FILE(GLOB_RECURSE APP_HEADERS "include/*.h")
-message("APP Headers: " ${APP_HEADERS})
+FILE(GLOB_RECURSE CSG_LIB_HEADERS "include/*.h")
+message("Lib Headers: " ${CSG_LIB_HEADERS})
 
-FILE(GLOB_RECURSE APP_SOURCES "src/*.cpp")
-message("APP Sources: " ${APP_SOURCES})
+FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp")
+message("Lib Sources: " ${CSG_LIB_SOURCES})
 
 if(MSVC)
 	add_definitions(-D_USE_MATH_DEFINES)
 endif()
 
 
-add_executable(${PROJECT_NAME}_bin ${APP_HEADERS} ${APP_SOURCES})
+# Otherwise g++ was failing on cygwin 
+if(CYGWIN)
+       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")
+endif()
 
-target_link_libraries(${PROJECT_NAME}_bin ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_SAMPLE_CONSENSUS_LIBRARIES} ${PCL_KEYPOINTS_LIBRARIES} igl::core igl::opengl_glfw igl::cgal)
+
+# Compile the lib
+add_library(csg_playground_lib STATIC ${CSG_LIB_HEADERS} ${CSG_LIB_SOURCES})
+target_link_libraries(csg_playground_lib igl::core igl::cgal)
+
+
+# Program for sampling models
+add_executable(main_sampling "src/main_sampling.cpp")
+target_link_libraries(main_sampling csg_playground_lib igl::core igl::cgal)
+
+
+# Program for csg reconstruction
+add_executable(main_csg "src/main_csg.cpp")
+target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
+
+
+# Program for csg reconstruction with the wscg18 approach
+add_executable(main_wscg18 "src/main_wscg18.cpp")
+target_link_libraries(main_wscg18 csg_playground_lib igl::core igl::cgal)
+# Program for csg reconstruction with gui
+if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
+	add_executable(main "src/main.cpp")
+	target_link_libraries(main csg_playground_lib igl::core igl::cgal igl::core igl::opengl_glfw)
+endif()

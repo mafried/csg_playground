@@ -494,6 +494,7 @@ namespace lmu
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
 
+	std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const std::vector<std::shared_ptr<ImplicitFunction>>& geos);
 	std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node);
 
 }

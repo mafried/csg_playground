@@ -4,10 +4,16 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <string>
+#include <memory>
+#include <algorithm>
 
 #include <igl/readOBJ.h>
 #include <igl/signed_distance.h>
 #include <igl/upsample.h>
+
+#include "../include/constants.h"
+
 
 using namespace lmu;
 
@@ -406,6 +412,104 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 	return res;
 }
 
+
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::string& file) 
+{
+  std::ifstream s(file);
+  
+  std::vector<std::shared_ptr<ImplicitFunction>> res;
+
+  while (!s.eof()) {
+    std::string name;
+    s >> name; 
+    
+    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    std::cout << "Name: " << name << std::endl;
+    
+    if (name.find("cylinder") != std::string::npos) {
+      // transform radius height
+      Eigen::Affine3d t;
+      // row 1
+      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
+      // row 2
+      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
+      // row 3
+      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
+      // row 4
+      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+
+      double radius;
+      s >> radius;
+
+      double height;
+      s >> height;
+
+      res.push_back(std::make_shared<IFCylinder>(t, radius, height, name));
+
+    } else if (name.find("sphere") != std::string::npos) {
+      // transform radius displacement
+      Eigen::Affine3d t;
+      // row 1
+      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
+      // row 2
+      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
+      // row 3
+      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
+      // row 4
+      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+
+      double radius;
+      s >> radius;
+
+      double disp;
+      s >> disp;
+
+      res.push_back(std::make_shared<IFSphere>(t, radius, name, disp));
+
+    } else if (name.find("box") != std::string::npos) {
+      // transform size displacement
+      Eigen::Affine3d t;
+      // row 1
+      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
+      // row 2
+      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
+      // row 3
+      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
+      // row 4
+      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+
+      Eigen::Vector3d size;
+      s >> size[0] >> size[1] >> size[2];
+
+      double disp;
+      s >> disp;
+
+      res.push_back(std::make_shared<IFBox>(t, size, 1, name, disp));
+
+    } else if (name.find("cone") != std::string::npos) {
+      // transform c
+      Eigen::Affine3d t;
+      // row 1
+      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
+      // row 2
+      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
+      // row 3
+      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
+      // row 4
+      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+
+      Eigen::Vector3d c;
+      s >> c[0] >> c[1] >> c[2];
+
+      res.push_back(std::make_shared<IFCone>(t, c, name));
+
+    }
+  }		
+  
+  return res;
+}
+
+
 void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter, double threshold)
 {
 	
@@ -457,4 +561,18 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 			func->points() = m;
 		}
 	}
+}
+
+
+void lmu::writePrimitives(const std::string& filename, 
+			  const std::vector<std::shared_ptr<ImplicitFunction>>& shapes)
+{
+  std::ofstream of(filename.c_str());
+  
+  for (const auto& shape : shapes) {
+    of << shape->name(); 
+    of << " " + shape->serializeTransform(); 
+    of << " " + shape->serializeParameters();
+    of << std::endl;
+  }
 }

@@ -5,8 +5,9 @@
 #include <CGAL/IO/read_xyz_points.h>
 #include <CGAL/Point_with_normal_3.h>
 #include <CGAL/property_map.h>
-#include <CGAL/Shape_detection_3.h>
+//#include <CGAL/Shape_detection_3.h>
 
+/*
 #include <pcl/console/parse.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/io/pcd_io.h>
@@ -25,7 +26,7 @@
 #include <pcl/sample_consensus/sac_model_normal_sphere.h>
 #include <pcl/visualization/pcl_visualizer.h>
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
+/*typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
 typedef Kernel::FT                                           FT;
 typedef std::pair<Kernel::Point_3, Kernel::Vector_3>         Point_with_normal;
 typedef std::vector<Point_with_normal>                       Pwn_vector;
@@ -42,10 +43,11 @@ typedef CGAL::Shape_detection_3::Cylinder<Traits>         Cylinder;
 typedef CGAL::Shape_detection_3::Plane<Traits>            Plane;
 typedef CGAL::Shape_detection_3::Sphere<Traits>           Sphere;
 typedef CGAL::Shape_detection_3::Torus<Traits>            Torus;
+*/
 
 using namespace lmu;
 
-Eigen::MatrixXd getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& shape, const Pwn_vector& pointsWithNormals)
+/*Eigen::MatrixXd getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& shape, const Pwn_vector& pointsWithNormals)
 {
 	Eigen::MatrixXd points;
 	points.resize(shape.indices_of_assigned_points().size(), 6);
@@ -63,12 +65,12 @@ Eigen::MatrixXd getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& sha
 	std::cout << "Total points: " << pointsWithNormals.size() << " Assigned points: " << points.rows() << std::endl;
 
 	return points;
-}
+}*/
 
 std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals)
 {
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
-
+	/*
 	// Add points and normals to the correct structure.
 	Pwn_vector pointsWithNormals;
 	for (int i = 0; i < points.rows(); i++)
@@ -164,13 +166,14 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithCGAL(const Eigen::
 		// Prints the parameters of the detected shape.
 		// This function is available for any type of shape.
 		std::cout << shape->info() << std::endl;
-	}
+	}*/
 
 	return res;
 }
 
-using Point = pcl::PointXYZ;// pcl::PointXYZRGBNormal;
+//using Point = pcl::PointXYZ;// pcl::PointXYZRGBNormal;
 
+/*
 std::vector<std::shared_ptr<ImplicitFunction>> lmu::ransacWithPCL(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals)
 {
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
@@ -265,6 +268,7 @@ break;
 
 	return res;
 }
+*/
 
 void lmu::ransacWithSimMultiplePointOwners(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
 {
@@ -328,6 +332,8 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 
 			Eigen::Vector3d g = curFunc->signedDistanceAndGradient(p).bottomRows(3);
 
+			if (std::abs(n.dot(g)) < 0.9)
+			  continue; 
 			//if (n.dot(g) <= 0.0)
 			//	continue;
 

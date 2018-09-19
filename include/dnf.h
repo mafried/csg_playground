@@ -58,7 +58,9 @@ namespace lmu
 	CSGNode DNFtoCSGNode(const DNF& dnf);
 	CSGNode clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions);
 	
-	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, int numClauseFunctions, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const SampleParams& params);
+	std::tuple<Clause, double, double> scoreClause(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions, 
+		int numClauseFunctions, const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, 
+		const lmu::Graph& conGraph, const SampleParams& params);
 	
 	std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> computeOutlierTestValues(const std::vector<lmu::ImplicitFunctionPtr>& functions, double h);
 
@@ -71,9 +73,13 @@ namespace lmu
 
 	std::string espressoExpression(const DNF& dnf);
 
-	CSGNode computeShapiroWithPartitions(const std::tuple < std::vector<Graph>, std::vector<ImplicitFunctionPtr>>& partition, const SampleParams& params);
+	CSGNode computeShapiroWithPartitions(const std::vector<Graph>& partitions, const SampleParams& params);
 
-	std::tuple < std::vector<Graph>, std::vector<ImplicitFunctionPtr>> partitionByPrimeImplicants(const Graph& graph, const SampleParams& params);
+	std::vector<Graph> getUnionPartitionsByPrimeImplicants(const Graph& graph, const SampleParams& params);
+
+	std::vector<Graph> getUnionPartitionsByPrimeImplicantsWithPruning(const Graph& graph, const SampleParams& params);
+
+	std::vector<Graph> getUnionPartitionsByArticulationPoints(const Graph& graph);
 
 }
 

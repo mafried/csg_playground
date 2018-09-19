@@ -1,9 +1,14 @@
 #include "../include/csgnode_evo.h"
+#include "../include/csgnode_helper.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/graph/adjacency_list.hpp>
+
+
+#include "../include/constants.h"
+
 
 using namespace lmu;
 
@@ -318,6 +323,9 @@ long long binom(int n, int k)
 
 lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, bool inParallel, const lmu::Graph& connectionGraph, const std::string& statsFile)
 {
+	if (shapes.size() == 1)
+		return lmu::geometry(shapes[0]);
+
 	lmu::CSGNodeGA ga;
 	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.3, inParallel);
 
@@ -348,6 +356,37 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	res.statistics.save(statsFile, &res.population[0].creature);
 	return res.population[0].creature;
 }
+
+
+// Mimic computeShapiroWithPartitions in dnf.cpp
+// Apply a GA to each group of intersecting shapes
+lmu::CSGNode 
+lmu::computeGAWithPartitions
+(const std::vector<Graph>& partitions,
+ bool inParallel, const std::string& statsFile)
+{
+  lmu::CSGNode res = lmu::op<Union>();
+  
+  //for (const auto& pi: get<1>(partition)) {
+  //  res.addChild(lmu::geometry(pi));
+  //}
+
+  for (const auto& p: partitions) 
+  {
+    std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(p);
+    
+    // This is a first try:
+    // Possibly we can change the parameters of the GA (smallest population), 
+    // also we do not need union operators at all
+
+    lmu::CSGNode ga = lmu::createCSGNodeWithGA(shapes, inParallel, p, statsFile);
+    
+	res.addChild(ga);
+  }
+
+  return res;
+}
+
 
 std::tuple<long long, double> computeNodesForClique(const Clique& clique, bool gAInParallel, std::vector<GeometryCliqueWithCSGNode>& res)
 {
