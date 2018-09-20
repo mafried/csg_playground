@@ -24,9 +24,9 @@ option(LIBIGL_WITH_PYTHON           "Use Python"         OFF)
 option(LIBIGL_WITH_TETGEN           "Use Tetgen"         OFF)
 option(LIBIGL_WITH_TRIANGLE         "Use Triangle"       OFF)
 option(LIBIGL_WITH_XML              "Use XML"            OFF)
-option(LIBIGL_WITH_VIEWER           "Use OpenGL viewer"  ON)
-option(LIBIGL_WITH_OPENGL           "Use OpenGL"         ON)
-option(LIBIGL_WITH_OPENGL_GLFW      "Use GLFW"           ON)
+option(LIBIGL_WITH_VIEWER           "Use OpenGL viewer"  OFF)
+option(LIBIGL_WITH_OPENGL           "Use OpenGL"         OFF)
+option(LIBIGL_WITH_OPENGL_GLFW      "Use GLFW"           OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
 
@@ -86,6 +86,8 @@ target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
 # Program for csg reconstruction with the wscg18 approach
 add_executable(main_wscg18 "src/main_wscg18.cpp")
 target_link_libraries(main_wscg18 csg_playground_lib igl::core igl::cgal)
+
+
 # Program for csg reconstruction with gui
 if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
 	add_executable(main "src/main.cpp")
