@@ -606,7 +606,7 @@ lmu::CSGNode lmu::computeShapiroWithPartitions(const std::vector<Graph>& partiti
 		std::cout << "----" << std::endl;
 
 		auto dnf = lmu::computeShapiro(lmu::getImplicitFunctions(p), true, p, params);
-		for (auto& const clause : dnf.clauses)
+		for (const auto& clause : dnf.clauses)
 		{
 			res.addChild(lmu::clauseToCSGNode(clause, dnf.functions));
 		}

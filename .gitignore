@@ -32,3 +32,8 @@
 *.swp
 
 build/*
+
+# For emacs
+*~
+\#*\#
+.\#*
