@@ -28,25 +28,38 @@
 using namespace lmu;
 
 
+/*
 enum class ApproachType
 {
   None = 0,
-    BaselineGA, 
-    Partition
-    };
+  BaselineGA, 
+  Partition
+};
+*/
 
 
-ApproachType approachType = ApproachType::BaselineGA;
-ParallelismOptions paraOptions = ParallelismOptions::GAParallelism;
+enum class PartitionType {
+  none=0,
+  pi, //prime implicant
+  piWithPruning,
+  ap // articulation point
+};
+
+
+enum class CSGRecoveryType {
+  ga=0, 
+  shapiro
+};
 
 
 static void usage(const char* pname) {
   std::cout << "Usage:" << std::endl;
-  std::cout << pname << " points.xyz shapes.prim samplingStepSize maxDistance method outBasename" 
+  std::cout << pname << " points.xyz shapes.prim samplingStepSize maxDistance"
+	    << " partitionType recoveryType outBasename" 
 	    << std::endl;
   std::cout << std::endl;
   std::cout << "Example: " << pname 
-	    << " model.xyz model.prim 0.03 0.01 GA|SHAPIRO|SHAPIRO_PARTITION model" << std::endl;
+	    << " model.xyz model.prim 0.03 0.01 none|pi|piWithPruning|ap ga|shapiro model" << std::endl;
 }
 
 
@@ -55,26 +68,23 @@ int main(int argc, char *argv[])
   using namespace Eigen;
   using namespace std;
 
-  if (argc != 7) {
+  if (argc != 8) {
     usage(argv[0]);
     return -1;
   }
-
-
-  std::string mode = argv[5];
 
 
   Eigen::AngleAxisd rot90x(M_PI / 2.0, Vector3d(0.0, 0.0, 1.0));
 
   CSGNode node(nullptr);
 
-  double samplingStepSize = std::stod(argv[3]); //0.03; 
-  double maxDistance = std::stod(argv[4]); //0.01;
+  double samplingStepSize = std::stod(argv[3]); // 0.03; 
+  double maxDistance = std::stod(argv[4]); // 0.01;
 
-  std::string pcName = argv[1]; //"model.xyz";
+  std::string pcName = argv[1]; // "model.xyz";
   auto pointCloud = lmu::readPointCloudXYZ(pcName, 1.0);
 
-  std::string primName = argv[2]; //"model.prim";
+  std::string primName = argv[2]; // "model.prim";
   std::vector<ImplicitFunctionPtr> shapes; 
   shapes = lmu::fromFilePRIM(primName);
   auto dims = lmu::computeDimensions(shapes);
@@ -98,30 +108,58 @@ int main(int argc, char *argv[])
 
   SampleParams p{ 0.001 };
 
-  auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, p);
 
-  if (mode == "SHAPIRO") {
-    auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), p);
-    res = lmu::DNFtoCSGNode(dnf);
-    //res = lmu::computeCSGNode(shapes, graph, p);
-  } else if (mode == "SHAPIRO_PARTITION")
-    res = lmu::computeShapiroWithPartitions(partitions, p);
-  else if (mode == "GA") {
-    // Some comments:
-    // * currently I am not using any parallelism options 
-    // * it is not tested
-    // * connectionGraph is set to Graph() (same as for the GA used for 
-    // WSCG18 as far as I understand), but then it means it can not be used 
-    // for the max-size computation for the trees.
-    res = lmu::computeGAWithPartitions(partitions);
-  } else {
-    std::cerr << "Invalid mode: " << mode << std::endl;
-    std::cerr << "Select one of: SHAPIRO, SHAPIRO_PARTITION, GA" << std::endl;
-    return -1;
-  }
+  std::string partitionType = argv[5];
+  std::string recoveryType = argv[6];
+
+  // Some comments:
+  // * currently I am not using any parallelism options 
+  // * for the GA: connectionGraph is set to Graph() (same as for the GA used for 
+  // WSCG18 as far as I understand), but then it means it can not be used 
+  // for the max-size computation for the trees.
+  // * should we call optimizeCSGNodeStructure for each recoveryType? 
   
+  if (partitionType == "none") {
+    if (recoveryType == "shapiro") {
+      auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), p);
+      res = lmu::DNFtoCSGNode(dnf);
+    } else if (recoveryType == "ga") {
+      res = createCSGNodeWithGA(shapes);
+      optimizeCSGNodeStructure(res);
+    } else {
+      std::cerr << "Invalid recovery type" << std::endl;
+      usage(argv[0]);
+      return -1;
+    }
+  } else {
+    // First compute the partition based on the partition type
+    std::vector<lmu::Graph> partitions;
+    if (partitionType == "pi") {
+      partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, p);
+    } else if (partitionType == "piWithPruning") {
+      partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, p);
+    } else if (partitionType == "ap") {
+      partitions = lmu::getUnionPartitionsByArticulationPoints(graph);
+    } else {
+      std::cerr << "Invalid partition type" << std::endl;
+      usage(argv[0]);
+      return -1;
+    }
 
-  std::string outBasename = argv[6];
+    // Then call Shapiro or GA with partitions
+    if (recoveryType == "shapiro") {
+      res = lmu::computeShapiroWithPartitions(partitions, p);
+    } else if (recoveryType == "ga") {
+      res = lmu::computeGAWithPartitions(partitions);
+    } else {
+      std::cerr << "Invalid recovery type" << std::endl;
+      usage(argv[0]);
+      return -1;
+    }
+  }
+
+
+  std::string outBasename = argv[7];
   lmu::writeNode(res, outBasename + "_tree.dot");
 
   auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
