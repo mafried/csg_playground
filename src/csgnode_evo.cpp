@@ -121,6 +121,9 @@ CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunctio
 	_rndEngine.seed(_rndDevice());
 }
 
+
+// For a given probability, create a new creature 
+// Otherwise, select a node and create a new sub-tree at the node
 CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 {
 	static std::bernoulli_distribution d{};
@@ -683,6 +686,7 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 
 	return *candidateList.front();
 }
+<<<<<<< HEAD
 
 
 double computeGeometryScore(const CSGNode& node, double distAngleDeviationRatio, double maxDistance, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
@@ -739,3 +743,5 @@ std::string lmu::CSGNodeRankerNew::info() const
 {
 	return std::string();
 }*/
+=======
+>>>>>>> use a schedule for the crossover rate and the mutation rate

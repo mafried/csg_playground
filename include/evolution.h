@@ -363,6 +363,9 @@ namespace lmu
 			int iterationCount = 0;
 			_stopRequested.store(false);
 
+			double crossoverRate = params.crossoverRate;
+			double mutationRate = params.mutationRate;
+
 			while (!stopCriterion.shouldStop(population, iterationCount) && !_stopRequested.load())			
 			{
 				std::cout << "Start iteration " << std::endl;
@@ -386,10 +389,10 @@ namespace lmu
 					auto parent1 = parentSelector.selectFrom(population);
 					auto parent2 = parentSelector.selectFrom(population);
 									
-					auto offspring = crossover(parent1, parent2, params.crossoverRate, creator, stats);					
+					auto offspring = crossover(parent1, parent2, crossoverRate, creator, stats);					
 				
-					newPopulation.push_back(mutate(offspring[0], params.mutationRate, creator, stats));
-					newPopulation.push_back(mutate(offspring[1], params.mutationRate, creator, stats));
+					newPopulation.push_back(mutate(offspring[0], mutationRate, creator, stats));
+					newPopulation.push_back(mutate(offspring[1], mutationRate, creator, stats));
 				}
 				stats.scmDurations.push_back(stats.iterationDuration.tick());
 				
@@ -397,6 +400,11 @@ namespace lmu
 				stats.update();
 				stats.print();
 				iterationCount++;
+
+				// Update the cross-over rate and mutation rate based on 
+				// some annealing schedule
+				crossoverRate = params.crossoverRate * expSchedule(iterationCount);
+				mutationRate = params.mutationRate * expSchedule(iterationCount);
 			}
 
 			stats.totalDuration.tick();
@@ -405,6 +413,19 @@ namespace lmu
 		}
 
 	private:
+	  // schedules
+	  static double expSchedule(int t, double lam=0.005, int limit=100000) {
+	    if (t >= limit) return 0.0;
+
+	    return std::exp(-lam*t);
+	  }
+
+	  static double logSchedule(int t, double lam=1.0, int limit=100000) {
+	    if (t >= limit) return 0.0;
+	    
+	    return std::log(2.0)/std::log(lam*t + 1);
+	  }
+
 
 		RankedCreature mutate(const RankedCreature& creature, double mutationRate, const CreatureCreator& creator, Statistics& stats) const
 		{
