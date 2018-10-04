@@ -121,6 +121,9 @@ CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunctio
 	_rndEngine.seed(_rndDevice());
 }
 
+
+// For a given probability, create a new creature 
+// Otherwise, select a node and create a new sub-tree at the node
 CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 {
 	static std::bernoulli_distribution d{};
