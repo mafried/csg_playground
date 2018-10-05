@@ -17,6 +17,7 @@
 #include "tests.h"
 
 #include "csgnode_evo.h"
+#include "csgnode_evo_v2.h"
 #include "csgnode_helper.h"
 
 #include "evolution.h"
@@ -387,7 +388,6 @@ int main(int argc, char *argv[])
 //	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
 //});
 
-//geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6");
 
 node = op<Union>(
 {
@@ -436,20 +436,6 @@ node = op<Union>(
 	
 });
 
-
-//node = geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2");
-
-/*node =
-op<Difference>(
-{
-	op<Union>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.0, 0), 0.25, "Sphere_1"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.3, 0), 0.25, "Sphere_2"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.6, 0), 0.25, "Sphere_3"),
-	}),
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.5, 0), 0.25, "Sphere_4")
-});*/
 	double samplingStepSize = 0.03; 
 	double maxDistance = 0.01;
 	double noiseSigma = 0.03;
@@ -480,21 +466,21 @@ op<Difference>(
 
 
 
-	lmu::movePointsToSurface(shapes, false, 0.0001);
+	lmu::movePointsToSurface(shapes, true, 0.00001);
 
 	//auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.001 });
 
 	//auto res = lmu::computeCSGNode(shapes, graph, { 0.001 });//lmu::DNFtoCSGNode(dnf);
 
-	CSGNode res = op<Union>();
+	//CSGNode res = op<Union>();
 
-	SampleParams p{ 0.001 };
+	//SampleParams p{ 0.001 };
 
 	//auto partitions = lmu::partitionByPrimeImplicants(graph, p, true);
 
 	//res = lmu::computeShapiroWithPartitions(partitions, p);
 		
-	auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, { 0.001 });
+	/*auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, { 0.001 });
 	int i = 0;
 	for (const auto& p : partitions)
 	{
@@ -502,7 +488,17 @@ op<Difference>(
 		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
 	}
 
-	res = computeGAWithPartitions(partitions);//lmu::computeShapiroWithPartitions(partitions, p);
+	double lambda = lmu::lambdaBasedOnPoints(shapes);
+	std::cout << "lambda: " << lambda << std::endl;
+	lmu::CSGNodeRanker r(lambda, shapes, graph);
+	std::cout << "QUALITY: " << r.rank(node) << std::endl;
+	*/
+	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
+	std::cout << "RANK: " << r.rank(node) << std::endl;
+	auto res = lmu::createCSGNodeWithGAV2(graph);
+	//computeGAWithPartitions({ graph });//lmu::computeShapiroWithPartitions(partitions, p);
+
+	
 
 	lmu::writeNode(res, "tree.dot");
 

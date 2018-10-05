@@ -21,6 +21,8 @@
 
 using namespace lmu;
 
+CSGNode const CSGNode::invalidNode = CSGNode(nullptr);
+
 CSGNodePtr UnionOperation::clone() const
 {
 	return std::make_shared<UnionOperation>(*this);

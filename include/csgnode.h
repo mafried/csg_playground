@@ -10,6 +10,7 @@
 #include "mesh.h"
 
 #include <Eigen/Core>
+#include <boost/any.hpp>
 
 namespace lmu
 {
@@ -40,7 +41,11 @@ namespace lmu
 
 	class ICSGNode
 	{
-	public: 
+	public: 		
+		using Attributes = std::unordered_map<std::string, boost::any>;
+	
+		virtual Attributes& attributesRef() = 0;
+		virtual Attributes attributes() const = 0;
 
 		virtual CSGNodePtr clone() const = 0;
 
@@ -85,18 +90,27 @@ namespace lmu
 			return _type;
 		}
 
+		virtual Attributes& attributesRef() override
+		{
+			return _attr;
+		}
+
+		virtual Attributes attributes() const override
+		{
+			return _attr;
+		}
+
 	protected: 
 		std::string _name;
 		CSGNodeType _type;
-
+		ICSGNode::Attributes _attr;
 		//CSGNodeBase(CSGNodeBase const& other) :
 		//	_name(other._name),
 		//	_type(other._type)
 		//{
 		//}
 		//void operator=(CSGNodeBase const &t) = delete;
-		//CSGNodeBase(CSGNodeBase &&) = delete;
-
+		//CSGNodeBase(CSGNodeBase &&) = delete;		
 	};
 
 	class CSGNodeOperation : public CSGNodeBase
@@ -228,6 +242,24 @@ namespace lmu
 	{
 	public:
 
+		template<typename T> 
+		T attribute(const std::string& name) const 
+		{
+			auto it = _node->attributesRef().find(name);
+			if (it == _node->attributesRef().end())
+				return T();
+			else
+			{
+				return boost::any_cast<T>(it->second);
+			}
+		}
+
+		template<typename T>
+		void setAttribute(const std::string& name, const T& value)
+		{
+			_node->attributesRef()[name] = value;
+		}
+
 		explicit CSGNode(CSGNodePtr node) :
 			_node(node)
 		{
@@ -249,7 +281,7 @@ namespace lmu
 
 		inline virtual CSGNodePtr clone() const override final
 		{
-			return _node->clone();
+			return _node ? _node->clone() : nullptr;
 		}
 
 		inline virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override final
@@ -312,6 +344,16 @@ namespace lmu
 			return _node->childsRef();
 		}
 
+		virtual Attributes& attributesRef() override
+		{
+			return _node->attributesRef();
+		}
+
+		virtual Attributes attributes() const override
+		{
+			return _node->attributes();
+		}
+
 		CSGNodePtr nodePtr() const
 		{
 			return _node;
@@ -337,6 +379,13 @@ namespace lmu
 
 			return ss.str();
 		}
+
+		bool isValid() const
+		{
+			return _node != nullptr;
+		}
+
+		static const CSGNode invalidNode;
 
 	private: 
 		CSGNodePtr _node;

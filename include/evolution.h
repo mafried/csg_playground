@@ -189,12 +189,14 @@ namespace lmu
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel) :
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, 
+				const std::function<void(const std::vector<RankedCreature>&)>& popInsp = [](const std::vector<RankedCreature>&) {return; }) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
 				crossoverRate(crossoverRate),
-				rankingInParallel(rankingInParallel)
+				rankingInParallel(rankingInParallel),
+				populationInspector(popInsp)
 			{
 			}
 
@@ -214,6 +216,9 @@ namespace lmu
 			double mutationRate;
 			double crossoverRate;
 			bool rankingInParallel;
+
+			std::function<void(const std::vector<RankedCreature>&)> populationInspector;
+
 		};
 
 		struct Statistics
@@ -366,6 +371,8 @@ namespace lmu
 				rankPopulation(population, ranker, params.rankingInParallel);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 
+				params.populationInspector(population);
+
 				sortPopulation(population);
 				stats.sortingDurations.push_back(stats.iterationDuration.tick());
 				
@@ -495,9 +502,6 @@ namespace lmu
 			//normalize rank
 			//for (auto& c : population)			
 			//	c.rank = (c.rank - minRank) / (maxRank - minRank);
-			
-			
-
 		}
 
 		void sortPopulation(std::vector<RankedCreature>& population) const
