@@ -13,10 +13,57 @@
 
 namespace lmu
 {
-	using IFBudget = std::unordered_map<lmu::ImplicitFunctionPtr, int>;
+	struct IFBudgetPerIF;
+	std::ostream& operator<<(std::ostream& os, const IFBudgetPerIF& b);
 
-	std::ostream& operator<<(std::ostream& os, const IFBudget& b);
-		
+	struct IFBudgetPerIF
+	{
+		IFBudgetPerIF(const lmu::CSGNode& node, const IFBudgetPerIF& budget);
+		IFBudgetPerIF(const lmu::Graph& g);
+
+		int numFuncs() const;
+		ImplicitFunctionPtr useIF(const lmu::ImplicitFunctionPtr& func);
+		ImplicitFunctionPtr getRandomIF();
+		ImplicitFunctionPtr useFirstIF();
+		ImplicitFunctionPtr exchangeIF(const lmu::ImplicitFunctionPtr& func);
+		void freeIF(const lmu::ImplicitFunctionPtr& func);
+
+		friend std::ostream& operator<<(std::ostream& os, const IFBudgetPerIF& b);
+	
+	private:
+		void getRestBudget(const lmu::CSGNode& node, IFBudgetPerIF& restBudget);
+		mutable std::default_random_engine _rndEngine;
+
+		std::unordered_map<lmu::ImplicitFunctionPtr, int> _budget;
+	};
+
+	struct IFBudgetComplete;
+	std::ostream& operator<<(std::ostream& os, const IFBudgetComplete& b);
+
+	struct IFBudgetComplete
+	{
+		IFBudgetComplete(const lmu::CSGNode& node, const IFBudgetComplete& budget);
+		IFBudgetComplete(const lmu::Graph& g);
+
+		int numFuncs() const;
+		ImplicitFunctionPtr useIF(const lmu::ImplicitFunctionPtr& func);
+		ImplicitFunctionPtr getRandomIF();
+		ImplicitFunctionPtr useFirstIF();
+		ImplicitFunctionPtr exchangeIF(const lmu::ImplicitFunctionPtr& func);
+		void freeIF(const lmu::ImplicitFunctionPtr& func);
+
+		friend std::ostream& operator<<(std::ostream& os, const IFBudgetComplete& b);
+
+	private:
+		mutable std::default_random_engine _rndEngine;
+
+		std::vector<ImplicitFunctionPtr> _funcs;
+		int _budget;
+	};
+
+	using IFBudget = IFBudgetComplete;//IFBudgetPerIF;
+
+
 	struct CSGNodeCreatorV2
 	{
 		CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, const lmu::Graph& connectionGraph);
@@ -24,6 +71,7 @@ namespace lmu
 		CSGNode mutate(const CSGNode& tree) const;
 		std::vector<CSGNode> crossover(const CSGNode& tree1, const CSGNode& tree2) const;
 		CSGNode create() const;
+		void replaceIFs(IFBudget& budget, CSGNode& node) const;
 		
 		std::string info() const;
 

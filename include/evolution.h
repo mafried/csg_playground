@@ -403,8 +403,8 @@ namespace lmu
 
 				// Update the cross-over rate and mutation rate based on 
 				// some annealing schedule
-				crossoverRate = params.crossoverRate * expSchedule(iterationCount);
-				mutationRate = params.mutationRate * expSchedule(iterationCount);
+				crossoverRate = params.crossoverRate * identitySchedule(iterationCount);
+				mutationRate = params.mutationRate * identitySchedule(iterationCount);
 			}
 
 			stats.totalDuration.tick();
@@ -414,16 +414,23 @@ namespace lmu
 
 	private:
 	  // schedules
-	  static double expSchedule(int t, double lam=0.005, int limit=100000) {
+	  static double expSchedule(int t, double lam=0.005, int limit=100000)
+	  {
 	    if (t >= limit) return 0.0;
 
 	    return std::exp(-lam*t);
 	  }
 
-	  static double logSchedule(int t, double lam=1.0, int limit=100000) {
+	  static double logSchedule(int t, double lam=1.0, int limit=100000)
+	  {
 	    if (t >= limit) return 0.0;
 	    
 	    return std::log(2.0)/std::log(lam*t + 1);
+	  }
+
+	  static double identitySchedule(int t, double lam = 1.0, int limit = 100000)
+	  {
+		  return 1.0;
 	  }
 
 

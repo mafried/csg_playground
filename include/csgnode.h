@@ -31,6 +31,7 @@ namespace lmu
 		Union,
 		Difference,
 		Complement,
+		Identity,
 		Invalid
 	};
 
@@ -66,6 +67,7 @@ namespace lmu
 		virtual std::tuple<int,int> numAllowedChilds() const = 0;
 
 		virtual ImplicitFunctionPtr function() const = 0;
+		virtual void setFunction(const ImplicitFunctionPtr& f) = 0;
 
 		virtual Mesh mesh() const = 0;
 	};
@@ -127,6 +129,10 @@ namespace lmu
 			return nullptr;
 		}
 
+		virtual void setFunction(const ImplicitFunctionPtr& f) override
+		{
+		}
+
 		virtual const std::vector<CSGNode>& childsCRef() const override
 		{
 			return _childs;
@@ -168,6 +174,12 @@ namespace lmu
 		virtual ImplicitFunctionPtr function() const override
 		{
 			return _function;
+		}
+
+		virtual void setFunction(const ImplicitFunctionPtr& f) override
+		{
+			_function = f;
+			_name = f->name();
 		}
 
 		virtual CSGNodePtr clone() const override 
@@ -237,6 +249,9 @@ namespace lmu
 	CSGNode* nodePtrAt(CSGNode& node, int idx);
 	int depthAt(const CSGNode& node, int idx);
 	std::vector<CSGNodePtr> allGeometryNodePtrs(const CSGNode& node);
+	std::vector<ImplicitFunctionPtr> allDistinctFunctions(const CSGNode& node);
+
+	void visit(const CSGNode& node, const std::function<void(const CSGNode& node)>& f);
 	
 	class CSGNode : public ICSGNode 
 	{
@@ -327,6 +342,11 @@ namespace lmu
 		inline virtual ImplicitFunctionPtr function() const override final
 		{
 			return _node->function();
+		}
+
+		inline virtual void setFunction(const ImplicitFunctionPtr& f) override final
+		{
+			_node->setFunction(f);
 		}
 
 		inline virtual Mesh mesh() const override final
@@ -454,14 +474,29 @@ namespace lmu
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
 	};
+
+	class IdentityOperation : public CSGNodeOperation
+	{
+	public:
+		IdentityOperation(const std::string& name, const std::vector<CSGNode>& childs = {}) :
+			CSGNodeOperation(name, childs)
+		{
+		}
+
+		virtual CSGNodePtr clone() const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
+		virtual CSGNodeOperationType operationType() const override;
+		virtual std::tuple<int, int> numAllowedChilds() const override;
+		virtual Mesh mesh() const override;
+	};
 	
 	CSGNode createOperation(CSGNodeOperationType type, const std::string& name = std::string(), const std::vector<CSGNode>& childs = {});
 
 	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
 
 	double computeRawDistanceScore(const CSGNode& node, const Eigen::MatrixXd& points);
-
-
+	
 	void writeNode(const CSGNode& node, const std::string& file);
 
 	enum class NodePartType

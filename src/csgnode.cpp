@@ -247,6 +247,31 @@ Mesh lmu::ComplementOperation::mesh() const
 	return Mesh();
 }
 
+CSGNodePtr IdentityOperation::clone() const
+{
+	return std::make_shared<IdentityOperation>(*this);
+}
+Eigen::Vector4d IdentityOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
+{
+	return _childs[0].signedDistanceAndGradient(p, h);
+}
+double IdentityOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	return _childs[0].signedDistance(p);
+}
+CSGNodeOperationType IdentityOperation::operationType() const
+{
+	return CSGNodeOperationType::Identity;
+}
+std::tuple<int, int> IdentityOperation::numAllowedChilds() const
+{
+	return std::make_tuple(1, 1);
+}
+Mesh lmu::IdentityOperation::mesh() const
+{
+	return Mesh();
+}
+
 /*
 CSGNodePtr DifferenceRLOperation::clone() const
 {
@@ -309,6 +334,8 @@ std::string lmu::operationTypeToString(CSGNodeOperationType type)
 		return "Unknown";
 	case CSGNodeOperationType::Complement:
 		return "Complement";
+	case CSGNodeOperationType::Identity:
+		return "Identity";
 	case CSGNodeOperationType::Invalid:
 		return "Invalid";
 	default:
@@ -341,6 +368,8 @@ CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name
 		return CSGNode(std::make_shared<DifferenceOperation>(name, childs));
 	case CSGNodeOperationType::Complement:
 		return CSGNode(std::make_shared<ComplementOperation>(name, childs));
+	case CSGNodeOperationType::Identity:
+		return CSGNode(std::make_shared<IdentityOperation>(name, childs));
 	default:
 		throw std::runtime_error("Operation type is not supported");
 	}
@@ -374,6 +403,30 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 	allGeometryNodePtrsRec(node, res);
 
 	return res;
+}
+
+std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode & node)
+{
+	std::unordered_set<ImplicitFunctionPtr> set;
+	std::vector<ImplicitFunctionPtr> vec;
+	
+	auto allGeomPtrs = allGeometryNodePtrs(node);
+	std::transform(allGeomPtrs.begin(), allGeomPtrs.end(), std::back_inserter(vec), [](const auto& p) { return p->function(); });
+
+	set.insert(vec.begin(), vec.end()); 
+	
+	vec.clear();
+
+	std::copy(set.begin(), set.end(), std::back_inserter(vec));
+
+	return vec;
+}
+
+void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node)>& f)
+{
+	f(node);
+	for (const auto& child : node.childsCRef())	
+		visit(child, f);	
 }
 
 
@@ -595,7 +648,7 @@ void lmu::writeNode(const CSGNode& node, const std::string & file)
 void serializeNodeRec(CSGNode& node, SerializedCSGNode& res)
 {
 	if (node.childsCRef().size() == 2)
-	{		
+	{
 		res.push_back(NodePart(NodePartType::LeftBracket, nullptr));
 		serializeNodeRec(node.childsRef()[0], res);
 		res.push_back(NodePart(NodePartType::RightBracket, nullptr));
@@ -1279,7 +1332,7 @@ std::ostream& lmu::operator<<(std::ostream& os, const NodePart& np)
 			os << operationTypeToString(np.node->operationType());
 			break;
 		case CSGNodeType::Geometry:
-			os << np.node->function()->name();
+			os << (np.node->function() ? np.node->function()->name() : "EMPTY FUNC");
 			break;
 		}
 		break;

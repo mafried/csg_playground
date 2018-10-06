@@ -504,14 +504,18 @@ node = op<Union>(
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
-	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, noiseSigma);
+	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, 0);
+	viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 	
 	//std::cout << lmu::espressoExpression(dnf) << std::endl;
 
 	
-
+	//for (const auto& func : shapes)
+	//{
+	//	viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
+	//}
 
 	
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
@@ -538,8 +542,6 @@ node = op<Union>(
 	//std::cout << "Considered Clause " << g_clause << std::endl;
 	//viewer.data().set_points(g_testPoints.leftCols(3), g_testPoints.rightCols(3));
 	
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
 	//viewer.data().set_mesh(node.function
 
 	//for (const auto& shape : allGeometryNodePtrs(node))

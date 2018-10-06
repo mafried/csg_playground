@@ -686,8 +686,6 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 
 	return *candidateList.front();
 }
-<<<<<<< HEAD
-
 
 double computeGeometryScore(const CSGNode& node, double distAngleDeviationRatio, double maxDistance, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
 {
@@ -743,5 +741,3 @@ std::string lmu::CSGNodeRankerNew::info() const
 {
 	return std::string();
 }*/
-=======
->>>>>>> use a schedule for the crossover rate and the mutation rate
