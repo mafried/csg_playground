@@ -325,17 +325,17 @@ std::string lmu::CSGNodeCreator::info() const
 
 double lmu::lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes)
 {
-	int numPoints = 0;
-	for (const auto& shape : shapes)
-		numPoints += shape->points().rows();
+int numPoints = 0;
+for (const auto& shape : shapes)
+numPoints += shape->points().rows();
 
-	return std::log(numPoints);
+return std::log(numPoints);
 }
 
 long long binom(int n, int k)
 {
 	long long ans = 1;
-	k = k>n - k ? n - k : k;
+	k = k > n - k ? n - k : k;
 	int j = 1;
 	for (; j <= k; j++, n--)
 	{
@@ -362,7 +362,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		return lmu::geometry(shapes[0]);
 
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters p(150, 2, 0.7, 0.3, inParallel, 
+	lmu::CSGNodeGA::Parameters p(150, 2, 0.7, 0.3, inParallel,
 		[](const auto& p)
 	{
 		/*double rate = 0.0;
@@ -379,7 +379,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
 	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(500, 0.01, 500);
 
-	int maxDepth =(int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph.structure) > 0 ? boost::num_edges(connectionGraph.structure) : binom(shapes.size(),2)) * M_PI));
+	int maxDepth = (int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph.structure) > 0 ? boost::num_edges(connectionGraph.structure) : binom(shapes.size(), 2)) * M_PI));
 	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
 
 	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, maxDepth, connectionGraph);
@@ -402,34 +402,83 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	return res.population[0].creature;
 }
 
+CSGNode computeForTwoClique(const std::vector<ImplicitFunctionPtr>& functions)
+{
+	lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(functions), functions);
+
+	std::vector<CSGNode> candidates;
+
+	CSGNode un(std::make_shared<UnionOperation>("un"));
+	un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[0])));
+	un.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[1])));
+	candidates.push_back(un);
+
+	CSGNode inter(std::make_shared<IntersectionOperation>("inter"));
+	inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[0])));
+	inter.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[1])));
+	candidates.push_back(inter);
+
+	CSGNode lr(std::make_shared<DifferenceOperation>("lr"));
+	lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[0])));
+	lr.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[1])));
+	candidates.push_back(lr);
+
+	CSGNode rl(std::make_shared<DifferenceOperation>("rl"));
+	rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[1])));
+	rl.addChild(CSGNode(std::make_shared<CSGNodeGeometry>(functions[0])));
+	candidates.push_back(rl);
+
+	double maxScore = -std::numeric_limits<double>::max();
+	const CSGNode* bestCandidate = nullptr;
+	for (const auto& candidate : candidates)
+	{
+		double curScore = ranker.rank(candidate);
+
+		if (maxScore < curScore)
+		{
+			maxScore = curScore;
+			bestCandidate = &candidate;
+		}
+	}
+
+	return *bestCandidate;
+}
 
 // Mimic computeShapiroWithPartitions in dnf.cpp
 // Apply a GA to each group of intersecting shapes
-lmu::CSGNode 
+lmu::CSGNode
 lmu::computeGAWithPartitions
 (const std::vector<Graph>& partitions,
- bool inParallel, const std::string& statsFile)
+	bool inParallel, const std::string& statsFile)
 {
-  lmu::CSGNode res = lmu::op<Union>();
-  
-  //for (const auto& pi: get<1>(partition)) {
-  //  res.addChild(lmu::geometry(pi));
-  //}
+	lmu::CSGNode res = lmu::op<Union>();
 
-  for (const auto& p: partitions) 
-  {
-    std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(p);
+	//for (const auto& pi: get<1>(partition)) {
+	//  res.addChild(lmu::geometry(pi));
+	//}
+
+	for (const auto& p : partitions)
+	{
+		std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(p);
+
+		lmu::CSGNode partRes(nullptr);
+		if (shapes.size() == 1)
+		{
+			partRes = geometry(shapes.front());
+		}
+		else if (shapes.size() == 2)
+		{
+			partRes = computeForTwoClique(shapes);
+		}
+		else
+		{
+			partRes = lmu::createCSGNodeWithGA(shapes, inParallel, p, statsFile);
+		}
     
-    // This is a first try:
-    // Possibly we can change the parameters of the GA (smallest population), 
-    // also we do not need union operators at all
+		if (partitions.size() == 1)
+			return partRes;
 
-    lmu::CSGNode ga = lmu::createCSGNodeWithGA(shapes, inParallel, p, statsFile);
-    
-	if (partitions.size() == 1)
-		return ga;
-
-	res.addChild(ga);
+		res.addChild(partRes);
   }
 
   return res;

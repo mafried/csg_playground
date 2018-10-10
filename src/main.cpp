@@ -480,7 +480,7 @@ node = op<Union>(
 
 	//res = lmu::computeShapiroWithPartitions(partitions, p);
 		
-	/*auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, { 0.001 });
+	auto partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, { 0.001 });
 	int i = 0;
 	for (const auto& p : partitions)
 	{
@@ -488,24 +488,35 @@ node = op<Union>(
 		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
 	}
 
-	double lambda = lmu::lambdaBasedOnPoints(shapes);
+	/*double lambda = lmu::lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 	lmu::CSGNodeRanker r(lambda, shapes, graph);
 	std::cout << "QUALITY: " << r.rank(node) << std::endl;
 	*/
 	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
 	std::cout << "RANK: " << r.rank(node) << std::endl;
-	auto res = lmu::createCSGNodeWithGAV2(graph);
-	//computeGAWithPartitions({ graph });//lmu::computeShapiroWithPartitions(partitions, p);
+	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
+	//auto res = computeGAWithPartitionsV2(partitions, false, "stats.dat")
+	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });
+	auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
 
-	
+	//auto res = DNFtoCSGNode(lmu::computeShapiro(lmu::getImplicitFunctions(graph), true, graph, { 0.001 }));
+	//std::cout << "NODESIZE: " << numNodes(res) << std::endl;
+
+	/*auto cliques = lmu::getCliques(graph);
+	auto cliquesAndNodes = computeNodesForCliques(cliques, paraOptions);
+
+	optimizeCSGNodeClique(cliquesAndNodes, 100.0);
+
+	auto res = mergeCSGNodeCliqueSimple(cliquesAndNodes);
+	*/
 
 	lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
 	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, 0);
-	viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 	

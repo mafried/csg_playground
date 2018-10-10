@@ -23,7 +23,7 @@ namespace lmu
 
 		int numFuncs() const;
 		ImplicitFunctionPtr useIF(const lmu::ImplicitFunctionPtr& func);
-		ImplicitFunctionPtr getRandomIF();
+		ImplicitFunctionPtr getRandomIF(bool uniform = false);
 		ImplicitFunctionPtr useFirstIF();
 		ImplicitFunctionPtr exchangeIF(const lmu::ImplicitFunctionPtr& func);
 		void freeIF(const lmu::ImplicitFunctionPtr& func);
@@ -35,34 +35,10 @@ namespace lmu
 		mutable std::default_random_engine _rndEngine;
 
 		std::unordered_map<lmu::ImplicitFunctionPtr, int> _budget;
+		int _totalBudget;
 	};
 
-	struct IFBudgetComplete;
-	std::ostream& operator<<(std::ostream& os, const IFBudgetComplete& b);
-
-	struct IFBudgetComplete
-	{
-		IFBudgetComplete(const lmu::CSGNode& node, const IFBudgetComplete& budget);
-		IFBudgetComplete(const lmu::Graph& g);
-
-		int numFuncs() const;
-		ImplicitFunctionPtr useIF(const lmu::ImplicitFunctionPtr& func);
-		ImplicitFunctionPtr getRandomIF();
-		ImplicitFunctionPtr useFirstIF();
-		ImplicitFunctionPtr exchangeIF(const lmu::ImplicitFunctionPtr& func);
-		void freeIF(const lmu::ImplicitFunctionPtr& func);
-
-		friend std::ostream& operator<<(std::ostream& os, const IFBudgetComplete& b);
-
-	private:
-		mutable std::default_random_engine _rndEngine;
-
-		std::vector<ImplicitFunctionPtr> _funcs;
-		int _budget;
-	};
-
-	using IFBudget = IFBudgetComplete;//IFBudgetPerIF;
-
+	using IFBudget = IFBudgetPerIF;
 
 	struct CSGNodeCreatorV2
 	{
@@ -104,6 +80,7 @@ namespace lmu
 
 	CSGNode createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel = false, const std::string& statsFile = std::string("stats.dat"));
 
+	lmu::CSGNode computeGAWithPartitionsV2(const std::vector<Graph>& partitions, bool inParallel, const std::string & statsFile);
 }
 
 #endif

@@ -90,15 +90,7 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 	//_createNewRandomProb (my_0) 
 	if (d(_rndEngine, parm_t{ _createNewRandomProb }))
 	{
-		mutatedNode = create();
-		if (!mutatedNode.isValid())
-		{
-			std::cout << "INVALID" << std::endl;
-		}
-		else
-		{
-			std::cout << "VALID" << std::endl;
-		}
+		mutatedNode = create();	
 	}
 	else
 	{
@@ -107,36 +99,17 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 		auto mutatedNode = node;
 
 		CSGNode* subNode = nodePtrAt(mutatedNode, nodeIdx);
-		
-		//std::cout << "----------" << std::endl;
-		//std::cout << serializeNode(mutatedNode) << std::endl;
-		//std::cout << serializeNode(*subNode) << std::endl;
 				
 		*subNode = createOperation(CSGNodeOperationType::Identity);
 				
-		//if (d(_rndEngine, parm_t{ 0.5 }))
-		//{
-		*subNode = create(IFBudget(mutatedNode, _ifBudget));
-		if (!subNode->isValid())
+		if (d(_rndEngine, parm_t{ 0.5 }))
 		{
-			std::cout << "INVALID" << std::endl;
-			mutatedNode = node;
+			*subNode = create(IFBudget(mutatedNode, _ifBudget));
 		}
-		else
+		else 		
 		{
-			std::cout << "VALID" << std::endl;
+			replaceIFs(IFBudget(mutatedNode, _ifBudget), *subNode);
 		}
-		//std::cout << serializeNode(mutatedNode) << std::endl;
-
-		//}
-		//else
-		//{
-		//	replaceIFs(IFBudget(mutatedNode, _ifBudget), *subNode);
-		//}
-		
-		//serializeNode(mutatedNode);
-		//std::cout << serializeNode(mutatedNode) << std::endl;
-
 	}
 
 	return mutatedNode;
@@ -203,61 +176,46 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::create(IFBudget& budget) const
 	// Note: It would be possible to choose a complement operation with a budget of only 1 func left. 
 	//       But since we currently do not support complement in this method, we do not consider that case.
 	//       In addition, union and intersection could also deal with only 1 operand, but its pointless.
-	switch (budget.numFuncs())
-	{
-	case 0:
-		return CSGNode::invalidNode;
-	case 1:
-		return geometry(budget.useFirstIF());
-	}
+	//switch (budget.numFuncs())
+	//{
+	//case 0:
+	//	return CSGNode::invalidNode;
+	//case 1:
+	//	return geometry(budget.useFirstIF());
+	//}
 	
 	// Create operation node.
 	// 0 is OperationType::Unknown, 4 is OperationType::Complement, 5 is OperationType::Invalid.
 	auto node = createOperation(static_cast<CSGNodeOperationType>(du(_rndEngine, parmu_t{1, 3})));
-
-	//std::cout << "Node of type: " << operationTypeToString(node.operationType()) << std::endl;
-
+		
 	// Create operands
 	auto numAllowedChilds = node.numAllowedChilds();
 	int minChilds = 2;// std::get<0>(numAllowedChilds);
 	int maxChilds = std::get<1>(numAllowedChilds);
 	int numChilds = clamp(2, minChilds, maxChilds); //2 is the maximum number of childs allowed.
+
+	if (minChilds > budget.numFuncs())
+	{
+		return geometry(budget.getRandomIF());
+	}
+	
 	for (int i = 0; i < numChilds; i++)
 	{
+		//In case budget is exhausted and enough childs are already available, stop child creation.
+		if (budget.numFuncs() <= 0 && i > minChilds - 1) 
+			break;		
+
 		if (db(_rndEngine, parmb_t{ _subtreeProb }))
 		{
-			auto child = create(budget);
-			if (child.isValid()) //valid operand?
-			{
-				node.addChild(child);
-				continue;
-			}
+			auto child = create(budget);			
+			node.addChild(child);
+						
 		}
-		
-		auto func = budget.getRandomIF();
-		if (func)
-		{		
-			node.addChild(geometry(func));			
+		else
+		{
+			auto func = budget.getRandomIF();
+			node.addChild(geometry(func));
 		}
-		else //budget exceeded
-		{				
-			if (i > minChilds - 1) //do we have already enough operands?
-			{		
-				break;
-			}
-			else // return invalid node.
-			{
-				//Free all acquired ifs
-				lmu::visit(node, [&budget](const auto& n) 
-				{
-					if (n.function())
-						budget.freeIF(n.function());
-				});
-				
-				//This node is not built properly.
-				return CSGNode::invalidNode;
-			}
-		}	
 	}
 
 	return node;
@@ -277,7 +235,7 @@ lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
 	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.3, 0.3, inParallel);
-	lmu::CSGNodeRankerV2 r(connectionGraph, 0.01, 0.01);
+	lmu::CSGNodeRankerV2 r(connectionGraph, 0.1, 0.01);
 	
 	auto res = ga.run(p, s, c, r, isc);
 
@@ -307,6 +265,8 @@ lmu::IFBudgetPerIF::IFBudgetPerIF(const lmu::CSGNode& node, const IFBudgetPerIF&
 	auto b = budget;
 	getRestBudget(node, b);
 	_budget = b._budget;
+	_totalBudget = std::accumulate(std::begin(_budget), std::end(_budget), 0,
+			[](int value, const std::unordered_map<lmu::ImplicitFunctionPtr, int>::value_type& p) { return value + p.second; });
 }
 
 lmu::IFBudgetPerIF::IFBudgetPerIF(const lmu::Graph& g) : 
@@ -357,12 +317,14 @@ lmu::IFBudgetPerIF::IFBudgetPerIF(const lmu::Graph& g) :
 		if (_budget[func] == 0)
 			_budget[func] = 1;
 	}
+
+	_totalBudget = std::accumulate(std::begin(_budget), std::end(_budget), 0,
+		[](int value, const std::unordered_map<lmu::ImplicitFunctionPtr, int>::value_type& p) { return value + p.second; });
 }
 
 int lmu::IFBudgetPerIF::numFuncs() const
 {
-	return std::accumulate(std::begin(_budget), std::end(_budget), 0, 
-		[](int value, const std::unordered_map<lmu::ImplicitFunctionPtr, int>::value_type& p) { return value + p.second; });
+	return _totalBudget;
 }
 
 lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::useIF(const lmu::ImplicitFunctionPtr & func)
@@ -372,25 +334,36 @@ lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::useIF(const lmu::ImplicitFunctionPt
 	if (it == _budget.end())
 		return nullptr;
 
-	if (it->second <= 0)
-		return nullptr;
+	//if (it->second <= 0)
+	//	return nullptr;
 
-	it->second = it->second - 1;
+	//it->second = it->second - 1;
+
+	_totalBudget = _totalBudget > 0 ? _totalBudget - 1 : 0;
 
 	return func;
 }
 
-lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::getRandomIF()
+lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::getRandomIF(bool uniform)
 {
-	std::vector<double> probs(_budget.size());
-	std::vector<lmu::ImplicitFunctionPtr> funcs(_budget.size());
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
 
-	std::transform(_budget.begin(), _budget.end(), probs.begin(), [](auto pair) {return pair.second; });
+	std::vector<lmu::ImplicitFunctionPtr> funcs(_budget.size());
 	std::transform(_budget.begin(), _budget.end(), funcs.begin(), [](auto pair) {return pair.first; });
 
-	std::discrete_distribution<> d(probs.begin(), probs.end());
-
-	int funcIdx = d(_rndEngine);
+	int funcIdx = 0;
+	if (uniform)
+	{
+		funcIdx = du(_rndEngine, parmu_t{ 0, (int)funcs.size() - 1 });
+	}
+	else
+	{
+		std::vector<double> probs(_budget.size());
+		std::transform(_budget.begin(), _budget.end(), probs.begin(), [](auto pair) {return pair.second; });
+		std::discrete_distribution<> d(probs.begin(), probs.end());
+		funcIdx = d(_rndEngine);
+	}
 
 	return useIF(funcs[funcIdx]);
 }
@@ -402,7 +375,7 @@ lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::useFirstIF()
 
 lmu::ImplicitFunctionPtr lmu::IFBudgetPerIF::exchangeIF(const lmu::ImplicitFunctionPtr& func)
 {
-	_budget[func]++;
+	_totalBudget++;
 	return getRandomIF();
 }
 
@@ -411,7 +384,7 @@ void lmu::IFBudgetPerIF::freeIF(const lmu::ImplicitFunctionPtr & func)
 	auto it = _budget.find(func);
 
 	if (it != _budget.end())
-		it->second++;
+		_totalBudget++;
 }
 
 
@@ -423,96 +396,24 @@ std::ostream& lmu::operator<<(std::ostream& os, const IFBudgetPerIF& b)
 	return os;
 }
 
-std::ostream& lmu::operator<<(std::ostream& os, const IFBudgetComplete& b)
-{	
-	os << "Budget: " << b._budget << std::endl;
-	return os;
-}
-
-lmu::IFBudgetComplete::IFBudgetComplete(const lmu::CSGNode& node, const IFBudgetComplete& budget) :
-	_funcs(budget._funcs),
-	_budget(budget._budget - allGeometryNodePtrs(node).size()),
-	_rndEngine(lmu::rndEngine())
-
+lmu::CSGNode lmu::computeGAWithPartitionsV2(const std::vector<Graph>& partitions,
+	bool inParallel, const std::string& statsFile)
 {
-}
+	lmu::CSGNode res = lmu::op<Union>();
 
-lmu::IFBudgetComplete::IFBudgetComplete(const lmu::Graph& g) : 
-	_funcs(getImplicitFunctions(g)),
-	_budget(0),
-	_rndEngine(lmu::rndEngine())
-{	
-	//heuristic for function budget based on cliques.
-	auto cliques = lmu::getCliques(g);
-	for (const auto& clique : cliques)
-	{
-		for (const auto& func : clique.functions)
-		{
-			int budgetForFunc = 0;
-			switch (clique.functions.size())
-			{
-			case 1:
-				budgetForFunc = 1;
-				break;
-			case 2:
-				budgetForFunc = 2;
-				break;
-			case 3:
-				budgetForFunc = 3;
-				break;
-			case 4:
-				budgetForFunc = 4;
-				break;
-			case 5:
-				budgetForFunc = 5;
-				break;
-			default:
-				std::cerr << "Cannot estimate budget for Function. Not implemented for clique size " << clique.functions.size() << "." << std::endl;
-			}
+	//for (const auto& pi: get<1>(partition)) {
+	//  res.addChild(lmu::geometry(pi));
+	//}
 
-			_budget += budgetForFunc;
-		}
+	for (const auto& p : partitions)
+	{			
+		lmu::CSGNode ga = lmu::createCSGNodeWithGAV2(p, inParallel, statsFile);
+
+		if (partitions.size() == 1)
+			return ga;
+
+		res.addChild(ga);
 	}
-}
 
-int lmu::IFBudgetComplete::numFuncs() const
-{
-	return _budget;
-}
-
-lmu::ImplicitFunctionPtr lmu::IFBudgetComplete::useIF(const lmu::ImplicitFunctionPtr & func)
-{
-	if (_budget <= 0)
-		return nullptr;
-	else
-	{
-		_budget--;
-		return func;
-	}
-}
-
-lmu::ImplicitFunctionPtr lmu::IFBudgetComplete::getRandomIF()
-{
-	static std::uniform_int_distribution<> du{};
-	using parmu_t = decltype(du)::param_type;
-
-	int funcIdx = du(_rndEngine, parmu_t{ 0, (int)_funcs.size() - 1 });
-
-	return useIF(_funcs[funcIdx]);
-}
-
-lmu::ImplicitFunctionPtr lmu::IFBudgetComplete::useFirstIF()
-{
-	return getRandomIF();
-}
-
-lmu::ImplicitFunctionPtr lmu::IFBudgetComplete::exchangeIF(const lmu::ImplicitFunctionPtr & func)
-{
-	_budget++;
-	return getRandomIF();
-}
-
-void lmu::IFBudgetComplete::freeIF(const lmu::ImplicitFunctionPtr& func)
-{
-	_budget++;
+	return res;
 }
