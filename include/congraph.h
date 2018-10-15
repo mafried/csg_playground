@@ -92,6 +92,7 @@ namespace lmu
 
 	bool areConnected(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2);
 
+	//WARNING: NOT CORRECT ANYMORE!
 	bool wasPruned(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f);
 
 	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs);
@@ -114,6 +115,14 @@ namespace lmu
 
 	lmu::Graph pruneGraph(const lmu::Graph& g);
 
+	using NeighborMap = std::unordered_map<VertexDescriptor, std::unordered_set<VertexDescriptor>>;
+	using PruneList = std::unordered_map<VertexDescriptor, std::vector<VertexDescriptor>>;
+
+	lmu::NeighborMap createNeighborMap(const lmu::Graph& g);
+	lmu::PruneList createPruneList(const lmu::Graph& g, const lmu::NeighborMap& neighborMap);
+	lmu::Graph pruneGraph(const lmu::Graph& g, const lmu::PruneList& pruneList);
+	lmu::Graph recreatePrunedGraph(const lmu::Graph& originalGraph, const lmu::Graph& prunedGraph, const lmu::PruneList& pruneList);
+	
 	size_t numVertices(const lmu::Graph& g);
 
 	size_t numEdges(const lmu::Graph& g);

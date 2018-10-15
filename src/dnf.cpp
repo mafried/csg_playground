@@ -683,10 +683,13 @@ std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(cons
 		return { graph };
 		
 	//Prune graph.
-	auto prunedGraph = lmu::pruneGraph(graph);
+	//auto prunedGraph = lmu::pruneGraph(graph);
 	//lmu::writeConnectionGraph("pgraph.dot", prunedGraph);
 	//=> Tested, works.
-	
+	auto pruneList = createPruneList(graph, createNeighborMap(graph));
+	auto prunedGraph = pruneGraph(graph, pruneList);
+	lmu::writeConnectionGraph("pgraph.dot", prunedGraph);
+
 	if (numVertices(prunedGraph) < 2)
 	{
 		//TODO;
@@ -700,6 +703,8 @@ std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(cons
 
 	for (const auto& c : components)
 	{
+		std::cout << "Component: " << numVertices(c) << std::endl;
+
 		//Only search for bridges if component has more than 2 vertices.
 		if (numVertices(c) > 2)
 		{
@@ -713,8 +718,9 @@ std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(cons
 		else if(numVertices(c) == 1) //components of size 1 are prime implicants. 
 		{
 			//Create graphs for PIs + pruned vertices.
-			auto piGraph = getGraphWithPrunedVertices(graph, lmu::getImplicitFunctions(c).front());
-			partitions.push_back(piGraph);
+			//auto piGraph = getGraphWithPrunedVertices(graph, lmu::getImplicitFunctions(c).front());
+			//partitions.push_back(piGraph);
+			partitions.push_back(recreatePrunedGraph(graph, c, pruneList));
 		}
 	}
 
@@ -724,165 +730,4 @@ std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(cons
 std::vector<lmu::Graph> lmu::getUnionPartitionsByArticulationPoints(const Graph& graph)
 {
 	return getArticulationPointSeparatedConnectedComponents(graph);
-}
-
-
-
-//////////////////////////////////////////////////////////////////////
-// Old optimization code
-//////////////////////////////////////////////////////////////////////
-
-bool isIn(const lmu::Clause& clause, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions, const std::unordered_map<lmu::ImplicitFunctionPtr,
-	std::tuple<double, double>>& outlierTestValues, const lmu::Graph& conGraph, const lmu::SampleParams& params)
-{
-	//std::tuple<lmu::Clause, double, double> 
-	auto clauseQuality = lmu::scoreClause(clause, functions, numClauseFunctions, outlierTestValues, conGraph, params);
-	
-	const double distT = 0.9;
-	const double angleT = 0.9; 
-
-	return (std::get<1>(clauseQuality) >= distT && std::get<2>(clauseQuality) >= angleT);
-}
-
-
-void computeClauseForPivotalFunction(const lmu::Clause& pivotal, int pivotalLiteral, int currentLiteral, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions,
-	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::SampleParams& params, std::vector<lmu::Clause>& resultClauses)
-{
-	if (isIn(pivotal, functions, numClauseFunctions, outlierTestValues, lmu::Graph() /*currently not used for overlap calculation*/, params))
-	{
-		resultClauses.push_back(pivotal);
-		return;
-	}
-
-	std::vector<lmu::ImplicitFunctionPtr> candidateFunctions;
-
-	for (int i = 0; i < numClauseFunctions; ++i)
-	{
-		if (i == pivotalLiteral)
-			continue; 
-
-		candidateFunctions.push_back(functions[i]);
-		candidateFunctions.push_back(functions[i]);
-	}
-
-	for (size_t k = 1; k <= candidateFunctions.size(); ++k)
-	{
-		do
-		{
-
-
-		
-
-		} while (lmu::next_combination(candidateFunctions.begin(), candidateFunctions.begin() + k, candidateFunctions.end()));
-
-		//Remove all functions 
-	}
-	
-	
-	/*for (int i = currentLiteral; i < numClauseFunctions; ++i)
-	{
-		if (i == pivotalLiteral)
-			continue;
-
-		auto c = pivotal;
-
-		//TODO: Check if non negated pivotal was already considered => lookup 
-
-		c.literals[i] = true;
-
-		computeClauseForPivotalFunction(c, pivotalLiteral, i+1, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
-
-		c.negated[i] = true; 
-
-		computeClauseForPivotalFunction(c, pivotalLiteral, i+1, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
-
-		//TODO: Think about lookup for avoiding double cover of regions e.g. ABC | AB instead of AB
-	}*/
-}
-
-std::vector<lmu::Clause> computeClauseForPivotalFunction(int pivotalLiteral, const std::vector<lmu::ImplicitFunctionPtr>& functions, int numClauseFunctions,
-	const std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>>& outlierTestValues, const lmu::SampleParams& params)
-{
-	lmu::Clause pivotal(numClauseFunctions);
-	pivotal.literals[pivotalLiteral] = true;
-	
-	std::vector<lmu::Clause> resultClauses;
-
-	computeClauseForPivotalFunction(pivotal, pivotalLiteral, 0, functions, numClauseFunctions, outlierTestValues, params, resultClauses);
-
-	return resultClauses;
-}
-
-std::vector<std::tuple<lmu::Clique, int>> getAllCliquesContainingFunction(const lmu::ImplicitFunctionPtr& func, const std::vector<lmu::Clique>& allCliques)
-{
-	std::vector<std::tuple<lmu::Clique, int>> cliques;
-
-	for (const auto& clique : allCliques)
-	{
-		auto it = std::find(clique.functions.begin(), clique.functions.end(), func);
-		if(it != clique.functions.end())
-			cliques.push_back(std::make_tuple(clique, it - clique.functions.begin()));
-	}
-
-	return cliques; 
-}
-
-std::unordered_set<lmu::ImplicitFunctionPtr> getAllIntersectingFunctions(const std::vector<std::tuple<lmu::Clique, int>>& cliques)
-{
-	std::unordered_set<lmu::ImplicitFunctionPtr> res; 
-
-	for (const auto& clique : cliques)	
-		res.insert(std::get<0>(clique).functions.begin(), std::get<0>(clique).functions.end());
-		
-	return res;
-}
-
-//Horrible 
-std::vector<lmu::ImplicitFunctionPtr> getAllCliqueFunctionsWithAppendedRest(const std::vector<lmu::ImplicitFunctionPtr>& cliqueFunctions, const std::unordered_set<lmu::ImplicitFunctionPtr>& intersectingFunctions)
-{
-	std::vector<lmu::ImplicitFunctionPtr> res; 
-
-	res.insert(res.end(), cliqueFunctions.begin(), cliqueFunctions.end());
-
-	for (const auto& intersectingFunction : intersectingFunctions)
-	{
-		if (std::find(cliqueFunctions.begin(), cliqueFunctions.end(), intersectingFunction) == cliqueFunctions.end())
-			res.push_back(intersectingFunction);
-	}
-
-	return res;
-}
-
-lmu::CSGNode lmu::computeCSGNode(const std::vector<lmu::ImplicitFunctionPtr>& functions, const lmu::Graph& conGraph, const lmu::SampleParams& params)
-{
-	lmu::CSGNode node = lmu::opUnion();
-	
-	auto allCliques = getCliques(conGraph);
-
-	auto outlierTestValues = computeOutlierTestValues(functions, params.h);
-
-	for (const auto& f : functions)
-	{
-		std::cout << "Compute for " << f->name() << std::endl;
-
-		auto cliquesForFunc = getAllCliquesContainingFunction(f, allCliques);
-
-		auto intersectingFunctions = getAllIntersectingFunctions(cliquesForFunc);
-
-		for (const auto& cliqueForFunc : cliquesForFunc)
-		{		
-			auto cliqueFunctions = getAllCliqueFunctionsWithAppendedRest(std::get<0>(cliqueForFunc).functions, intersectingFunctions);
-
-			int numClauseFunctions = std::get<0>(cliqueForFunc).functions.size();
-
-			auto clauses = computeClauseForPivotalFunction(std::get<1>(cliqueForFunc), cliqueFunctions, numClauseFunctions, outlierTestValues, params);
-
-			for (const auto& clause : clauses)
-			{
-				node.addChild(lmu::clauseToCSGNode(clause, cliqueFunctions));
-			}
-		}
-	}
-
-	return node;
 }

@@ -17,6 +17,7 @@
 #include "tests.h"
 
 #include "csgnode_evo.h"
+#include "csgnode_evo_v2.h"
 #include "csgnode_helper.h"
 
 #include "evolution.h"
@@ -387,7 +388,6 @@ int main(int argc, char *argv[])
 //	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
 //});
 
-//geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6");
 
 node = op<Union>(
 {
@@ -436,20 +436,6 @@ node = op<Union>(
 	
 });
 
-
-//node = geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2");
-
-/*node =
-op<Difference>(
-{
-	op<Union>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.0, 0), 0.25, "Sphere_1"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.3, 0), 0.25, "Sphere_2"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0, 0.6, 0), 0.25, "Sphere_3"),
-	}),
-	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.5, 0), 0.25, "Sphere_4")
-});*/
 	double samplingStepSize = 0.03; 
 	double maxDistance = 0.01;
 	double noiseSigma = 0.03;
@@ -480,21 +466,21 @@ op<Difference>(
 
 
 
-	lmu::movePointsToSurface(shapes, false, 0.0001);
+	lmu::movePointsToSurface(shapes, true, 0.00001);
 
 	//auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.001 });
 
 	//auto res = lmu::computeCSGNode(shapes, graph, { 0.001 });//lmu::DNFtoCSGNode(dnf);
 
-	CSGNode res = op<Union>();
+	//CSGNode res = op<Union>();
 
-	SampleParams p{ 0.001 };
+	//SampleParams p{ 0.001 };
 
 	//auto partitions = lmu::partitionByPrimeImplicants(graph, p, true);
 
 	//res = lmu::computeShapiroWithPartitions(partitions, p);
 		
-	auto partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, { 0.001 });
+	auto partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, { 0.001 });
 	int i = 0;
 	for (const auto& p : partitions)
 	{
@@ -502,20 +488,45 @@ op<Difference>(
 		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
 	}
 
-	res = computeGAWithPartitions(partitions);//lmu::computeShapiroWithPartitions(partitions, p);
+	/*double lambda = lmu::lambdaBasedOnPoints(shapes);
+	std::cout << "lambda: " << lambda << std::endl;
+	lmu::CSGNodeRanker r(lambda, shapes, graph);
+	std::cout << "QUALITY: " << r.rank(node) << std::endl;
+	*/
+	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
+	std::cout << "RANK: " << r.rank(node) << std::endl;
+	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
+	//auto res = computeGAWithPartitionsV2(partitions, false, "stats.dat")
+	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });
+	auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
+
+	//auto res = DNFtoCSGNode(lmu::computeShapiro(lmu::getImplicitFunctions(graph), true, graph, { 0.001 }));
+	//std::cout << "NODESIZE: " << numNodes(res) << std::endl;
+
+	/*auto cliques = lmu::getCliques(graph);
+	auto cliquesAndNodes = computeNodesForCliques(cliques, paraOptions);
+
+	optimizeCSGNodeClique(cliquesAndNodes, 100.0);
+
+	auto res = mergeCSGNodeCliqueSimple(cliquesAndNodes);
+	*/
 
 	lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
-	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, noiseSigma);
+	pointCloud = lmu::computePointCloud(res, samplingStepSize, maxDistance, 0);
+	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 	igl::writeOBJ("mesh.obj", mesh.vertices, mesh.indices);
 	
 	//std::cout << lmu::espressoExpression(dnf) << std::endl;
 
 	
-
+	//for (const auto& func : shapes)
+	//{
+	//	viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
+	//}
 
 	
 	//std::cout << "Before: " << pointCloud.rows() << std::endl;
@@ -542,8 +553,6 @@ op<Difference>(
 	//std::cout << "Considered Clause " << g_clause << std::endl;
 	//viewer.data().set_points(g_testPoints.leftCols(3), g_testPoints.rightCols(3));
 	
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
 	//viewer.data().set_mesh(node.function
 
 	//for (const auto& shape : allGeometryNodePtrs(node))

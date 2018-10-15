@@ -8,6 +8,7 @@
 #include "boost/graph/bron_kerbosch_all_cliques.hpp"
 #include "boost/graph/copy.hpp"
 #include <boost/graph/biconnected_components.hpp>
+#include <boost/graph/adjacency_list.hpp>
 
 
 #include <boost/dynamic_bitset.hpp>
@@ -524,12 +525,153 @@ lmu::Graph lmu::pruneGraph(const Graph& g)
 	return g2;
 }
 
-size_t lmu::numVertices(const lmu::Graph & g)
+bool shouldBePruned(lmu::VertexDescriptor v, const lmu::Graph& g, const std::unordered_map<lmu::VertexDescriptor, std::unordered_set<lmu::VertexDescriptor>>& neighborMap)
+{
+	boost::graph_traits<lmu::GraphStructure>::adjacency_iterator neighbour, neighbour_end;
+	const auto& neighbors = neighborMap.at(v);
+
+	for (boost::tie(neighbour, neighbour_end) = boost::adjacent_vertices(v, g.structure); neighbour != neighbour_end; ++neighbour)
+	{
+		const auto& neighborNeighbors = neighborMap.at(*neighbour);
+
+		bool fullyContained = true;
+		for (const auto& n : neighbors)
+		{
+			if (neighborNeighbors.count(n) == 0)
+			{
+				fullyContained = false;
+				break;
+			}
+		}
+
+		if (fullyContained)
+			return true;
+	}
+
+	return false;
+}
+
+lmu::NeighborMap lmu::createNeighborMap(const lmu::Graph& g)
+{
+	boost::graph_traits<GraphStructure>::vertex_iterator vi, vi_end;
+
+	lmu::NeighborMap neighborMap;
+	for (boost::tie(vi, vi_end) = boost::vertices(g.structure); vi != vi_end; ++vi)
+	{
+		std::unordered_set<VertexDescriptor> neighbors;
+		boost::graph_traits<GraphStructure>::adjacency_iterator neighbour, neighbour_end;
+
+		//Get neighbor set.
+		for (boost::tie(neighbour, neighbour_end) = boost::adjacent_vertices(*vi, g.structure); neighbour != neighbour_end; ++neighbour)
+			neighbors.insert(*neighbour);
+
+		neighborMap[*vi] = neighbors;
+	}
+
+	return neighborMap;
+}
+
+lmu::PruneList lmu::createPruneList(const lmu::Graph& g, const lmu::NeighborMap& neighborMap)
+{
+	boost::graph_traits<GraphStructure>::vertex_iterator vi, vi_end;
+	PruneList pruneList;
+	for (boost::tie(vi, vi_end) = boost::vertices(g.structure); vi != vi_end; ++vi)
+	{
+		boost::graph_traits<GraphStructure>::adjacency_iterator neighbour, neighbour_end;
+
+		for (boost::tie(neighbour, neighbour_end) = boost::adjacent_vertices(*vi, g.structure); neighbour != neighbour_end; ++neighbour)
+		{
+			const auto& neighborNeighbors = neighborMap.at(*neighbour);
+
+			//are all neighbors of the neighbor also neighbor of *vi?
+			bool fullyContained = true;
+			for (const auto& nn : neighborNeighbors)
+			{
+				if (neighborMap.at(*vi).count(nn) == 0 && nn != *vi)
+				{
+					fullyContained = false;
+					break;
+				}
+			}
+
+			if (fullyContained)
+			{
+				pruneList[*vi].push_back(*neighbour);
+			}
+		}
+	}
+
+	return pruneList;
+}
+
+bool inPruneList(const lmu::VertexDescriptor& v, const lmu::PruneList& pruneList)
+{
+	for (const auto& list : pruneList)
+	{
+		if (std::find(list.second.begin(), list.second.end(), v) != list.second.end())
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+lmu::Graph lmu::pruneGraph(const lmu::Graph& g, const lmu::PruneList & pruneList)
+{
+	return lmu::filterGraph(g, [&pruneList](const VertexDescriptor& v) {return !inPruneList(v, pruneList); }, [](const EdgeDescriptor& e) { return true; });
+}
+
+lmu::Graph lmu::recreatePrunedGraph(const lmu::Graph& originalGraph, const lmu::Graph& prunedGraph, const lmu::PruneList& pruneList)
+{	
+	
+	if (numVertices(prunedGraph) > 1)
+	{
+		std::cerr << "Too many vertices. " << std::endl;
+		return lmu::Graph();
+	}
+
+	boost::graph_traits<GraphStructure>::vertex_iterator vi, vi_end;
+	for (boost::tie(vi, vi_end) = boost::vertices(prunedGraph.structure); vi != vi_end; ++vi)
+	{
+		auto func = prunedGraph.structure[*vi];
+		auto v = originalGraph.vertexLookup.at(func);
+
+		std::cout << " Partition " << func->name() << std::endl;
+		auto it = pruneList.find(v);
+		if (it == pruneList.end())
+		{
+			std::cout << "Has no pruned nodes." << std::endl;
+			break;
+		}
+		auto prunedVertices = it->second;
+
+		for (const auto& pv : prunedVertices)
+			std::cout << "  " << originalGraph.structure[pv]->name() << std::endl;
+
+		return lmu::filterGraph(originalGraph,
+			[&prunedVertices, v](const VertexDescriptor& vp)
+		{			
+			return std::find(prunedVertices.begin(), prunedVertices.end(), vp) != prunedVertices.end() || vp == v;
+		}, 
+			[&prunedVertices, &originalGraph](const EdgeDescriptor& e)
+		{ 
+			return true;
+				//std::find(prunedVertices.begin(), prunedVertices.end(), boost::source(e, originalGraph.structure)) != prunedVertices.end() &&
+				//std::find(prunedVertices.begin(), prunedVertices.end(), boost::target(e, originalGraph.structure)) != prunedVertices.end();
+		}
+		);
+	}
+
+	return prunedGraph;
+}
+
+size_t lmu::numVertices(const lmu::Graph& g)
 {
 	return boost::num_vertices(g.structure);
 }
 
-size_t lmu::numEdges(const lmu::Graph & g)
+size_t lmu::numEdges(const lmu::Graph& g)
 {
 	return boost::num_edges(g.structure);
 }
@@ -539,11 +681,7 @@ lmu::Graph lmu::getGraphWithPrunedVertices(const lmu::Graph& g, const std::share
 	auto v = g.vertexLookup.at(f);
 
 	typename boost::graph_traits <lmu::GraphStructure>::out_edge_iterator ei, ei_end;
-
-	//Get pruned property map. 
-	boost::property_map <GraphStructure, boost::edge_pruned_t >::const_type
-		pruned = boost::get(boost::edge_pruned_t(), g.structure);
-
+		
 	//Iterate through all neighbor vertices, check if they were pruned and add them to new graph.
 	lmu::Graph res;
 	auto fVertex = addVertex(res, f);

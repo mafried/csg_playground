@@ -5,10 +5,12 @@
 #include <chrono>
 
 #include <algorithm>
-
+#include <random>
 
 namespace lmu
 {
+	std::default_random_engine rndEngine();
+
 	//From http://en.cppreference.com/w/cpp/numeric/math/acos
 	//template<class T>
 	//constexpr const T& clamp(const T& v, const T& lo, const T& hi)

@@ -57,6 +57,29 @@ namespace lmu
 		lmu::Graph _connectionGraph;
 	};
 
+	using MappingFunction = std::function<double(double)>;
+
+	
+	/*struct CSGNodeRankerNew
+	{
+		CSGNodeRankerNew(const lmu::Graph& graph, double sizePenaltyInfluence, double distAngleDeviationRatio, double maxSize, double maxGeo) :
+			_graph(graph), _functions(lmu::getImplicitFunctions(graph), _sizePenaltyInfluence(sizePenaltyInfluence), _distAngleDeviationRatio(distAngleDeviationRatio), _maxSize(maxSize), _maxGeo(maxGeo)
+		{
+		}
+
+		double rank(const CSGNode& node) const;
+		std::string info() const;
+		
+	private:
+
+		lmu::Graph _graph;
+		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
+		double _sizePenaltyInfluence;
+		double _distAngleDeviationRatio;
+		double _maxSize;
+		double _maxGeo;
+	};*/
+
 	using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode>>;
 
 	using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode>>;
@@ -84,6 +107,9 @@ namespace lmu
 	CSGNode mergeCSGNodeCliqueSimple(CSGNodeClique& clique);
 	void optimizeCSGNodeClique(CSGNodeClique& clique, float tolerance);
   
+	double lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes);
+
+
   // 
   CSGNode 
   computeGAWithPartitions
