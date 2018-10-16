@@ -69,6 +69,8 @@ namespace lmu
 		double rank(const CSGNode& node) const;
 		std::string info() const;
 
+		double computeGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs) const;
+
 	private: 
 		lmu::Graph _connectionGraph;
 		IFBudget _ifBudget;

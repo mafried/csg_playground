@@ -403,8 +403,8 @@ namespace lmu
 
 				// Update the cross-over rate and mutation rate based on 
 				// some annealing schedule
-				crossoverRate = params.crossoverRate * identitySchedule(iterationCount);
-				mutationRate = params.mutationRate * identitySchedule(iterationCount);
+				crossoverRate = params.crossoverRate * expSchedule(iterationCount);
+				mutationRate = params.mutationRate * expSchedule(iterationCount);
 			}
 
 			stats.totalDuration.tick();

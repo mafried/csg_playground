@@ -496,9 +496,9 @@ node = op<Union>(
 	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
 	std::cout << "RANK: " << r.rank(node) << std::endl;
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
-	//auto res = computeGAWithPartitionsV2(partitions, false, "stats.dat")
+	auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });
-	auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
+	//auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
 
 	//auto res = DNFtoCSGNode(lmu::computeShapiro(lmu::getImplicitFunctions(graph), true, graph, { 0.001 }));
 	//std::cout << "NODESIZE: " << numNodes(res) << std::endl;
