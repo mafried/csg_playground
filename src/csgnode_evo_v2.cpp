@@ -1,6 +1,7 @@
 #include <numeric>
 #include "../include/csgnode_evo_v2.h"
 #include "../include/csgnode_helper.h"
+#include "../include/dnf.h"
 
 // =========================================================================================
 // Types 
@@ -19,38 +20,7 @@ double lmu::CSGNodeRankerV2::rank(const CSGNode& node) const
 	if (!node.isValid())
 		return 0.0;
 	
-	auto funcs = lmu::getImplicitFunctions(_connectionGraph);
-	int numCorrectSamples = 0;
-	int numConsideredSamples = 0;
-	const double smallestDelta = 0.0001;
-	
-	for (const auto& func : funcs)
-	{
-		for (int i = 0; i < func->pointsCRef().rows(); ++i)
-		{
-			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(i);
-
-			Eigen::Vector3d sampleP = pn.leftCols(3);
-			Eigen::Vector3d sampleN = pn.rightCols(3);
-
-			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, _h);
-			double sampleDistNode = sampleDistGradNode[0];
-			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
-
-			numConsideredSamples++;
-
-			if (std::abs(sampleDistNode) <= smallestDelta && sampleGradNode.dot(sampleN) > 0.0)
-			{
-				numCorrectSamples++;
-			}		
-			else
-			{
-				//std::cout << sampleDistNode << std::endl;
-			}
-		}
-	}
-
-	double geometryScore = (double)numCorrectSamples / (double)numConsideredSamples; 
+	double geometryScore = computeGeometryScore(node, lmu::getImplicitFunctions(_connectionGraph));
 
 	int numRest = IFBudget(node, _ifBudget).numFuncs();
 	int numAvailable = _ifBudget.numFuncs();
@@ -62,7 +32,52 @@ double lmu::CSGNodeRankerV2::rank(const CSGNode& node) const
 
 std::string lmu::CSGNodeRankerV2::info() const
 {
-	return std::string();
+	return "Size weight: " + std::to_string(_sizeWeight);
+}
+
+double lmu::CSGNodeRankerV2::computeGeometryScore(const CSGNode & node, const std::vector<ImplicitFunctionPtr>& funcs) const
+{
+	if (!node.isValid())
+		return 0.0;
+
+	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
+	double numCorrectSamples = 0;
+	double numConsideredSamples = 0;
+	const double smallestDelta = 0.0001;
+
+	double totalNumSamples = 0;
+	for (const auto& func : funcs)
+		totalNumSamples += func->pointsCRef().rows();
+
+	for (const auto& func : funcs)
+	{
+		double sampleFactor = 1.0;//totalNumSamples / func->pointsCRef().rows();
+
+		for (int i = 0; i < func->pointsCRef().rows(); ++i)
+		{
+			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(i);
+
+			Eigen::Vector3d sampleP = pn.leftCols(3);
+			Eigen::Vector3d sampleN = pn.rightCols(3);
+
+			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, _h);
+			double sampleDistNode = sampleDistGradNode[0];
+			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
+
+			numConsideredSamples += (1.0 * sampleFactor);
+
+			if (std::abs(sampleDistNode) <= smallestDelta && sampleGradNode.dot(sampleN) > 0.0)
+			{
+				numCorrectSamples += (1.0 * sampleFactor);
+			}
+			else
+			{
+				//std::cout << sampleDistNode << std::endl;
+			}
+		}
+	}
+
+	return numCorrectSamples / numConsideredSamples;
 }
 
 lmu::CSGNodeCreatorV2::CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, const lmu::Graph& graph) : 
@@ -72,6 +87,48 @@ lmu::CSGNodeCreatorV2::CSGNodeCreatorV2(double createNewRandomProb, double subtr
 	_rndEngine(lmu::rndEngine())
 {
 	std::cout << "CREATOR BUDGET: " << _ifBudget << std::endl;
+}
+
+lmu::CSGNode createWithShapiro(lmu::IFBudget& budget, std::default_random_engine& rndEngine)
+{
+	static std::bernoulli_distribution d{};
+	using parm_t = decltype(d)::param_type;
+
+	//Collect primitives 
+	lmu::ImplicitFunctionPtr func = nullptr;
+	std::vector<lmu::ImplicitFunctionPtr> funcs; 
+	do 
+	{
+		func = budget.getRandomIF();
+		if (!func)
+			break; 
+
+		funcs.push_back(func);
+	} while (d(rndEngine, parm_t{ 0.5 }));
+
+	auto g = createConnectionGraph(funcs);
+	auto cc = getConnectedComponents(g);
+	size_t ccSize = 0;
+	const lmu::Graph* cg = nullptr;
+	for (const auto& c : cc)
+	{
+		if (numVertices(c) > ccSize)
+		{
+			cg = &c; 
+			ccSize = numVertices(c);
+		}
+	}
+
+	//std::cout << "GRAPH " << (cg == nullptr) << " " << (funcs.size()) << " " << cc.size() << std::endl;
+
+	funcs = lmu::getImplicitFunctions(*cg);
+
+	if (funcs.size() == 1)
+		return lmu::geometry(funcs[0]);
+
+	auto dnf = lmu::computeShapiro(funcs, true, *cg, { 0.001 });
+
+	return lmu::DNFtoCSGNode(dnf);
 }
 
 lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
@@ -102,7 +159,7 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 				
 		*subNode = createOperation(CSGNodeOperationType::Identity);
 				
-		if (d(_rndEngine, parm_t{ 0.5 }))
+		if (d(_rndEngine, parm_t{ 1.0 }))
 		{
 		  IFBudget ifbud(mutatedNode, _ifBudget);
 		  //*subNode = create(IFBudget(mutatedNode, _ifBudget));
@@ -111,15 +168,15 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 		else 		
 		{
 		  IFBudget ifbud(mutatedNode, _ifBudget);
-		  //replaceIFs(IFBudget(mutatedNode, _ifBudget), *subNode);
-		  replaceIFs(ifbud, *subNode);
+		  //replaceIFs(ifbud, *subNode);
+		  *subNode = createWithShapiro(ifbud, _rndEngine);
 		}
 	}
 
 	return mutatedNode;
 }
 
-std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+/*std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
@@ -145,6 +202,46 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1,
 	{
 		newNode1, newNode2
 	};
+}*/
+
+std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+{
+	if (!node1.isValid() || !node2.isValid())
+		return std::vector<lmu::CSGNode> {node1, node2};
+
+	lmu::CSGNodeRankerV2 r(_connectionGraph, 0.1, 0.01);
+	
+	auto newNode1 = node1;
+	auto newNode2 = node2;
+
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(node1) - 1 });
+	
+	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
+	auto subNode1Funcs = lmu::allDistinctFunctions(*subNode1);
+	
+	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, subNode1Funcs);
+	
+	if(!subNode2)
+		return std::vector<lmu::CSGNode> {node1, node2};
+
+	auto subNode2Funcs = lmu::allDistinctFunctions(*subNode2);
+
+	auto funcs = subNode1Funcs.size() > subNode2Funcs.size() ? subNode1Funcs : subNode2Funcs;
+
+	double score1 = r.computeGeometryScore(*subNode1, funcs);
+	double score2 = r.computeGeometryScore(*subNode2, funcs);
+
+	std::cout << "CROSSOVER" << std::endl;
+	std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
+	std::cout << score1 << "     " << score2 << std::endl;
+	if (score1 > score2)
+		*subNode2 = *subNode1;
+	else if (score1 < score2)
+		*subNode1 = *subNode2;
+	
+	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
 }
 
 lmu::CSGNode lmu::CSGNodeCreatorV2::create() const
@@ -200,7 +297,7 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::create(IFBudget& budget) const
 
 	if (minChilds > budget.numFuncs())
 	{
-		return geometry(budget.getRandomIF());
+		return geometry(budget.getRandomIF(false));
 	}
 	
 	for (int i = 0; i < numChilds; i++)
@@ -217,7 +314,7 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::create(IFBudget& budget) const
 		}
 		else
 		{
-			auto func = budget.getRandomIF();
+			auto func = budget.getRandomIF(false);
 			node.addChild(geometry(func));
 		}
 	}
@@ -233,13 +330,13 @@ std::string lmu::CSGNodeCreatorV2::info() const
 lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel, const std::string& statsFile)
 {
 	lmu::CSGNodeTournamentSelector s(2, true);
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(100, 0.001, 100);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(300, 0.001, 300);
 	lmu::CSGNodeCreatorV2 c(0.5, 0.7, connectionGraph);
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
-	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.3, 0.3, inParallel);
-	lmu::CSGNodeRankerV2 r(connectionGraph, 0.1, 0.01);
+	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.7, 0.7, true);
+	lmu::CSGNodeRankerV2 r(connectionGraph, 0.2, 0.01);
 	
 	auto res = ga.run(p, s, c, r, isc);
 

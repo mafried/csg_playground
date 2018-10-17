@@ -581,6 +581,8 @@ namespace lmu
 	std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const std::vector<std::shared_ptr<ImplicitFunction>>& geos);
 	std::tuple<Eigen::Vector3d, Eigen::Vector3d> computeDimensions(const CSGNode& node);
 
+	CSGNode* findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs);
+
 }
 
 #endif
