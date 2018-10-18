@@ -17,6 +17,7 @@
 //#include "tests.h"
 
 #include "csgnode_evo.h"
+#include "csgnode_evo_v2.h"
 #include "csgnode_helper.h"
 #include "evolution.h"
 #include "curvature.h"
@@ -59,7 +60,7 @@ static void usage(const char* pname) {
 	    << std::endl;
   std::cout << std::endl;
   std::cout << "Example: " << pname 
-	    << " model.xyz model.prim 0.03 0.01 none|pi|piWithPruning|ap ga|shapiro model" << std::endl;
+	    << " model.xyz model.prim 0.03 0.01 none|pi|piWithPruning|ap ga|ga2|shapiro model" << std::endl;
 }
 
 
@@ -119,13 +120,17 @@ int main(int argc, char *argv[])
   // for the max-size computation for the trees.
   // * should we call optimizeCSGNodeStructure for each recoveryType? 
   
-  if (partitionType == "none") {
+  if (partitionType == "none") 
+  {
     if (recoveryType == "shapiro") {
-      auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), p);
+      auto dnf = lmu::computeShapiro(shapes, true, graph, p);
       res = lmu::DNFtoCSGNode(dnf);
     } else if (recoveryType == "ga") {
-      res = createCSGNodeWithGA(shapes);
+      res = createCSGNodeWithGA(shapes, true);
       optimizeCSGNodeStructure(res);
+	} else if (recoveryType == "ga2") {
+	  res = createCSGNodeWithGAV2(graph);
+	  optimizeCSGNodeStructure(res);
     } else {
       std::cerr << "Invalid recovery type" << std::endl;
       usage(argv[0]);

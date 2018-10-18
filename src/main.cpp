@@ -436,6 +436,53 @@ node = op<Union>(
 	
 });
 
+auto nodeUnion = op<Union>(
+{
+	op<Union>({
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)*rot90x), 0.2, 0.8, "Cylinder_2"),
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -1)*rot90x), 0.1, 1, "Cylinder_3")
+}),
+
+op<Union>(
+{
+	geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_2"),
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_0")
+}),
+
+geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
+
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_0"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_1")
+}),
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_3")
+}),
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
+}),
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+}),
+
+geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_3"),
+
+geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
+
+geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
+
+});
+
 	double samplingStepSize = 0.03; 
 	double maxDistance = 0.01;
 	double noiseSigma = 0.03;
@@ -488,13 +535,20 @@ node = op<Union>(
 		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
 	}
 
-	/*double lambda = lmu::lambdaBasedOnPoints(shapes);
+	double lambda = lmu::lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 	lmu::CSGNodeRanker r(lambda, shapes, graph);
-	std::cout << "QUALITY: " << r.rank(node) << std::endl;
-	*/
-	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
-	std::cout << "RANK: " << r.rank(node) << std::endl;
+	std::cout << "QUALITY NODE: " << r.rank(node) << std::endl;
+	std::cout << "QUALITY NODE UNION: " << r.rank(nodeUnion) << std::endl;
+
+	lmu::CSGNodeRankerV2 r2(graph, 0.0, 0.01);
+	std::cout << "V2" << std::endl;
+
+	std::cout << "QUALITY NODE: " << r2.rank(node) << std::endl;
+	std::cout << "QUALITY NODE UNION: " << r2.rank(nodeUnion) << std::endl;
+
+	return 0;
+
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
 	auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });

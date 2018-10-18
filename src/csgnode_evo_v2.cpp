@@ -327,13 +327,13 @@ std::string lmu::CSGNodeCreatorV2::info() const
 lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel, const std::string& statsFile)
 {
 	lmu::CSGNodeTournamentSelector s(2, true);
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(300, 0.001, 300);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(1000, 0.001, 1000);
 	lmu::CSGNodeCreatorV2 c(0.5, 0.7, connectionGraph);
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
 	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.7, 0.7, true);
-	lmu::CSGNodeRankerV2 r(connectionGraph, 0.2, 0.01);
+	lmu::CSGNodeRankerV2 r(connectionGraph, 0.0, 0.01);
 	
 	auto res = ga.run(p, s, c, r, isc);
 

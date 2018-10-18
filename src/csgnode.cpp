@@ -482,19 +482,22 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
-
 			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
 
 			double d = distAndGrad[0] / epsilon;
-
+			
 			Eigen::Vector3d grad = distAndGrad.tail<3>();
-			double minusGradientDotN = lmu::clamp(/*-*/grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
-			double theta = std::acos(minusGradientDotN) / alpha;
+			grad.normalize();			
+			if (std::isnan(grad.norm()))
+			{	
+				continue;
+			}
+
+			double gradientDotN = lmu::clamp(grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
+						
+			double theta = std::acos(gradientDotN) / alpha;
 
 			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
-
-			//if (scoreDelta < 0)
-			//	std::cout << "Theta: " << theta << " minusGradientDotN: " << minusGradientDotN << std::endl;
 
 			score += scoreDelta;
 		}

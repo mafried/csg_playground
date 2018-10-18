@@ -16,15 +16,43 @@ lmu::CSGNodeRanker::CSGNodeRanker(double lambda, const std::vector<std::shared_p
 	_lambda(lambda),
 	_functions(functions),
 	_earlyOutTest(!connectionGraph.structure.m_vertices.empty()),
-	_connectionGraph(connectionGraph)
+	_connectionGraph(connectionGraph),
+	_epsilonScale(computeEpsilonScale())
 {
+}
+
+double lmu::CSGNodeRanker::computeEpsilonScale()
+{
+	const double minVal = -std::numeric_limits<double>::max(); 
+	const double maxVal = std::numeric_limits<double>::max();
+	
+	Eigen::Vector3d min(maxVal, maxVal, maxVal);
+	Eigen::Vector3d max(minVal, minVal, minVal);
+
+	for (const auto& f : _functions)
+	{
+		auto curMin = f->points().colwise().minCoeff();
+		auto curMax = f->points().colwise().maxCoeff();
+
+		min.x() = curMin.x() < min.x() ? curMin.x() : min.x(); 
+		min.y() = curMin.y() < min.y() ? curMin.y() : min.y();
+		min.z() = curMin.z() < min.z() ? curMin.z() : min.z();
+
+		max.x() = curMax.x() > max.x() ? curMax.x() : max.x();
+		max.y() = curMax.y() > max.y() ? curMax.y() : max.y();
+		max.z() = curMax.z() > max.z() ? curMax.z() : max.z();
+	}
+
+	return (max - min).norm();
 }
 
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {
 	const double alpha = M_PI / 18.0;
-	const double epsilon = 0.01;
-		
+	const double epsilon = 0.01 * _epsilonScale;
+	
+	//std::cout << "EPSILON: " << epsilon << std::endl;
+	
 	double geometryScore = computeGeometryScore(node, epsilon, alpha, _functions);
 
 	double score = geometryScore - _lambda * numNodes(node);
@@ -135,11 +163,6 @@ CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 	static std::uniform_real_distribution<double> dur(-0.1, 0.1);
 	using parmur_t = decltype(dur)::param_type;
 	
-	//Node mutation probability 
-	//auto rate = node.attribute<double>("mutationRate");
-	//if (d(_rndEngine, parm_t{ 1.0 - rate }))
-	//	return node;
-
 	//_createNewRandomProb (my_0) 
 	if (d(_rndEngine, parm_t{ _createNewRandomProb }))
 		return create(_maxTreeDepth);
@@ -150,18 +173,9 @@ CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 
 	auto newNode = node;
 
-	//auto delta = dur(_rndEngine);
-	//newNode.setAttribute("mutationRate", lmu::clamp(rate + delta, 0.0, 1.0));
-
 	CSGNode* subNode = nodePtrAt(newNode, nodeIdx);
-
-	//int nodeBudget = numNodes(*subNode);
-
-	int maxSubtreeDepth = _maxTreeDepth - depthAt(newNode, nodeIdx);
-
-	*subNode = create(maxSubtreeDepth);
-
-	//std::cout << "    old node depth: " << depth(node) << " new tree depth: " << depth(newNode) << " subtree depth: " << depth(subNode) << " max subtree depth: " << maxSubtreeDepth << std::endl;
+	
+	create(*subNode, _maxTreeDepth, 0);
 
 	return newNode;
 }
@@ -184,22 +198,12 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::crossover(const lmu::CSGNode& nod
 
 	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
 	CSGNode* subNode2 = nodePtrAt(newNode2, nodeIdx2);
-	
-	//CSGNode tmp = subNode1->clone();
-	//*subNode1 = *subNode2;
-	//*subNode2 = *tmp;
+
 	std::swap(*subNode1, *subNode2);
-
-	//std::cout << "    1: old tree depth: " << tree1.depth() << " new tree depth: " << newTree1.depth() << " Max: " << _maxTreeDepth << std::endl;
-	//std::cout << "    2: old tree depth: " << tree2.depth() << " new tree depth: " << newTree2.depth() << " Max: " << _maxTreeDepth << std::endl;
-
+	
 	return std::vector<lmu::CSGNode>
 	{
-		//newTree1.depth() <= _maxTreeDepth ? newTree1 : tree1,
-		//newTree2.depth() <= _maxTreeDepth ? newTree2 : tree2
-
-		depth(newNode1) <= _maxTreeDepth ? newNode1 : node1,
-		depth(newNode2) <= _maxTreeDepth ? newNode2 : node2
+		newNode1, newNode2
 	};
 }
 
@@ -210,33 +214,9 @@ lmu::CSGNode lmu::CSGNodeCreator::create() const
 
 lmu::CSGNode lmu::CSGNodeCreator::create(int maxDepth) const
 {
-	static std::bernoulli_distribution db{};
-	using parmb_t = decltype(db)::param_type;
-
-	static std::uniform_int_distribution<> du{};
-	using parmu_t = decltype(du)::param_type;
-
-	static std::uniform_real_distribution<double> dur(0, 1);
-	using parmur_t = decltype(dur)::param_type;
-
-	if (maxDepth == 0)
-	{
-		int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) });
-
-		auto node = geometry(_functions[funcIdx]);
-	
-		return node;
-	}
-	else
-	{
-		int op = du(_rndEngine, parmu_t{ 1, 3 }); //0 is OperationType::Unknown, 6 is OperationType::Invalid.
-
-		auto node = createOperation(static_cast<CSGNodeOperationType>(op));
-	
-		create(node, maxDepth, 1);
-
-		return node;
-	}
+	auto node = CSGNode::invalidNode;
+	create(node, maxDepth, 0);
+	return node;
 }
 
 void lmu::CSGNodeCreator::create(lmu::CSGNode& node, int maxDepth, int curDepth) const
@@ -251,40 +231,34 @@ void lmu::CSGNodeCreator::create(lmu::CSGNode& node, int maxDepth, int curDepth)
 	using parmur_t = decltype(dur)::param_type;
 
 	if (curDepth >= maxDepth)
+	{		
+		int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) });
+		node = geometry(_functions[funcIdx]);				
+	}
+	else
 	{
-		if (node.type() == CSGNodeType::Operation)
+		if (db(_rndEngine, parmb_t{ _subtreeProb }))
+		{
+			std::discrete_distribution<> d({ 1, 1, 1 });
+			int op = d(_rndEngine) + 1; //0 is OperationType::Unknown, 6 is OperationType::Invalid.
+
+			node = createOperation(static_cast<CSGNodeOperationType>(op));
+
+			auto numAllowedChilds = node.numAllowedChilds();
+			int numChilds = clamp(std::get<1>(numAllowedChilds), std::get<0>(numAllowedChilds), 2); //2 is the maximum number of childs allowed for create
+
+			for (int i = 0; i < numChilds; ++i)
+			{
+				auto child = CSGNode::invalidNode;
+				create(child, maxDepth, curDepth + 1);
+				node.addChild(child);
+			}
+		}
+		else 
 		{
 			int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) });
 			node = geometry(_functions[funcIdx]);
 		}
-
-		return;
-	}
-
-	auto numAllowedChilds = node.numAllowedChilds();
-	int numChilds = clamp(std::get<1>(numAllowedChilds), std::get<0>(numAllowedChilds), 2); //2 is the maximum number of childs allowed for create
-
-	for (int i = 0; i < numChilds; ++i)
-	{
-		lmu::CSGNode child(nullptr);
-
-		if (db(_rndEngine, parmb_t{ _subtreeProb }))
-		{
-			int op = du(_rndEngine, parmu_t{ 1, 3 }); //0 is OperationType::Unknown, 5 is OperationType::Complement, 6 is OperationType::Invalid.
-
-			child = createOperation(static_cast<CSGNodeOperationType>(op));
-
-			create(child, maxDepth, curDepth + 1);
-		}
-		else
-		{
-			//Get random function index.
-			int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) }); 																								 
-
-			child = geometry(_functions[funcIdx]);
-		}
-
-		node.addChild(child);
 	}
 }
 
@@ -362,7 +336,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		return lmu::geometry(shapes[0]);
 
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters p(150, 2, 0.7, 0.3, inParallel,
+	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.4, inParallel,
 		[](const auto& p)
 	{
 		/*double rate = 0.0;
@@ -381,6 +355,8 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	int maxDepth = (int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph.structure) > 0 ? boost::num_edges(connectionGraph.structure) : binom(shapes.size(), 2)) * M_PI));
 	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
+
+	maxDepth = 10;
 
 	lmu::CSGNodeCreator c(shapes, 0.5, 0.7, maxDepth, connectionGraph);
 

@@ -51,10 +51,14 @@ namespace lmu
 		bool treeIsInvalid(const lmu::CSGNode& node) const;
 
 	private:
+
+		double computeEpsilonScale();
+
 		double _lambda;
 		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
 		bool _earlyOutTest;
 		lmu::Graph _connectionGraph;
+		double _epsilonScale;
 	};
 
 	using MappingFunction = std::function<double(double)>;
