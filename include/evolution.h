@@ -21,6 +21,64 @@
 
 namespace lmu
 {
+	enum class ScheduleType
+	{
+		LOG,
+		EXP,
+		IDENTITY
+	};
+
+	struct Schedule
+	{
+		Schedule() : type(ScheduleType::IDENTITY)
+		{
+		}
+
+		Schedule(ScheduleType type) : 
+			type(type)
+		{
+		}
+
+		ScheduleType type; 
+		
+		//ignore for now.
+		//double lam; 
+		//int limit;
+
+		double getFactor(int iteration) const
+		{
+			switch (type)
+			{
+			case ScheduleType::LOG:
+				return logSchedule(iteration);
+			case ScheduleType::EXP:
+				return expSchedule(iteration);
+			case ScheduleType::IDENTITY:
+				return identitySchedule(iteration);
+			}
+		}
+
+		// schedules
+		static double expSchedule(int t, double lam = 0.005, int limit = 100000)
+		{
+			if (t >= limit) return 0.0;
+
+			return std::exp(-lam*t);
+		}
+
+		static double logSchedule(int t, double lam = 1.0, int limit = 100000)
+		{
+			if (t >= limit) return 0.0;
+
+			return std::log(2.0) / std::log(lam*t + 1);
+		}
+
+		static double identitySchedule(int t, double lam = 1.0, int limit = 100000)
+		{
+			return 1.0;
+		}
+	};
+
 	template<typename Creature>
 	struct RankedCreature
 	{
@@ -189,13 +247,15 @@ namespace lmu
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, 
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, const Schedule& crossoverSchedule, const Schedule& mutationSchedule,
 				const std::function<void(const std::vector<RankedCreature>&)>& popInsp = [](const std::vector<RankedCreature>&) {return; }) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
 				crossoverRate(crossoverRate),
 				rankingInParallel(rankingInParallel),
+				crossoverSchedule(crossoverSchedule),
+				mutationSchedule(mutationSchedule),
 				populationInspector(popInsp)
 			{
 			}
@@ -216,6 +276,8 @@ namespace lmu
 			double mutationRate;
 			double crossoverRate;
 			bool rankingInParallel;
+			Schedule crossoverSchedule;
+			Schedule mutationSchedule;
 
 			std::function<void(const std::vector<RankedCreature>&)> populationInspector;
 
@@ -403,8 +465,8 @@ namespace lmu
 
 				// Update the cross-over rate and mutation rate based on 
 				// some annealing schedule
-				crossoverRate = params.crossoverRate * identitySchedule(iterationCount);
-				mutationRate = params.mutationRate * identitySchedule(iterationCount);
+				crossoverRate = params.crossoverRate * params.crossoverSchedule.getFactor(iterationCount);
+				mutationRate = params.mutationRate * params.mutationSchedule.getFactor(iterationCount);
 			}
 
 			stats.totalDuration.tick();
@@ -413,27 +475,7 @@ namespace lmu
 		}
 
 	private:
-	  // schedules
-	  static double expSchedule(int t, double lam=0.005, int limit=100000)
-	  {
-	    if (t >= limit) return 0.0;
-
-	    return std::exp(-lam*t);
-	  }
-
-	  static double logSchedule(int t, double lam=1.0, int limit=100000)
-	  {
-	    if (t >= limit) return 0.0;
-	    
-	    return std::log(2.0)/std::log(lam*t + 1);
-	  }
-
-	  static double identitySchedule(int t, double lam = 1.0, int limit = 100000)
-	  {
-		  return 1.0;
-	  }
-
-
+	 
 		RankedCreature mutate(const RankedCreature& creature, double mutationRate, const CreatureCreator& creator, Statistics& stats) const
 		{
 			stats.numMutationTries++;

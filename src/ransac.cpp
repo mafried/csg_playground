@@ -332,8 +332,8 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 
 			Eigen::Vector3d g = curFunc->signedDistanceAndGradient(p).bottomRows(3);
 
-			if (std::abs(n.dot(g)) < 0.9)
-			  continue; 
+			//if (std::abs(n.dot(g)) < 0.5)
+			//  continue; 
 			//if (n.dot(g) <= 0.0)
 			//	continue;
 

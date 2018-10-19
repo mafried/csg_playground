@@ -173,7 +173,7 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 	return mutatedNode;
 }
 
-/*std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
@@ -199,9 +199,9 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 	{
 		newNode1, newNode2
 	};
-}*/
+}
 
-std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+/*std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
@@ -239,7 +239,7 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1,
 		*subNode1 = *subNode2;
 	
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
-}
+}*/
 
 lmu::CSGNode lmu::CSGNodeCreatorV2::create() const
 {
@@ -327,12 +327,12 @@ std::string lmu::CSGNodeCreatorV2::info() const
 lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel, const std::string& statsFile)
 {
 	lmu::CSGNodeTournamentSelector s(2, true);
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(1000, 0.001, 1000);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(100, 0.001, 100);
 	lmu::CSGNodeCreatorV2 c(0.5, 0.7, connectionGraph);
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
-	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.7, 0.7, true);
+	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.7, 0.7, true, Schedule(), Schedule());
 	lmu::CSGNodeRankerV2 r(connectionGraph, 0.0, 0.01);
 	
 	auto res = ga.run(p, s, c, r, isc);

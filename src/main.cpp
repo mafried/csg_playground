@@ -489,12 +489,25 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 
     auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
 
+	
 	std::vector<ImplicitFunctionPtr> shapes; 
 	for (const auto& geoNode : allGeometryNodePtrs(node))
 	{
 		shapes.push_back(geoNode->function());
-		std::cout << "Shape: " << geoNode->function()->name() << std::endl;
 	}
+	lmu::ransacWithSimMultiplePointOwners(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance * 5 , shapes);
+
+	int totalNumPoints = 0;
+	for (const auto& geoNode : allGeometryNodePtrs(node))
+	{
+		int curNumPts = geoNode->function()->pointsCRef().rows();
+		totalNumPoints += curNumPts;
+
+		std::cout << "Shape: " << geoNode->function()->name() << " Points: " << curNumPts << std::endl;
+	}
+	std::cout << "NUM POINTS: " << totalNumPoints << std::endl;
+	std::cout << "Point-cloud size: " << pointCloud.rows() << std::endl;
+
 	auto dims = lmu::computeDimensions(node);
 
 	auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), samplingStepSize);
@@ -504,7 +517,6 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	lmu::writeConnectionGraph("connectionGraph.dot", graph);
 	//lmu::writeConnectionGraph("connectionGraph2.dot", graph2);
 
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
 	
 	//pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
 

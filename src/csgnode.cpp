@@ -470,14 +470,16 @@ void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node
 }*/
 
 double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
-{
-	//std::cout << "Compute Geometry Score" << std::endl;
+{	
+	int num = 0; 
 
 	double score = 0.0;
 	for (const auto& func : funcs)
 	{
 		for (int i = 0; i < func->points().rows(); ++i)
 		{
+			num++;
+
 			auto row = func->points().row(i);
 
 			Eigen::Vector3d p = row.head<3>();
@@ -502,6 +504,9 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 			score += scoreDelta;
 		}
 	}
+
+	//std::cout << "Num points: " << num << std::endl;
+
 
 	//std::cout << "ScoreGeo: " << score << std::endl;
 
@@ -1291,8 +1296,6 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 	Eigen::MatrixXd res(samplingPoints.size(), 6);
 	for (int i = 0; i < samplingPoints.size(); ++i)
 		res.row(i) = samplingPoints[i].row(0);
-
-	std::cout << "Point-cloud size: " << samplingPoints.size() << std::endl;
 
 	return res;
 }

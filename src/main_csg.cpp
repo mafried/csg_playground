@@ -95,6 +95,18 @@ int main(int argc, char *argv[])
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
   lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
+  //lmu::ransacWithSimMultiplePointOwners(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance * 5, shapes);
+
+  int totalNumPoints = 0;
+  for (const auto& shape : shapes)
+  {
+	  int curNumPts = shape->pointsCRef().rows();
+	  totalNumPoints += curNumPts;
+
+	  std::cout << "Shape: " << shape->name() << " Points: " << curNumPts << std::endl;
+  }
+  std::cout << "Points in primitives: " << totalNumPoints << std::endl;
+  std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
 	
   //pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
   //shapes.clear();
@@ -129,8 +141,8 @@ int main(int argc, char *argv[])
       res = createCSGNodeWithGA(shapes, true);
       optimizeCSGNodeStructure(res);
 	} else if (recoveryType == "ga2") {
-	  res = createCSGNodeWithGAV2(graph);
-	  optimizeCSGNodeStructure(res);
+	  res = createCSGNodeWithGAV2(graph, true);
+	  //optimizeCSGNodeStructure(res); Some issues here
     } else {
       std::cerr << "Invalid recovery type" << std::endl;
       usage(argv[0]);

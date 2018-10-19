@@ -48,7 +48,7 @@ double lmu::CSGNodeRanker::computeEpsilonScale()
 
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {
-	const double alpha = M_PI / 18.0;
+	const double alpha = (M_PI / 180.0) * 35.0;
 	const double epsilon = 0.01 * _epsilonScale;
 	
 	//std::cout << "EPSILON: " << epsilon << std::endl;
@@ -58,7 +58,7 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 	double score = geometryScore - _lambda * numNodes(node);
 		
 	//std::cout << "lambda: " << _lambda << std::endl;
-	//std::cout << "geometry score: " << geometryScore << std::endl;
+	//std::cout << "### geometry score: " << geometryScore << std::endl;
 		
 		
 	return score;
@@ -336,7 +336,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		return lmu::geometry(shapes[0]);
 
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.4, inParallel,
+	lmu::CSGNodeGA::Parameters p(150, 2, 0.3, 0.4, inParallel, Schedule(), Schedule(),
 		[](const auto& p)
 	{
 		/*double rate = 0.0;
@@ -351,7 +351,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	lmu::CSGNodeTournamentSelector s(2, true);
 
 	//lmu::CSGNodeIterationStopCriterion isc(100); 
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(500, 0.01, 500);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(200, 0.01, 200);
 
 	int maxDepth = (int)(/*2.0**/ sqrt((double)(boost::num_edges(connectionGraph.structure) > 0 ? boost::num_edges(connectionGraph.structure) : binom(shapes.size(), 2)) * M_PI));
 	std::cout << "Num Shapes: " << shapes.size() << " MaxDepth: " << maxDepth << std::endl;
