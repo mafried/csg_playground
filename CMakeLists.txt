@@ -34,6 +34,9 @@ find_package(LIBIGL REQUIRED QUIET)
 include_directories(${PROJECT_SOURCE_DIR}/third_party/json/src) 
 include_directories(${PROJECT_SOURCE_DIR}/include/) 
 
+#INIH
+include_directories(${PROJECT_SOURCE_DIR}/third_party/inih) 
+
 #PCL
 #find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus keypoints)
 #include_directories(${PCL_INCLUDE_DIRS})
@@ -54,7 +57,7 @@ endif()
 FILE(GLOB_RECURSE CSG_LIB_HEADERS "include/*.h")
 message("Lib Headers: " ${CSG_LIB_HEADERS})
 
-FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp")
+FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp")
 message("Lib Sources: " ${CSG_LIB_SOURCES})
 
 if(MSVC)

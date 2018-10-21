@@ -162,7 +162,7 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 		int j = 0;
 		for (boost::tie(vi2, vi2_end) = boost::vertices(graph.structure); vi2 != vi2_end; ++vi2)
 		{
-			std::cout << overlaps[i][j] << " ";
+			//std::cout << overlaps[i][j] << " ";
 
 			if (i == j)
 				break;

@@ -547,7 +547,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 		lmu::writeConnectionGraph("p_" + std::to_string(i++), p);
 	}
 
-	double lambda = lmu::lambdaBasedOnPoints(shapes);
+	/*double lambda = lmu::lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 	lmu::CSGNodeRanker r(lambda, shapes, graph);
 	std::cout << "QUALITY NODE: " << r.rank(node) << std::endl;
@@ -559,10 +559,10 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	std::cout << "QUALITY NODE: " << r2.rank(node) << std::endl;
 	std::cout << "QUALITY NODE UNION: " << r2.rank(nodeUnion) << std::endl;
 
-	return 0;
+	return 0;*/
 
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
-	auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
+	//auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });
 	//auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
 
@@ -577,7 +577,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	auto res = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 	*/
 
-	lmu::writeNode(res, "tree.dot");
+	/*lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
@@ -634,7 +634,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	fs.close();
 	
 
-
+	*/
 
 	/*double lower_bound = 0;
 	double upper_bound = 1;
