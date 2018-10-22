@@ -975,11 +975,7 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 
 
 CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs)
-{	
-	//Ignore the primitive itself.
-	if (node.type() == CSGNodeType::Geometry)
-		return nullptr;
-
+{
 	auto nfs = lmu::allDistinctFunctions(node);
 	std::unordered_set<ImplicitFunctionPtr> nodeFuncs(nfs.begin(), nfs.end());
 	
@@ -987,21 +983,15 @@ CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std
 	{
 		if (nodeFuncs.count(func) == 0)
 			return nullptr;
-	}
-	
-	int foundNodeSize = std::numeric_limits<int>::max();
+	}	
 	CSGNode* foundNode = &node;
+
 	for (auto& child : node.childsRef())
 	{
 		auto childNode = findSmallestSubgraphWithImplicitFunctions(child, funcs);
 		if (childNode)
-		{
-			int childNodeSize = numNodes(*childNode);
-			if (childNodeSize < foundNodeSize)
-			{
-				foundNodeSize = childNodeSize;
-				foundNode = childNode;
-			}
+		{	
+			foundNode = childNode;			
 		}
 	}
 

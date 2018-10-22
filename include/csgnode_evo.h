@@ -41,13 +41,12 @@ namespace lmu
 
 	struct CSGNodeCreator
 	{
-		CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, int maxTreeDepth, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph = lmu::Graph());
+		CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, int maxTreeDepth, double initializeWithUnionOfAllFunctions, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph = lmu::Graph());
 
 		CSGNode mutate(const CSGNode& tree) const;
 		std::vector<CSGNode> crossover(const CSGNode& tree1, const CSGNode& tree2) const;
-		CSGNode create() const;
+		CSGNode create(bool unions = true) const;
 		CSGNode create(int maxDepth) const;
-
 		std::string info() const;
 
 	private:
@@ -56,12 +55,14 @@ namespace lmu
 		std::vector<CSGNode> sharedPrimitiveCrossover(const CSGNode& tree1, const CSGNode& tree2) const;
 
 		void create(CSGNode& node, int maxDepth, int curDepth) const;
+		void createUnionTree(CSGNode& node, std::vector<ImplicitFunctionPtr>& funcs) const;
 
 		int getRndFuncIndex(const std::vector<int>& usedFuncIndices) const;
 
 		double _createNewRandomProb;
 		double _subtreeProb;
 		double _simpleCrossoverProb;
+		double _initializeWithUnionOfAllFunctions;
 
 		int _maxTreeDepth;
 		std::vector<std::shared_ptr<ImplicitFunction>> _functions;

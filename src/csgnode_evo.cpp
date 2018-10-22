@@ -136,12 +136,13 @@ bool lmu::CSGNodeRanker::treeIsInvalid(const lmu::CSGNode& node) const
 	return treeIsInvalidRec(node, bf, _connectionGraph, funcToIdx);
 }
 
-CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, int maxTreeDepth, const lmu::CSGNodeRanker& ranker, const Graph& connectionGraph) :
+CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, int maxTreeDepth, double initializeWithUnionOfAllFunctions, const lmu::CSGNodeRanker& ranker, const Graph& connectionGraph) :
 	_functions(functions),
 	_createNewRandomProb(createNewRandomProb),
 	_subtreeProb(subtreeProb),
 	_simpleCrossoverProb(simpleCrossoverProb),
 	_maxTreeDepth(maxTreeDepth),
+	_initializeWithUnionOfAllFunctions(initializeWithUnionOfAllFunctions),
 	_ranker(ranker),
 	_connectionGraph(connectionGraph)
 {
@@ -181,17 +182,17 @@ CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 
 std::vector<lmu::CSGNode> lmu::CSGNodeCreator::crossover(const CSGNode& node1, const CSGNode& node2) const
 {
-	static std::bernoulli_distribution db{};
-	using parmb_t = decltype(db)::param_type;
+static std::bernoulli_distribution db{};
+using parmb_t = decltype(db)::param_type;
 
-	if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
-	{
-		return simpleCrossover(node1, node2);
-	}
-	else
-	{
-		return sharedPrimitiveCrossover(node1, node2);
-	}
+if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
+{
+	return simpleCrossover(node1, node2);
+}
+else
+{
+	return sharedPrimitiveCrossover(node1, node2);
+}
 }
 
 
@@ -233,19 +234,14 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
+
 	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(node1) - 1 });
 
-	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
-	auto subNode1Funcs = lmu::allDistinctFunctions(*subNode1);
-
-	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, subNode1Funcs);
+	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);	
+	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, lmu::allDistinctFunctions(*subNode1));
 
 	if (!subNode2)
 		return std::vector<lmu::CSGNode> {node1, node2};
-
-	auto subNode2Funcs = lmu::allDistinctFunctions(*subNode2);
-
-	auto funcs = subNode1Funcs.size() > subNode2Funcs.size() ? subNode1Funcs : subNode2Funcs;
 
 	double score1 = _ranker.rank(*subNode1);
 	double score2 = _ranker.rank(*subNode2);
@@ -253,6 +249,7 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 	std::cout << "CROSSOVER" << std::endl;
 	std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
 	std::cout << score1 << "     " << score2 << std::endl;
+	
 	if (score1 > score2)
 		*subNode2 = *subNode1;
 	else if (score1 < score2)
@@ -260,9 +257,56 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
 }
-lmu::CSGNode lmu::CSGNodeCreator::create() const
-{	
-	return create(_maxTreeDepth);
+lmu::CSGNode lmu::CSGNodeCreator::create(bool unions) const
+{
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
+	if (!unions || !db(_rndEngine, parmb_t{ _initializeWithUnionOfAllFunctions }))
+	{
+		return create(_maxTreeDepth);
+	}
+	else
+	{
+		auto node = opUnion();
+		auto funcs = _functions;//lmu::getImplicitFunctions(_connectionGraph);
+		createUnionTree(node, funcs);
+		return node;
+	}
+}
+
+void lmu::CSGNodeCreator::createUnionTree(CSGNode& node, std::vector<ImplicitFunctionPtr>& funcs) const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	if (funcs.size() == 0)
+	{
+		node = CSGNode::invalidNode;
+	}
+	else if (funcs.size() == 1)
+	{	
+		node = lmu::geometry(funcs[0]);
+		funcs.clear();
+	}
+	else
+	{
+		int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(funcs.size() - 1) });
+		node.addChild(lmu::geometry(funcs[funcIdx]));
+		
+		funcs.erase(funcs.begin() + funcIdx);
+
+		CSGNode child = opUnion();
+		createUnionTree(child, funcs);
+		if (child.isValid())
+		{
+			node.addChild(child);
+		}
+		else
+		{
+			node = node.childsCRef()[0];
+		}
+	}
 }
 
 lmu::CSGNode lmu::CSGNodeCreator::create(int maxDepth) const
@@ -391,6 +435,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	double mutation = p.getDouble("GA", "MutationRate", 0.3);
 	double crossover = p.getDouble("GA", "CrossoverRate", 0.4);
 	double simpleCrossoverProb = p.getDouble("GA", "SimpleCrossoverRate", 1.0);
+	bool initializeWithUnionOfAllFunctions = p.getBool("GA", "InitializeWithUnionOfAllFunctions", false);
 
 	int k = p.getInt("Selection", "TournamentK", 2);
 	
@@ -422,7 +467,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodeRanker r(lambda, epsilon, alpha, shapes, connectionGraph);
 
-	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, r, connectionGraph);
+	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 
 	auto task = ga.runAsync(params, s, c, r, isc);
 
