@@ -42,7 +42,7 @@ namespace lmu
 
 	struct CSGNodeCreatorV2
 	{
-		CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, const lmu::Graph& connectionGraph);
+		CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, const lmu::Graph& connectionGraph);
 
 		CSGNode mutate(const CSGNode& tree) const;
 		std::vector<CSGNode> crossover(const CSGNode& tree1, const CSGNode& tree2) const;
@@ -52,10 +52,14 @@ namespace lmu
 		std::string info() const;
 
 	private:
-		CSGNode create(IFBudget& budget) const;
+
+		std::vector<CSGNode> simpleCrossover(const CSGNode& tree1, const CSGNode& tree2) const;
+		std::vector<CSGNode> sharedPrimitiveCrossover(const CSGNode& tree1, const CSGNode& tree2) const;
+		void create(lmu::CSGNode & node, IFBudget & budget) const;
 		
 		double _createNewRandomProb;
 		double _subtreeProb;
+		double _simpleCrossoverProb;
 		lmu::Graph _connectionGraph;
 		IFBudget _ifBudget;
 
@@ -80,9 +84,9 @@ namespace lmu
 
 	using CSGNodeGAV2 = GeneticAlgorithm<CSGNode, CSGNodeCreatorV2, CSGNodeRankerV2, CSGNodeTournamentSelector, CSGNodeNoFitnessIncreaseStopCriterion>;
 
-	CSGNode createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel = false, const std::string& statsFile = std::string("stats.dat"));
+	CSGNode createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const lmu::ParameterSet& p);
 
-	lmu::CSGNode computeGAWithPartitionsV2(const std::vector<Graph>& partitions, bool inParallel, const std::string & statsFile);
+	lmu::CSGNode computeGAWithPartitionsV2(const std::vector<Graph>& partitions, const lmu::ParameterSet& p);
 }
 
 #endif

@@ -17,12 +17,14 @@
 //#include "tests.h"
 
 #include "csgnode_evo.h"
+#include "csgnode_evo_v2.h"
 #include "csgnode_helper.h"
 #include "evolution.h"
 #include "curvature.h"
 #include "dnf.h"
 #include "statistics.h"
 #include "constants.h"
+#include "params.h"
 
 
 using namespace lmu;
@@ -54,12 +56,12 @@ enum class CSGRecoveryType {
 
 static void usage(const char* pname) {
   std::cout << "Usage:" << std::endl;
-  std::cout << pname << " points.xyz shapes.prim samplingStepSize maxDistance"
+  std::cout << pname << " points.xyz shapes.prim params.ini"
 	    << " partitionType recoveryType outBasename" 
 	    << std::endl;
   std::cout << std::endl;
   std::cout << "Example: " << pname 
-	    << " model.xyz model.prim 0.03 0.01 none|pi|piWithPruning|ap ga|shapiro model" << std::endl;
+	    << " model.xyz model.prim params.ini none|pi|piWithPruning|ap ga|ga2|shapiro model" << std::endl;
 }
 
 
@@ -68,18 +70,18 @@ int main(int argc, char *argv[])
   using namespace Eigen;
   using namespace std;
 
-  if (argc != 8) {
+  if (argc != 7) {
     usage(argv[0]);
     return -1;
   }
 
-
-  Eigen::AngleAxisd rot90x(M_PI / 2.0, Vector3d(0.0, 0.0, 1.0));
-
   CSGNode node(nullptr);
 
-  double samplingStepSize = std::stod(argv[3]); // 0.03; 
-  double maxDistance = std::stod(argv[4]); // 0.01;
+  ParameterSet params(argv[3]);
+  params.print();
+  
+  double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.03);
+  double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.1);
 
   std::string pcName = argv[1]; // "model.xyz";
   auto pointCloud = lmu::readPointCloudXYZ(pcName, 1.0);
@@ -94,6 +96,18 @@ int main(int argc, char *argv[])
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
   lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
+  //lmu::ransacWithSimMultiplePointOwners(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance * 5, shapes);
+
+  int totalNumPoints = 0;
+  for (const auto& shape : shapes)
+  {
+	  int curNumPts = shape->pointsCRef().rows();
+	  totalNumPoints += curNumPts;
+
+	  std::cout << "Shape: " << shape->name() << " Points: " << curNumPts << std::endl;
+  }
+  std::cout << "Points in primitives: " << totalNumPoints << std::endl;
+  std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
 	
   //pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
   //shapes.clear();
@@ -106,11 +120,12 @@ int main(int argc, char *argv[])
 
   CSGNode res = op<Union>();
 
-  SampleParams p{ 0.001 };
+  double gradientStepSize = params.getDouble("Shapiro", "GradientStepSize", 0.001);
+  SampleParams p{ gradientStepSize };
 
 
-  std::string partitionType = argv[5];
-  std::string recoveryType = argv[6];
+  std::string partitionType = argv[4];
+  std::string recoveryType = argv[5];
 
   // Some comments:
   // * currently I am not using any parallelism options 
@@ -119,13 +134,17 @@ int main(int argc, char *argv[])
   // for the max-size computation for the trees.
   // * should we call optimizeCSGNodeStructure for each recoveryType? 
   
-  if (partitionType == "none") {
+  if (partitionType == "none") 
+  {
     if (recoveryType == "shapiro") {
-      auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), p);
+      auto dnf = lmu::computeShapiro(shapes, true, graph, p);
       res = lmu::DNFtoCSGNode(dnf);
     } else if (recoveryType == "ga") {
-      res = createCSGNodeWithGA(shapes);
+      res = createCSGNodeWithGA(shapes, params);
       optimizeCSGNodeStructure(res);
+	} else if (recoveryType == "ga2") {
+	  res = createCSGNodeWithGAV2(graph, params);
+	  //optimizeCSGNodeStructure(res); Some issues here
     } else {
       std::cerr << "Invalid recovery type" << std::endl;
       usage(argv[0]);
@@ -150,8 +169,11 @@ int main(int argc, char *argv[])
     if (recoveryType == "shapiro") {
       res = lmu::computeShapiroWithPartitions(partitions, p);
     } else if (recoveryType == "ga") {
-      res = lmu::computeGAWithPartitions(partitions);
-    } else {
+      res = lmu::computeGAWithPartitions(partitions, params);
+	} else if (recoveryType == "ga2") {
+		res = lmu::computeGAWithPartitionsV2(partitions, params);
+	}
+	else {
       std::cerr << "Invalid recovery type" << std::endl;
       usage(argv[0]);
       return -1;
@@ -159,7 +181,7 @@ int main(int argc, char *argv[])
   }
 
 
-  std::string outBasename = argv[7];
+  std::string outBasename = argv[6];
   lmu::writeNode(res, outBasename + "_tree.dot");
 
   auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));

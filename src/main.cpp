@@ -436,18 +436,78 @@ node = op<Union>(
 	
 });
 
+auto nodeUnion = op<Union>(
+{
+	op<Union>({
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)*rot90x), 0.2, 0.8, "Cylinder_2"),
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -1)*rot90x), 0.1, 1, "Cylinder_3")
+}),
+
+op<Union>(
+{
+	geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_2"),
+	geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_0")
+}),
+
+geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
+
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_0"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_1")
+}),
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_2"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_3")
+}),
+
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_4"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_5")
+}),
+op<Union>(
+{
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_6"),
+	geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_7")
+}),
+
+geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_3"),
+
+geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
+
+geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
+
+});
+
 	double samplingStepSize = 0.03; 
 	double maxDistance = 0.01;
 	double noiseSigma = 0.03;
 
     auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
 
+	
 	std::vector<ImplicitFunctionPtr> shapes; 
 	for (const auto& geoNode : allGeometryNodePtrs(node))
 	{
 		shapes.push_back(geoNode->function());
-		std::cout << "Shape: " << geoNode->function()->name() << std::endl;
 	}
+	lmu::ransacWithSimMultiplePointOwners(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance * 5 , shapes);
+
+	int totalNumPoints = 0;
+	for (const auto& geoNode : allGeometryNodePtrs(node))
+	{
+		int curNumPts = geoNode->function()->pointsCRef().rows();
+		totalNumPoints += curNumPts;
+
+		std::cout << "Shape: " << geoNode->function()->name() << " Points: " << curNumPts << std::endl;
+	}
+	std::cout << "NUM POINTS: " << totalNumPoints << std::endl;
+	std::cout << "Point-cloud size: " << pointCloud.rows() << std::endl;
+
 	auto dims = lmu::computeDimensions(node);
 
 	auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), samplingStepSize);
@@ -457,7 +517,6 @@ node = op<Union>(
 	lmu::writeConnectionGraph("connectionGraph.dot", graph);
 	//lmu::writeConnectionGraph("connectionGraph2.dot", graph2);
 
-	lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
 	
 	//pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
 
@@ -491,12 +550,19 @@ node = op<Union>(
 	/*double lambda = lmu::lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 	lmu::CSGNodeRanker r(lambda, shapes, graph);
-	std::cout << "QUALITY: " << r.rank(node) << std::endl;
-	*/
-	lmu::CSGNodeRankerV2 r(graph, 0.0, 0.01);
-	std::cout << "RANK: " << r.rank(node) << std::endl;
+	std::cout << "QUALITY NODE: " << r.rank(node) << std::endl;
+	std::cout << "QUALITY NODE UNION: " << r.rank(nodeUnion) << std::endl;
+
+	lmu::CSGNodeRankerV2 r2(graph, 0.0, 0.01);
+	std::cout << "V2" << std::endl;
+
+	std::cout << "QUALITY NODE: " << r2.rank(node) << std::endl;
+	std::cout << "QUALITY NODE UNION: " << r2.rank(nodeUnion) << std::endl;
+
+	return 0;*/
+
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 }); //lmu::createCSGNodeWithGAV2(graph);
-	auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
+	//auto res = computeGAWithPartitionsV2(/*partitions*/{ graph }, false, "stats.dat");
 	//auto res = lmu::computeShapiroWithPartitions(partitions, { 0.001 });
 	//auto res = computeGAWithPartitions(/*partitions*/{graph}, false, "stats.dat");
 
@@ -511,7 +577,7 @@ node = op<Union>(
 	auto res = mergeCSGNodeCliqueSimple(cliquesAndNodes);
 	*/
 
-	lmu::writeNode(res, "tree.dot");
+	/*lmu::writeNode(res, "tree.dot");
 
 	auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
 
@@ -568,7 +634,7 @@ node = op<Union>(
 	fs.close();
 	
 
-
+	*/
 
 	/*double lower_bound = 0;
 	double upper_bound = 1;

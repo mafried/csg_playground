@@ -80,9 +80,10 @@ double lmu::CSGNodeRankerV2::computeGeometryScore(const CSGNode & node, const st
 	return numCorrectSamples / numConsideredSamples;
 }
 
-lmu::CSGNodeCreatorV2::CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, const lmu::Graph& graph) : 
+lmu::CSGNodeCreatorV2::CSGNodeCreatorV2(double createNewRandomProb, double subtreeProb, double simpleCrossoverProb, const lmu::Graph& graph) :
 	_createNewRandomProb(createNewRandomProb),
 	_subtreeProb(subtreeProb),
+	_simpleCrossoverProb(simpleCrossoverProb),
 	_ifBudget(IFBudget(graph)),
 	_rndEngine(lmu::rndEngine())
 {
@@ -142,28 +143,24 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	CSGNode mutatedNode = CSGNode::invalidNode;
-
 	//_createNewRandomProb (my_0) 
 	if (d(_rndEngine, parm_t{ _createNewRandomProb }))
 	{
-		mutatedNode = create();	
+		return create();	
 	}
 	else
 	{
-		int nodeIdx = du(_rndEngine, parmu_t{ 0, numNodes(node) - 1 });
-
 		auto mutatedNode = node;
 
+		int nodeIdx = du(_rndEngine, parmu_t{ 0, numNodes(mutatedNode) - 1 });
+			
 		CSGNode* subNode = nodePtrAt(mutatedNode, nodeIdx);
-				
-		*subNode = createOperation(CSGNodeOperationType::Identity);
-				
+		
 		if (d(_rndEngine, parm_t{ 1.0 }))
 		{
-		  IFBudget ifbud(mutatedNode, _ifBudget);
-		  //*subNode = create(IFBudget(mutatedNode, _ifBudget));
-		  *subNode = create(ifbud);
+		    //IFBudget ifbud(mutatedNode, _ifBudget);
+		    //create(*subNode, ifbud);
+		    create(*subNode, IFBudget(mutatedNode, _ifBudget));
 		}
 		else 		
 		{
@@ -171,12 +168,28 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 		  //replaceIFs(ifbud, *subNode);
 		  *subNode = createWithShapiro(ifbud, _rndEngine);
 		}
-	}
 
-	return mutatedNode;
+		return mutatedNode;
+	}
 }
 
-/*std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+{
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
+	if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
+	{
+		return simpleCrossover(node1, node2);
+	}
+	else
+	{
+		return sharedPrimitiveCrossover(node1, node2);
+	}
+}
+
+
+std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::simpleCrossover(const CSGNode & node1, const CSGNode & node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
@@ -202,28 +215,28 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 	{
 		newNode1, newNode2
 	};
-}*/
+}
 
-std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1, const CSGNode& node2) const
+std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::sharedPrimitiveCrossover(const CSGNode& node1, const CSGNode& node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
 
 	lmu::CSGNodeRankerV2 r(_connectionGraph, 0.1, 0.01);
-	
+
 	auto newNode1 = node1;
 	auto newNode2 = node2;
 
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(node1) - 1 });
-	
+
 	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
 	auto subNode1Funcs = lmu::allDistinctFunctions(*subNode1);
-	
+
 	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, subNode1Funcs);
-	
-	if(!subNode2)
+
+	if (!subNode2)
 		return std::vector<lmu::CSGNode> {node1, node2};
 
 	auto subNode2Funcs = lmu::allDistinctFunctions(*subNode2);
@@ -240,15 +253,16 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::crossover(const CSGNode& node1,
 		*subNode2 = *subNode1;
 	else if (score1 < score2)
 		*subNode1 = *subNode2;
-	
+
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
 }
 
 lmu::CSGNode lmu::CSGNodeCreatorV2::create() const
 {
 	auto budget = _ifBudget;
-
-	return create(budget);
+	auto node = CSGNode::invalidNode;
+	create(node, budget);
+	return node;
 }
 
 void lmu::CSGNodeCreatorV2::replaceIFs(IFBudget& budget, CSGNode& node) const
@@ -265,61 +279,45 @@ void lmu::CSGNodeCreatorV2::replaceIFs(IFBudget& budget, CSGNode& node) const
 	}
 }
 
-lmu::CSGNode lmu::CSGNodeCreatorV2::create(IFBudget& budget) const
+void lmu::CSGNodeCreatorV2::create(lmu::CSGNode& node, IFBudget& budget) const
 {
-	static std::uniform_int_distribution<> du{};
-	using parmu_t = decltype(du)::param_type;
-
 	static std::bernoulli_distribution db{};
 	using parmb_t = decltype(db)::param_type;
 
-	// Check for cases that don't need an operation.
-	// Note: It would be possible to choose a complement operation with a budget of only 1 func left. 
-	//       But since we currently do not support complement in this method, we do not consider that case.
-	//       In addition, union and intersection could also deal with only 1 operand, but its pointless.
-	//switch (budget.numFuncs())
-	//{
-	//case 0:
-	//	return CSGNode::invalidNode;
-	//case 1:
-	//	return geometry(budget.useFirstIF());
-	//}
-	
-	// Create operation node.
-	// 0 is OperationType::Unknown, 4 is OperationType::Complement, 5 is OperationType::Invalid.
-	auto node = createOperation(static_cast<CSGNodeOperationType>(du(_rndEngine, parmu_t{1, 3})));
-		
-	// Create operands
-	auto numAllowedChilds = node.numAllowedChilds();
-	int minChilds = 2;// std::get<0>(numAllowedChilds);
-	int maxChilds = std::get<1>(numAllowedChilds);
-	int numChilds = clamp(2, minChilds, maxChilds); //2 is the maximum number of childs allowed.
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
 
-	if (minChilds > budget.numFuncs())
+	static std::uniform_real_distribution<double> dur(0, 1);
+	using parmur_t = decltype(dur)::param_type;
+
+	if (budget.numFuncs() == 0)
 	{
-		return geometry(budget.getRandomIF(false));
+		node = geometry(budget.getRandomIF(false));
 	}
-	
-	for (int i = 0; i < numChilds; i++)
+	else
 	{
-		//In case budget is exhausted and enough childs are already available, stop child creation.
-		if (budget.numFuncs() <= 0 && i > minChilds - 1) 
-			break;		
-
 		if (db(_rndEngine, parmb_t{ _subtreeProb }))
 		{
-			auto child = create(budget);			
-			node.addChild(child);
-						
+			std::discrete_distribution<> d({ 1, 1, 1 });
+			int op = d(_rndEngine) + 1; //0 is OperationType::Unknown, 6 is OperationType::Invalid.
+
+			node = createOperation(static_cast<CSGNodeOperationType>(op));
+
+			auto numAllowedChilds = node.numAllowedChilds();
+			int numChilds = clamp(std::get<1>(numAllowedChilds), std::get<0>(numAllowedChilds), 2); //2 is the maximum number of childs allowed for create
+
+			for (int i = 0; i < numChilds; ++i)
+			{
+				auto child = CSGNode::invalidNode;
+				create(child, budget);
+				node.addChild(child);
+			}
 		}
 		else
 		{
-			auto func = budget.getRandomIF(false);
-			node.addChild(geometry(func));
+			node = geometry(budget.getRandomIF(false));
 		}
 	}
-
-	return node;
 }
 
 std::string lmu::CSGNodeCreatorV2::info() const
@@ -327,18 +325,40 @@ std::string lmu::CSGNodeCreatorV2::info() const
 	return std::string();
 }
 
-lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, bool inParallel, const std::string& statsFile)
+lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const lmu::ParameterSet& p)
 {
-	lmu::CSGNodeTournamentSelector s(2, true);
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(300, 0.001, 300);
-	lmu::CSGNodeCreatorV2 c(0.5, 0.7, connectionGraph);
+	bool inParallel = p.getBool("GA", "InParallel", false);
+	int popSize = p.getInt("GA", "PopulationSize", 150);
+	int numBestParents = p.getInt("GA", "NumBestParents", 2);
+	double mutation = p.getDouble("GA", "MutationRate", 0.3);
+	double crossover = p.getDouble("GA", "CrossoverRate", 0.4);
+	double simpleCrossoverProb = p.getDouble("GA", "SimpleCrossoverRate", 0.4);
+
+	int k = p.getInt("Selection", "TournamentK", 2);
+
+	int maxIter = p.getInt("StopCriterion", "MaxIterations", 500);
+	int maxIterWithoutChange = p.getInt("StopCriterion", "MaxIterationsWithoutChange", 200);
+	double changeDelta = p.getDouble("StopCriterion", "ChangeDelta", 0.01);
+
+	std::string statsFile = p.getStr("Statistics", "File", "stats.dat");
+
+	double createNewRandomProb = p.getDouble("Creation", "CreateNewRandomProb", 0.5);
+	double subtreeProb = p.getDouble("Creation", "SubtreeProb", 0.7);
+
+	double sizeWeight = p.getDouble("Ranking", "SizeWeight", 0.1);
+	double gradientStepSize = p.getDouble("Ranking", "GradientStepSize", 0.01);
+	
+	lmu::CSGNodeTournamentSelector s(k, true);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(maxIterWithoutChange, changeDelta, maxIter);
+	lmu::CSGNodeCreatorV2 c(createNewRandomProb, subtreeProb, simpleCrossoverProb, connectionGraph);
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
-	lmu::CSGNodeGAV2::Parameters p(150, 2, 0.7, 0.7, true);
-	lmu::CSGNodeRankerV2 r(connectionGraph, 0.2, 0.01);
+	lmu::CSGNodeGAV2::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule());
+
+	lmu::CSGNodeRankerV2 r(connectionGraph, sizeWeight, gradientStepSize);
 	
-	auto res = ga.run(p, s, c, r, isc);
+	auto res = ga.run(params, s, c, r, isc);
 
 	res.statistics.save(statsFile, &res.population[0].creature);
 	return res.population[0].creature;
@@ -498,7 +518,7 @@ std::ostream& lmu::operator<<(std::ostream& os, const IFBudgetPerIF& b)
 }
 
 lmu::CSGNode lmu::computeGAWithPartitionsV2(const std::vector<Graph>& partitions,
-	bool inParallel, const std::string& statsFile)
+	const lmu::ParameterSet& params)
 {
 	lmu::CSGNode res = lmu::op<Union>();
 
@@ -508,7 +528,7 @@ lmu::CSGNode lmu::computeGAWithPartitionsV2(const std::vector<Graph>& partitions
 
 	for (const auto& p : partitions)
 	{			
-		lmu::CSGNode ga = lmu::createCSGNodeWithGAV2(p, inParallel, statsFile);
+		lmu::CSGNode ga = lmu::createCSGNodeWithGAV2(p, params);
 
 		if (partitions.size() == 1)
 			return ga;

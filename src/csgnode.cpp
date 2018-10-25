@@ -470,35 +470,43 @@ void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node
 }*/
 
 double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
-{
-	//std::cout << "Compute Geometry Score" << std::endl;
+{	
+	int num = 0; 
 
 	double score = 0.0;
 	for (const auto& func : funcs)
 	{
 		for (int i = 0; i < func->points().rows(); ++i)
 		{
+			num++;
+
 			auto row = func->points().row(i);
 
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
-
 			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
 
 			double d = distAndGrad[0] / epsilon;
-
+			
 			Eigen::Vector3d grad = distAndGrad.tail<3>();
-			double minusGradientDotN = lmu::clamp(/*-*/grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
-			double theta = std::acos(minusGradientDotN) / alpha;
+			grad.normalize();			
+			if (std::isnan(grad.norm()))
+			{	
+				continue;
+			}
+
+			double gradientDotN = lmu::clamp(grad.dot(n), -1.0, 1.0); //clamp is necessary, acos is only defined in [-1,1].
+						
+			double theta = std::acos(gradientDotN) / alpha;
 
 			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
-
-			//if (scoreDelta < 0)
-			//	std::cout << "Theta: " << theta << " minusGradientDotN: " << minusGradientDotN << std::endl;
 
 			score += scoreDelta;
 		}
 	}
+
+	//std::cout << "Num points: " << num << std::endl;
+
 
 	//std::cout << "ScoreGeo: " << score << std::endl;
 
@@ -967,11 +975,7 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 
 
 CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs)
-{	
-	//Ignore the primitive itself.
-	if (node.type() == CSGNodeType::Geometry)
-		return nullptr;
-
+{
 	auto nfs = lmu::allDistinctFunctions(node);
 	std::unordered_set<ImplicitFunctionPtr> nodeFuncs(nfs.begin(), nfs.end());
 	
@@ -979,21 +983,15 @@ CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std
 	{
 		if (nodeFuncs.count(func) == 0)
 			return nullptr;
-	}
-	
-	int foundNodeSize = std::numeric_limits<int>::max();
+	}	
 	CSGNode* foundNode = &node;
+
 	for (auto& child : node.childsRef())
 	{
 		auto childNode = findSmallestSubgraphWithImplicitFunctions(child, funcs);
 		if (childNode)
-		{
-			int childNodeSize = numNodes(*childNode);
-			if (childNodeSize < foundNodeSize)
-			{
-				foundNodeSize = childNodeSize;
-				foundNode = childNode;
-			}
+		{	
+			foundNode = childNode;			
 		}
 	}
 
@@ -1288,8 +1286,6 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 	Eigen::MatrixXd res(samplingPoints.size(), 6);
 	for (int i = 0; i < samplingPoints.size(); ++i)
 		res.row(i) = samplingPoints[i].row(0);
-
-	std::cout << "Point-cloud size: " << samplingPoints.size() << std::endl;
 
 	return res;
 }
