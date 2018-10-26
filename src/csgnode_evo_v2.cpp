@@ -158,9 +158,9 @@ lmu::CSGNode lmu::CSGNodeCreatorV2::mutate(const CSGNode& node) const
 		
 		if (d(_rndEngine, parm_t{ 1.0 }))
 		{
-		    //IFBudget ifbud(mutatedNode, _ifBudget);
-		    //create(*subNode, ifbud);
-		    create(*subNode, IFBudget(mutatedNode, _ifBudget));
+		    IFBudget ifbud(mutatedNode, _ifBudget);
+		    create(*subNode, ifbud);
+		    //create(*subNode, IFBudget(mutatedNode, _ifBudget));
 		}
 		else 		
 		{
