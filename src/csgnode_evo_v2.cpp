@@ -355,7 +355,7 @@ lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const
 
 	lmu::CSGNodeRankerV2 r(connectionGraph, sizeWeight, gradientStepSize);
 	
-	auto res = ga.run(params, s, c, r, isc);
+	auto res = ga.run(params, s, c, r, isc, lmu::EmptyPopulationManipulator<RankedCreature<CSGNode>>());
 
 	res.statistics.save(statsFile, &res.population[0].creature);
 	return res.population[0].creature;

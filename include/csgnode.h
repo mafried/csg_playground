@@ -252,7 +252,8 @@ namespace lmu
 	std::vector<ImplicitFunctionPtr> allDistinctFunctions(const CSGNode& node);
 
 	void visit(const CSGNode& node, const std::function<void(const CSGNode& node)>& f);
-	
+	void visit(CSGNode& node, const std::function<void(CSGNode& node)>& f);
+
 	class CSGNode : public ICSGNode 
 	{
 	public:

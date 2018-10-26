@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
       auto dnf = lmu::computeShapiro(shapes, true, graph, p);
       res = lmu::DNFtoCSGNode(dnf);
     } else if (recoveryType == "ga") {
-      res = createCSGNodeWithGA(shapes, params);
+      res = createCSGNodeWithGA(shapes, params, graph);
       optimizeCSGNodeStructure(res);
 	} else if (recoveryType == "ga2") {
 	  res = createCSGNodeWithGAV2(graph, params);

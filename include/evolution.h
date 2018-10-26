@@ -28,6 +28,8 @@ namespace lmu
 		IDENTITY
 	};
 
+	ScheduleType scheduleTypeFromString(std::string scheduleType);
+	
 	struct Schedule
 	{
 		Schedule() : type(ScheduleType::IDENTITY)
@@ -234,12 +236,30 @@ namespace lmu
 		double _lastBestRank;
 	};
 
+	template<typename RankedCreature>
+	struct EmptyPopulationManipulator
+	{
+		void manipulateBeforeRanking(std::vector<RankedCreature>& population) const
+		{
+		}
+
+		void manipulateAfterRanking(std::vector<RankedCreature>& population) const
+		{
+		}
+
+		std::string info() const
+		{
+			return "Empty Population Manipulator";
+		}
+	};
+
 	template<
 		typename Creature, typename CreatureCreator, typename CreatureRanker,
 		typename ParentSelector = TournamentSelector<RankedCreature<Creature>>,
-		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature>>
-	>
-		class GeneticAlgorithm
+		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature>>,
+		typename PopulationManipulator = EmptyPopulationManipulator<RankedCreature<Creature>>
+	>		
+	class GeneticAlgorithm
 	{
 	public:
 
@@ -247,16 +267,14 @@ namespace lmu
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, const Schedule& crossoverSchedule, const Schedule& mutationSchedule,
-				const std::function<void(const std::vector<RankedCreature>&)>& popInsp = [](const std::vector<RankedCreature>&) {return; }) :
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, const Schedule& crossoverSchedule, const Schedule& mutationSchedule) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
 				crossoverRate(crossoverRate),
 				rankingInParallel(rankingInParallel),
 				crossoverSchedule(crossoverSchedule),
-				mutationSchedule(mutationSchedule),
-				populationInspector(popInsp)
+				mutationSchedule(mutationSchedule)
 			{
 			}
 
@@ -278,9 +296,6 @@ namespace lmu
 			bool rankingInParallel;
 			Schedule crossoverSchedule;
 			Schedule mutationSchedule;
-
-			std::function<void(const std::vector<RankedCreature>&)> populationInspector;
-
 		};
 
 		struct Statistics
@@ -393,15 +408,17 @@ namespace lmu
 			_stopRequested.store(true);
 		}
 
-		std::future<Result> runAsync(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, StopCriterion& stopCriterion)
+		std::future<Result> runAsync(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
+			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan)
 		{
 			return std::async(std::launch::async, [&]() 
 			{ 
-				return run(params, parentSelector, creator, ranker, stopCriterion);
+				return run(params, parentSelector, creator, ranker, stopCriterion, popMan);
 			});
 		}
 
-		std::string assembleInfoString(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, const StopCriterion& stopCriterion) const
+		std::string assembleInfoString(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
+			const CreatureRanker& ranker, const StopCriterion& stopCriterion, const PopulationManipulator& popMan) const
 		{
 			std::stringstream ss; 
 
@@ -410,13 +427,15 @@ namespace lmu
 			ss << "Creator: " << creator.info() << std::endl;
 			ss << "Ranker: " << ranker.info() << std::endl;
 			ss << "Stop Criterion: " << stopCriterion.info() << std::endl;
-
+			ss << "Population Manipulator: " << popMan.info() << std::endl;
+			
 			return ss.str();
 		}
 
-		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, const CreatureRanker& ranker, StopCriterion& stopCriterion) const
+		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
+			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan) const
 		{
-			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion));
+			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion, popMan));
 	
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
@@ -433,14 +452,16 @@ namespace lmu
 				std::cout << "Start iteration " << std::endl;
 				stats.iterationDuration.reset();
 				
+				popMan.manipulateBeforeRanking(population);
+
 				rankPopulation(population, ranker, params.rankingInParallel);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 
-				params.populationInspector(population);
-
 				sortPopulation(population);
 				stats.sortingDurations.push_back(stats.iterationDuration.tick());
-				
+
+				popMan.manipulateAfterRanking(population);
+
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				

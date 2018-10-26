@@ -20,6 +20,8 @@ namespace lmu
 		CSGNodeRanker(double lambda, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
 
 		double rank(const CSGNode& node) const;
+		double rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const;
+
 		std::string info() const;
 
 		bool treeIsInvalid(const lmu::CSGNode& node) const;
@@ -72,35 +74,46 @@ namespace lmu
 		lmu::Graph _connectionGraph;
 		lmu::CSGNodeRanker _ranker;
 	};
-
-
 	
-	/*struct CSGNodeRankerNew
+	enum class CSGNodeOptimization
 	{
-		CSGNodeRankerNew(const lmu::Graph& graph, double sizePenaltyInfluence, double distAngleDeviationRatio, double maxSize, double maxGeo) :
-			_graph(graph), _functions(lmu::getImplicitFunctions(graph), _sizePenaltyInfluence(sizePenaltyInfluence), _distAngleDeviationRatio(distAngleDeviationRatio), _maxSize(maxSize), _maxGeo(maxGeo)
-		{
-		}
+		RANDOM, 
+		TRAVERSE
+	};
 
-		double rank(const CSGNode& node) const;
+	CSGNodeOptimization optimizationTypeFromString(std::string type);
+
+	struct CSGNodePopMan
+	{	
+		CSGNodePopMan(double optimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
+
+		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const;
+		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const;
 		std::string info() const;
-		
-	private:
 
-		lmu::Graph _graph;
-		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
-		double _sizePenaltyInfluence;
-		double _distAngleDeviationRatio;
-		double _maxSize;
-		double _maxGeo;
-	};*/
+	private: 
 
+		CSGNode getOptimizedTree(std::vector<ImplicitFunctionPtr> funcs) const;
+		std::vector<ImplicitFunctionPtr> getSuitableFunctions(const std::vector<ImplicitFunctionPtr>& funcs) const;
+		double _optimizationProb;
+		int _maxFunctions;
+		int _nodeSelectionTries;
+		lmu::CSGNodeRanker _ranker;
+		lmu::Graph _connectionGraph;
+		CSGNodeOptimization _type;
+		int _randomIterations;
+		mutable std::unordered_map<size_t, CSGNode> _nodeLookup;
+
+		mutable std::default_random_engine _rndEngine;
+		mutable std::random_device _rndDevice;
+	};
+	
 	using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode>>;
 
 	using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode>>;
 	using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode>>;
 
-	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, CSGNodeTournamentSelector, CSGNodeNoFitnessIncreaseStopCriterion>;
+	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, CSGNodeTournamentSelector, CSGNodeNoFitnessIncreaseStopCriterion, CSGNodePopMan>;
 
 	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::ParameterSet& p, const lmu::Graph& connectionGraph = Graph());
 

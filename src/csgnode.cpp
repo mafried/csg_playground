@@ -429,6 +429,12 @@ void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node
 		visit(child, f);	
 }
 
+void lmu::visit(CSGNode& node, const std::function<void(CSGNode&node)>& f)
+{
+	f(node);
+	for (auto& child : node.childsRef())
+		visit(child, f);
+}
 
 /*double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs) 
 {

@@ -237,10 +237,6 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 		if (!isConnected(clause, functions, conGraph, functions[i]))
 			continue;
 
-		//If pruned vertices should not be considered, test for it.
-		//if (ignorePrunedVertices && lmu::wasPruned(conGraph, functions[i]))
-		//	continue;
-
 		numConsideredFunctions++;
 
 		lmu::ImplicitFunctionPtr currentFunc = functions[i];		

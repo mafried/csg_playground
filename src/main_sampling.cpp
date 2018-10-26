@@ -366,6 +366,101 @@ int main(int argc, char *argv[])
 	      geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0.5, 0), 0.25, "Sphere_4")
 	      });
     }
+  else if (nodeIdx == 13)
+  {
+	  double x_off = 2.0;
+
+	  // previous default model
+	  node = op<Union>(
+	  {
+
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2 + x_off, 0, -1)*rot90x), 0.2, 2.8, "Cylinder_2"),
+
+
+		  op<Union>(
+	  {
+		  geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_2"),
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(x_off, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_0")
+	  }),
+
+		  geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, 0), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
+
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_0"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_1")
+	  }),
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_2"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_3")
+	  }),
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_4"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_5")
+	  }),
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_6"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_7")
+	  }),
+
+		  geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3 + x_off, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_3"),
+
+		  geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3 + x_off, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
+
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3 + x_off, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
+
+
+		  op<Difference>({
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)*rot90x), 0.2, 0.8, "Cylinder_20"),
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -1)*rot90x), 0.1, 1, "Cylinder_30")
+	  }),
+
+		  op<Union>(
+	  {
+		  geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_20"),
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_00")
+	  }),
+
+		  geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_10"), //Box close to spheres
+
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_00"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_10")
+	  }),
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_20"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_30")
+	  }),
+
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_40"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_50")
+	  }),
+		  op<Difference>(
+	  {
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_60"),
+		  geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_70")
+	  }),
+
+		  geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_30"),
+
+		  geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_40"),
+
+		  geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_10"),
+
+	  });
+  }
   else
     {
       std::cerr << "Could not get node. Idx: " << nodeIdx << std::endl;
@@ -379,6 +474,8 @@ int main(int argc, char *argv[])
   std::string modelBasename = argv[5];
 
   auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
+
+  std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;
 
   std::string pcName = modelBasename + ".xyz"; //"model.xyz";
   lmu::writePointCloudXYZ(pcName, pointCloud);
