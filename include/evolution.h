@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 
 #include <omp.h>
 
@@ -267,14 +268,15 @@ namespace lmu
 
 		struct Parameters
 		{
-			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, const Schedule& crossoverSchedule, const Schedule& mutationSchedule) :
+			Parameters(int populationSize, int numBestParents, double mutationRate, double crossoverRate, bool rankingInParallel, const Schedule& crossoverSchedule, const Schedule& mutationSchedule, bool useCaching) :
 				populationSize(populationSize),
 				numBestParents(numBestParents),
 				mutationRate(mutationRate),
 				crossoverRate(crossoverRate),
 				rankingInParallel(rankingInParallel),
 				crossoverSchedule(crossoverSchedule),
-				mutationSchedule(mutationSchedule)
+				mutationSchedule(mutationSchedule),
+				useCaching(useCaching)
 			{
 			}
 
@@ -285,7 +287,8 @@ namespace lmu
 					" Num Best Parents: " << numBestParents <<
 					" Mutation Rate: " << mutationRate <<
 					" Crossover Rate: " << crossoverRate <<
-					" Ranking in parallel: " << rankingInParallel;
+					" Ranking in parallel: " << rankingInParallel <<
+					" Use Caching: " << useCaching;
 				return ss.str();
 			}
 
@@ -296,6 +299,7 @@ namespace lmu
 			bool rankingInParallel;
 			Schedule crossoverSchedule;
 			Schedule mutationSchedule;
+			bool useCaching;
 		};
 
 		struct Statistics
@@ -305,7 +309,9 @@ namespace lmu
 				numMutations(0),
 				numMutationTries(0),
 				numCrossovers(0),
-				numCrossoverTries(0)	
+				numCrossoverTries(0),
+				numCacheHits(0),
+				numCacheTries(0)
 			{
 			}
 
@@ -314,13 +320,18 @@ namespace lmu
 			int numMutationTries;
 			int numCrossovers;
 			int numCrossoverTries;
-			double deltaBestScores;
-			double deltaWorstScores;
+
+			int numCacheHits; 
+			int numCacheTries;
+
+			double bestScore;
+			double worstScore;
 			std::vector<double> bestCandidateScores;
 
 			std::vector<double> worstCandidateScores;
 			std::vector<long long> rankingDurations;
 			std::vector<long long> sortingDurations;
+			std::vector<long long> optDurations;
 
 			std::vector<long long> scmDurations;
 		
@@ -328,12 +339,8 @@ namespace lmu
 
 			void update()
 			{
-				int size = bestCandidateScores.size();
-				deltaBestScores = size < 2 ?
-					0.0 : bestCandidateScores[size - 1] - bestCandidateScores[size - 2];
-				size = worstCandidateScores.size();
-				deltaWorstScores = size < 2 ?
-					0.0 : worstCandidateScores[size - 1] - worstCandidateScores[size - 2];
+				bestScore = bestCandidateScores.empty() ? 0.0 : bestCandidateScores.back();
+				worstScore = worstCandidateScores.empty() ? 0.0 : worstCandidateScores.back();
 			}
 
 			void print()
@@ -341,7 +348,9 @@ namespace lmu
 				std::cout << "--- Iteration Statistics ---" << std::endl;
 				std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
 				std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
-				std::cout << "Score Delta Best: " << deltaBestScores << " Worst: " << deltaWorstScores << std::endl;				
+				std::cout << "Cache Hits: " << numCacheHits << " Tried: " << numCacheTries << " (" << (double)numCacheHits / (double)numCacheTries * 100.0 << "%)" << std::endl;
+
+				std::cout << "Score Best: " << bestScore << " Worst: " << worstScore << std::endl;				
 			}
 
 			void save(const std::string& file, const Creature* bestCreature = nullptr)
@@ -369,12 +378,12 @@ namespace lmu
 
 					fs << bestCreature->info() << std::endl;
 
-					fs << "# iteration    best candidate score    worst candidate score    ranking durations    sorting durations    scm durations" << std::endl;
+					fs << "# iteration    best candidate score    worst candidate score    optimization durations    ranking durations    sorting durations    scm durations" << std::endl;
 				}
 
 				for (int i = 0; i < bestCandidateScores.size(); ++i)
 				{
-					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
+					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << optDurations[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
 				}
 
 				fs.close();
@@ -452,16 +461,19 @@ namespace lmu
 				std::cout << "Start iteration " << std::endl;
 				stats.iterationDuration.reset();
 				
+				std::cout << "Optimize population." << std::endl;
 				popMan.manipulateBeforeRanking(population);
+				stats.optDurations.push_back(stats.iterationDuration.tick());
 
-				rankPopulation(population, ranker, params.rankingInParallel);
+				std::cout << "Rank population." << std::endl;
+				rankPopulation(population, ranker, params.rankingInParallel, params.useCaching, stats);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 
 				sortPopulation(population);
 				stats.sortingDurations.push_back(stats.iterationDuration.tick());
 
 				popMan.manipulateAfterRanking(population);
-
+			
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
@@ -561,10 +573,8 @@ namespace lmu
 			return population;
 		}
 
-		void rankPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel = false) const 
-		{
-			std::cout << "Rank population." << std::endl;
-						
+		void rankPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel, bool useCaching, Statistics& stats) const 
+		{				
 			//double minRank = std::numeric_limits<double>::max();
 			//double maxRank = -std::numeric_limits<double>::max();
 			
@@ -577,14 +587,14 @@ namespace lmu
 #pragma omp parallel for				
 				for (int i = 0; i < population.size(); ++i)
 				{					
-					population[i].rank = ranker.rank(population[i].creature);
+					population[i].rank = rankCreature(population[i].creature, ranker, useCaching, stats);
 				}
 			}
 			else
 			{
 				for (auto& c : population)
-				{				
-					c.rank = ranker.rank(c.creature);
+				{
+					c.rank = rankCreature(c.creature, ranker, useCaching, stats);
 					//minRank = minRank < c.rank ? minRank : c.rank;
 					//maxRank = maxRank > c.rank ? maxRank : c.rank;				
 				}
@@ -593,6 +603,27 @@ namespace lmu
 			//normalize rank
 			//for (auto& c : population)			
 			//	c.rank = (c.rank - minRank) / (maxRank - minRank);
+		}
+
+		inline double rankCreature(const Creature& c, const CreatureRanker& ranker, bool useCaching, Statistics& stats) const
+		{
+			if (!useCaching)
+				return ranker.rank(c);
+
+			stats.numCacheTries++;
+
+			size_t hash = c.hash(0);
+			auto it = _rankLookup.find(hash);
+			if (it != _rankLookup.end())
+			{
+				stats.numCacheHits++;
+				return it->second;
+			}
+
+			double rank = ranker.rank(c);
+			_rankLookup[hash] = rank;
+			
+			return rank;
 		}
 
 		void sortPopulation(std::vector<RankedCreature>& population) const
@@ -607,6 +638,7 @@ namespace lmu
 			});
 		}
 
+		mutable std::unordered_map<size_t, double> _rankLookup;
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 		mutable std::atomic<bool> _stopRequested;

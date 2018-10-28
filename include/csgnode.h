@@ -69,6 +69,8 @@ namespace lmu
 		virtual ImplicitFunctionPtr function() const = 0;
 		virtual void setFunction(const ImplicitFunctionPtr& f) = 0;
 
+		virtual size_t hash(size_t seed) const = 0;
+
 		virtual Mesh mesh() const = 0;
 	};
 
@@ -158,6 +160,8 @@ namespace lmu
 			return true;
 		}
 
+		virtual size_t hash(size_t seed) const override;
+
 	protected: 
 		std::vector<CSGNode> _childs;
 	};
@@ -231,6 +235,8 @@ namespace lmu
 		{
 			return _function->meshCRef();
 		}
+
+		virtual size_t hash(size_t seed) const override;
 
 	protected:
 		ImplicitFunctionPtr _function;
@@ -399,6 +405,11 @@ namespace lmu
 			ss << "# Num points: " << totalNumPoints << std::endl;
 
 			return ss.str();
+		}
+
+		virtual size_t hash(size_t seed) const override
+		{
+			return _node->hash(seed);
 		}
 
 		bool isValid() const

@@ -61,6 +61,8 @@ namespace lmu
 
 	std::string iFTypeToString(ImplicitFunctionType type);
 
+	using PointCloud = Eigen::Matrix<double, Eigen::Dynamic, 6, Eigen::RowMajor>;
+
 	struct ImplicitFunction 
 	{
 		ImplicitFunction(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
@@ -108,17 +110,17 @@ namespace lmu
 			return _mesh;
 		}
 
-		Eigen::MatrixXd& points()
+		PointCloud& points()
 		{
 			return _points;
 		}
 
-		const Eigen::MatrixXd& pointsCRef()
+		const PointCloud& pointsCRef()
 		{
 			return _points;
 		}
 
-		void setPoints(const Eigen::MatrixXd& points)
+		void setPoints(const PointCloud& points)
 		{
 			_points = points;
 		}
@@ -180,7 +182,7 @@ namespace lmu
 
 		Eigen::Vector3d _pos;
 		Mesh _mesh;
-		Eigen::MatrixXd _points;
+		PointCloud _points;
 		std::string _name;
 	};
 

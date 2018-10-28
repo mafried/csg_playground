@@ -351,7 +351,7 @@ lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
-	lmu::CSGNodeGAV2::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule());
+	lmu::CSGNodeGAV2::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule(), false);
 
 	lmu::CSGNodeRankerV2 r(connectionGraph, sizeWeight, gradientStepSize);
 	

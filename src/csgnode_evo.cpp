@@ -484,15 +484,12 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
-
-	std::cout << "Node Selection Tries " << _nodeSelectionTries << std::endl;
-
+		
 	for (int i = 0; i < population.size(); ++i)
 	{
 		if (db(_rndEngine, parmb_t{ _optimizationProb }))
 		{
-			std::cout << "Optimize population " << i << std::endl;
-
+					
 			auto& node = population[i].creature;
 
 			switch (_type)
@@ -523,7 +520,6 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 
 						if (funcs.size() < _maxFunctions)
 						{
-							std::cout << "Optimize Subtree " << subNodeIdx << std::endl;
 							*subNode = getOptimizedTree(funcs);
 							break;
 						}
@@ -577,6 +573,8 @@ long long binom(int n, int k)
 lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const ParameterSet& p, const lmu::Graph& connectionGraph)
 {
 	bool inParallel = p.getBool("GA", "InParallel", false);
+	bool useCaching = p.getBool("GA", "UseCaching", false);
+
 	int popSize = p.getInt("GA", "PopulationSize", 150);
 	int numBestParents = p.getInt("GA", "NumBestParents", 2);
 	double mutation = p.getDouble("GA", "MutationRate", 0.3);
@@ -611,7 +609,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		return lmu::geometry(shapes[0]);
 
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(crossScheduleType), Schedule(mutationScheduleType));
+	lmu::CSGNodeGA::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(crossScheduleType), Schedule(mutationScheduleType), useCaching);
 
 	lmu::CSGNodeTournamentSelector s(k, true);
 	

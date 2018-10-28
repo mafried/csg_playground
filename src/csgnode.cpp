@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "boost/graph/graphviz.hpp"
-
+#include <boost/functional/hash.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
@@ -482,14 +482,18 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 	double score = 0.0;
 	for (const auto& func : funcs)
 	{
-		for (int i = 0; i < func->points().rows(); ++i)
+		for (int i = 0; i < func->pointsCRef().rows(); ++i)
 		{
 			num++;
 
-			auto row = func->points().row(i);
+			//const double* data = func->pointsCRef().data() + i * 6;
+			//Eigen::Vector3d p(data[0], data[1], data[2]);
+			//Eigen::Vector3d n(data[3], data[4], data[5]);
 
+			auto row = func->pointsCRef().row(i);
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
+
 			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
 
 			double d = distAndGrad[0] / epsilon;
@@ -511,12 +515,7 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 		}
 	}
 
-	//std::cout << "Num points: " << num << std::endl;
-
-
-	//std::cout << "ScoreGeo: " << score << std::endl;
-
-	return /*1.0 / score*/ score;
+	return score;
 }
 
 double lmu::computeRawDistanceScore(const CSGNode & node, const Eigen::MatrixXd & points)
@@ -1378,5 +1377,17 @@ std::ostream& lmu::operator<<(std::ostream& os, const NodePart& np)
 	return os;
 }
 
+inline size_t lmu::CSGNodeOperation::hash(size_t seed) const
+{
+	boost::hash_combine(seed, operationType());
+	for (const auto& child : _childs)
+		seed = child.hash(seed);
 
+	return seed;
+}
 
+inline size_t lmu::CSGNodeGeometry::hash(size_t seed) const
+{
+	boost::hash_combine(seed, reinterpret_cast<std::uintptr_t>(_function.get()));
+	return seed;
+}
