@@ -435,6 +435,7 @@ CSGNode lmu::CSGNodePopMan::getOptimizedTree(std::vector<ImplicitFunctionPtr> fu
 		{
 			auto dnf = lmu::computeShapiro(funcs, true, _connectionGraph, { 0.001 });
 			node = lmu::DNFtoCSGNode(dnf);
+			convertToTreeWithMaxNChilds(node, 2);
 		}
 		
 		_nodeLookup.insert(std::make_pair(hash, node));

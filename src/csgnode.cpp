@@ -1134,18 +1134,18 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 
 			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 			{
-				if (childs[0].function() == childs[1].function())
-				{
-					node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
-					optimizedSomething = true;
-					std::cout << "Optimize Difference 0" << std::endl;
-					break;
-				}
+			if (childs[0].function() == childs[1].function())
+			{
+				node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
+				optimizedSomething = true;
+				std::cout << "Optimize Difference 0" << std::endl;
+				break;
 			}
-			
+			}
+
 			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
 			{
-				std::vector<CSGNode> childs = { childs[1]};
+				std::vector<CSGNode> childs = { childs[1] };
 				node = CSGNode(std::make_shared<ComplementOperation>("Complement", childs));
 				optimizedSomething = true;
 				std::cout << "Optimize Difference 0" << std::endl;
@@ -1171,7 +1171,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 			optimizedSomething |= optimizeCSGNodeStructureRec(child, nullFunc);
 		}
 	}
-	
+
 	return optimizedSomething;
 }
 
@@ -1205,19 +1205,19 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 			closestScoreFuncNode = funcNode;
 		}
 	}
-	
+
 	std::cout << "Try to optimize node. Delta:  " << closestScoreDelta << std::endl;
 	if (closestScoreFuncNode && closestScoreDelta <= tolerance)
 	{
 		std::cout << "optimized node. Delta: " << closestScoreDelta << std::endl;
-				
+
 		std::cout << "  from " << serializeNode(node) << std::endl;
 		CSGNode closest(closestScoreFuncNode);
 		//std::cout << "  to   " << serializeNode(CSGNode(closestScoreFuncNode)) << std::endl;
 		std::cout << "  to   " << serializeNode(closest) << std::endl;
 
 
-		node = CSGNode(closestScoreFuncNode);		
+		node = CSGNode(closestScoreFuncNode);
 	}
 	else
 	{
@@ -1226,6 +1226,30 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 			optimizeCSGNode(child, tolerance);
 		}
 	}
+}
+
+void lmu::convertToTreeWithMaxNChilds(CSGNode& node, int n)
+{
+	auto& childs = node.childsRef();
+	n = clamp(n, std::get<0>(node.numAllowedChilds()), std::get<1>(node.numAllowedChilds()));
+
+	if (childs.size() > n)
+	{
+		CSGNode newChild = createOperation(node.operationType());
+
+		for (int i = n - 1; i < childs.size(); ++i)
+		{
+			newChild.addChild(childs[i]);
+		}
+
+		childs.erase(childs.begin() + n - 1, childs.end());
+		node.addChild(newChild);
+	}
+	
+	for (auto& child : childs)
+	{
+		convertToTreeWithMaxNChilds(child, n);
+	}	
 }
 
 Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)

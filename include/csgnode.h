@@ -585,6 +585,8 @@ namespace lmu
 
 	void optimizeCSGNode(CSGNode& node, double tolerance);
 
+	void convertToTreeWithMaxNChilds(CSGNode& node, int n);
+
 	Eigen::MatrixXd computePointCloud(const CSGNode& node, double stepSize, double maxDistance, double errorSigma,
 		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 
