@@ -577,16 +577,26 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 
 });
 
-	double samplingStepSize = 0.03; 
-	double maxDistance = 0.01;
-	double noiseSigma = 0.03;
+	//double samplingStepSize = 0.03; 
+	double maxDistance = 0.03;
+	double maxAngleDistance = M_PI / 18.0;
+	double noiseSigma = 0.01;
+	CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma);
 
-    auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
+    auto pointCloud = lmu::computePointCloud(node, samplingParams);
 
 	std::cout << "Points: " << pointCloud.rows() << std::endl;
 
-	viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-	viewer.data().point_size = 10.0;
+	auto funcs = allDistinctFunctions(node);
+	double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
+	std::cout << "used points: " << res << "%" << std::endl;
+
+	for (const auto& func : funcs)
+	{
+		viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
+	}
+
+	viewer.data().point_size = 5.0;
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
 	viewer.launch();

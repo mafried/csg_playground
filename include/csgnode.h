@@ -587,8 +587,20 @@ namespace lmu
 
 	void convertToTreeWithMaxNChilds(CSGNode& node, int n);
 
-	Eigen::MatrixXd computePointCloud(const CSGNode& node, double stepSize, double maxDistance, double errorSigma,
-		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+	struct CSGNodeSamplingParams
+	{
+		CSGNodeSamplingParams(double maxDistance, double maxAngleDistance, double errorSigma, double samplingStepSize = 0.0,
+			const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+
+		double samplingStepSize; 
+		double maxDistance; 
+		double maxAngleDistance;
+		double errorSigma;
+		Eigen::Vector3d minDim;
+		Eigen::Vector3d maxDim;
+	};
+
+	PointCloud computePointCloud(const CSGNode& node, const CSGNodeSamplingParams& params);
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
 

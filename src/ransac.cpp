@@ -1,5 +1,7 @@
 #include "..\include\ransac.h"
 #include "..\include\csgnode.h"
+#include "..\include\pointcloud.h"
+
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/IO/read_xyz_points.h>
@@ -304,43 +306,42 @@ void lmu::ransacWithSimMultiplePointOwners(const Eigen::MatrixXd & points, const
 	}
 }
 
-void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & normals, double maxDelta, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
+double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams& params, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
 {
-
 	std::unordered_map<lmu::ImplicitFunctionPtr, std::vector<Eigen::Matrix<double, 1, 6>>> pointsAndNormalsMap;
+
+	size_t accessedPoints = 0; 
+	size_t usedPoints = 0;
+	double cosMaxAngleDistance = std::cos(params.maxAngleDistance);
 
 	for (int i = 0; i < points.rows(); ++i)
 	{
+		accessedPoints++;
+
 		lmu::ImplicitFunctionPtr curFunc = nullptr;
 		double curMaxDelta = std::numeric_limits<double>::max();
 
 		for (auto const& func : knownFunctions)
 		{
-			double d = std::abs(func->signedDistanceAndGradient(points.row(i))[0]);
+			Eigen::Vector3d p = points.row(i).leftCols(3).transpose();
+			Eigen::Vector3d n = points.row(i).rightCols(3).transpose();
+			
+			Eigen::Vector4d v = func->signedDistanceAndGradient(p);
+			double absD = std::abs(v[0]);			
+			Eigen::Vector3d g = v.bottomRows(3).transpose();
+			double absDAngleCos = std::abs(n.dot(g));
 
-			if (d <= maxDelta && d < curMaxDelta)
+			if (absD <= params.maxDistance + 3.0 * params.errorSigma && absDAngleCos > cosMaxAngleDistance && absD < curMaxDelta)
 			{
-				curMaxDelta = d;
+				curMaxDelta = absD;
 				curFunc = func;
 			}
 		}
 
 		if (curFunc)
-		{
-			Eigen::Vector3d p = points.row(i).transpose();
-			Eigen::Vector3d n = normals.row(i).rightCols(3).transpose();
-
-			Eigen::Vector3d g = curFunc->signedDistanceAndGradient(p).bottomRows(3);
-
-			//if (std::abs(n.dot(g)) < 0.5)
-			//  continue; 
-			//if (n.dot(g) <= 0.0)
-			//	continue;
-
-			Eigen::Matrix<double, 1, 6> row;
-			row << points.row(i), normals.row(i);
-
-			pointsAndNormalsMap[curFunc].push_back(row);
+		{			
+			pointsAndNormalsMap[curFunc].push_back(points.row(i));
+			usedPoints++;
 		}
 	}
 
@@ -350,7 +351,7 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 		{
 			const auto& pointsAndNormals = pointsAndNormalsMap[func];
 
-			Eigen::MatrixXd points(pointsAndNormals.size(), 6);
+			PointCloud points(pointsAndNormals.size(), 6);
 			int i = 0;
 			for (const auto& row : pointsAndNormals)
 			{
@@ -360,4 +361,6 @@ void lmu::ransacWithSim(const Eigen::MatrixXd & points, const Eigen::MatrixXd & 
 			func->setPoints(points);
 		}		
 	}
+
+	return (double)usedPoints / (double)accessedPoints;
 }

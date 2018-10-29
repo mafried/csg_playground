@@ -8,12 +8,14 @@
 #include <igl/per_face_normals.h>
 #include <igl/AABB.h>
 
+
 #include <iostream>
 #include <memory>
 
 #include <string>
 #include <vector>
 
+#include "pointcloud.h"
 
 namespace lmu
 {
@@ -60,8 +62,6 @@ namespace lmu
 	};
 
 	std::string iFTypeToString(ImplicitFunctionType type);
-
-	using PointCloud = Eigen::Matrix<double, Eigen::Dynamic, 6, Eigen::RowMajor>;
 
 	struct ImplicitFunction 
 	{

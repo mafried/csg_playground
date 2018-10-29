@@ -17,9 +17,9 @@ using namespace lmu;
 
 static void usage(const char* pname) {
   std::cout << "Usage:" << std::endl;
-  std::cout << pname << " modelID samplingStepSize maxDistance noiseSigma outBasename" << std::endl;
+  std::cout << pname << " modelID samplingStepSize maxDistance maxAngleDistance (RAD) noiseSigma outBasename" << std::endl;
   std::cout << std::endl;
-  std::cout << "Example: " << pname << " 11 0.03 0.01 0.03 model" << std::endl;
+  std::cout << "Example: " << pname << " 11 0.0 (0.0 means maxDistance * 2) 0.03 0.17 0.01 model" << std::endl;
 }
 
 
@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
   using namespace std;
 
 
-  if (argc != 6) {
+  if (argc != 7) {
     usage(argv[0]);
     return -1;
   }
@@ -470,16 +470,17 @@ int main(int argc, char *argv[])
 
   double samplingStepSize = std::stod(argv[2]); //0.03; 
   double maxDistance = std::stod(argv[3]); //0.01;
-  double noiseSigma = std::stod(argv[4]); //0.03;
-  std::string modelBasename = argv[5];
+  double maxAngleDistance = std::stod(argv[4]); //0.03;
+  double noiseSigma = std::stod(argv[5]); //0.03;
+  std::string modelBasename = argv[6];
 
-  auto pointCloud = lmu::computePointCloud(node, samplingStepSize, maxDistance, noiseSigma);
+  CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
 
+  auto pointCloud = lmu::computePointCloud(node, samplingParams);
   std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;
 
   std::string pcName = modelBasename + ".xyz"; //"model.xyz";
   lmu::writePointCloudXYZ(pcName, pointCloud);
-
 
   std::vector<ImplicitFunctionPtr> shapes; 
   for (const auto& geoNode : allGeometryNodePtrs(node)) {
