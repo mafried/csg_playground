@@ -41,6 +41,20 @@ bool lmu::areConnected(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitF
 	return boost::edge(g.vertexLookup.at(f1), g.vertexLookup.at(f2), g.structure).second;
 }
 
+std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::getConnectedImplicitFunctions(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f)
+{
+	auto v = g.vertexLookup.at(f);
+
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> neighbors;
+	boost::graph_traits<GraphStructure>::adjacency_iterator neighbour, neighbour_end;
+
+	//Get neighbor set.
+	for (boost::tie(neighbour, neighbour_end) = boost::adjacent_vertices(v, g.structure); neighbour != neighbour_end; ++neighbour)
+		neighbors.push_back(g.structure[*neighbour]);
+
+	return neighbors;
+}
+
 bool lmu::wasPruned(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f)
 {
 	if (numEdges(g) == 0)

@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "boost/graph/graphviz.hpp"
-
+#include <boost/functional/hash.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
@@ -429,6 +429,12 @@ void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node
 		visit(child, f);	
 }
 
+void lmu::visit(CSGNode& node, const std::function<void(CSGNode&node)>& f)
+{
+	f(node);
+	for (auto& child : node.childsRef())
+		visit(child, f);
+}
 
 /*double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs) 
 {
@@ -476,14 +482,18 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 	double score = 0.0;
 	for (const auto& func : funcs)
 	{
-		for (int i = 0; i < func->points().rows(); ++i)
+		for (int i = 0; i < func->pointsCRef().rows(); ++i)
 		{
 			num++;
 
-			auto row = func->points().row(i);
+			//const double* data = func->pointsCRef().data() + i * 6;
+			//Eigen::Vector3d p(data[0], data[1], data[2]);
+			//Eigen::Vector3d n(data[3], data[4], data[5]);
 
+			auto row = func->pointsCRef().row(i);
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
+
 			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
 
 			double d = distAndGrad[0] / epsilon;
@@ -505,12 +515,7 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 		}
 	}
 
-	//std::cout << "Num points: " << num << std::endl;
-
-
-	//std::cout << "ScoreGeo: " << score << std::endl;
-
-	return /*1.0 / score*/ score;
+	return score;
 }
 
 double lmu::computeRawDistanceScore(const CSGNode & node, const Eigen::MatrixXd & points)
@@ -1129,18 +1134,18 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 
 			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 			{
-				if (childs[0].function() == childs[1].function())
-				{
-					node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
-					optimizedSomething = true;
-					std::cout << "Optimize Difference 0" << std::endl;
-					break;
-				}
+			if (childs[0].function() == childs[1].function())
+			{
+				node = CSGNode(std::make_shared<CSGNodeGeometry>(nullFunc));
+				optimizedSomething = true;
+				std::cout << "Optimize Difference 0" << std::endl;
+				break;
 			}
-			
+			}
+
 			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
 			{
-				std::vector<CSGNode> childs = { childs[1]};
+				std::vector<CSGNode> childs = { childs[1] };
 				node = CSGNode(std::make_shared<ComplementOperation>("Complement", childs));
 				optimizedSomething = true;
 				std::cout << "Optimize Difference 0" << std::endl;
@@ -1166,7 +1171,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 			optimizedSomething |= optimizeCSGNodeStructureRec(child, nullFunc);
 		}
 	}
-	
+
 	return optimizedSomething;
 }
 
@@ -1200,19 +1205,19 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 			closestScoreFuncNode = funcNode;
 		}
 	}
-	
+
 	std::cout << "Try to optimize node. Delta:  " << closestScoreDelta << std::endl;
 	if (closestScoreFuncNode && closestScoreDelta <= tolerance)
 	{
 		std::cout << "optimized node. Delta: " << closestScoreDelta << std::endl;
-				
+
 		std::cout << "  from " << serializeNode(node) << std::endl;
 		CSGNode closest(closestScoreFuncNode);
 		//std::cout << "  to   " << serializeNode(CSGNode(closestScoreFuncNode)) << std::endl;
 		std::cout << "  to   " << serializeNode(closest) << std::endl;
 
 
-		node = CSGNode(closestScoreFuncNode);		
+		node = CSGNode(closestScoreFuncNode);
 	}
 	else
 	{
@@ -1223,12 +1228,36 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 	}
 }
 
-Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, double maxDistance, double errorSigma, const Eigen::Vector3d & minDim, const Eigen::Vector3d & maxDim)
+void lmu::convertToTreeWithMaxNChilds(CSGNode& node, int n)
+{
+	auto& childs = node.childsRef();
+	n = clamp(n, std::get<0>(node.numAllowedChilds()), std::get<1>(node.numAllowedChilds()));
+
+	if (childs.size() > n)
+	{
+		CSGNode newChild = createOperation(node.operationType());
+
+		for (int i = n - 1; i < childs.size(); ++i)
+		{
+			newChild.addChild(childs[i]);
+		}
+
+		childs.erase(childs.begin() + n - 1, childs.end());
+		node.addChild(newChild);
+	}
+	
+	for (auto& child : childs)
+	{
+		convertToTreeWithMaxNChilds(child, n);
+	}	
+}
+
+lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplingParams& params)
 {
 
 	Eigen::Vector3d min, max;
 
-	if (minDim == Eigen::Vector3d(0.0, 0.0, 0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
+	if (params.minDim == Eigen::Vector3d(0.0, 0.0, 0.0) && params.maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
 	{
 		auto dims = computeDimensions(node);
 		min = std::get<0>(dims);
@@ -1236,18 +1265,18 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 	}
 	else
 	{
-		min = minDim;
-		max = maxDim;
+		min = params.minDim;
+		max = params.maxDim;
 	}
 
 	//Add a bit dimensions to avoid cuts (TODO: do it right with modulo stepSize).
-	double extend = stepSize * 2.0;
+	double extend = params.samplingStepSize * 2.0;
 	min -= Eigen::Vector3d(extend, extend, extend);
 	max += Eigen::Vector3d(extend, extend, extend);
 
 	//Eigen::Vector3d stepSize((max(0) - min(0)) / numSamples(0), (max(1) - min(1)) / numSamples(1), (max(2) - min(2)) / numSamples(2));
 
-	Eigen::Vector3i numSamples((max(0) - min(0)) / stepSize, (max(1) - min(1)) / stepSize, (max(2) - min(2)) / stepSize);
+	Eigen::Vector3i numSamples((max(0) - min(0)) / params.samplingStepSize, (max(1) - min(1)) / params.samplingStepSize, (max(2) - min(2)) / params.samplingStepSize);
 
 	std::cout << "Number of samples: " << numSamples(0) 
 		  << " " << numSamples(1) 
@@ -1258,9 +1287,9 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 	std::random_device rd{};
 	std::mt19937 gen{ rd() };
 
-	std::normal_distribution<> dx{ 0.0 , errorSigma };
-	std::normal_distribution<> dy{ 0.0 , errorSigma };
-	std::normal_distribution<> dz{ 0.0 , errorSigma };
+	std::normal_distribution<> dx{ 0.0 , params.errorSigma };
+	std::normal_distribution<> dy{ 0.0 , params.errorSigma };
+	std::normal_distribution<> dz{ 0.0 , params.errorSigma };
 
 	for (int x = 0; x < numSamples(0); ++x)
 	{
@@ -1268,11 +1297,11 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 		{
 			for (int z = 0; z < numSamples(2); ++z)
 			{	
-				Eigen::Vector3d samplingPoint((double)x * stepSize + min(0), (double)y * stepSize + min(1), (double)z * stepSize + min(2));
+				Eigen::Vector3d samplingPoint((double)x * params.samplingStepSize + min(0), (double)y * params.samplingStepSize + min(1), (double)z * params.samplingStepSize + min(2));
 
 				auto samplingValue = node.signedDistanceAndGradient(samplingPoint);
 				
-				if (abs(samplingValue(0)) < maxDistance)
+				if (abs(samplingValue(0)) < params.maxDistance)
 				{
 					Eigen::Matrix<double, 1, 6> sp; 
 					sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
@@ -1283,7 +1312,7 @@ Eigen::MatrixXd lmu::computePointCloud(const CSGNode & node, double stepSize, do
 		}
 	}
 
-	Eigen::MatrixXd res(samplingPoints.size(), 6);
+	PointCloud res(samplingPoints.size(), 6);
 	for (int i = 0; i < samplingPoints.size(); ++i)
 		res.row(i) = samplingPoints[i].row(0);
 
@@ -1372,5 +1401,27 @@ std::ostream& lmu::operator<<(std::ostream& os, const NodePart& np)
 	return os;
 }
 
+inline size_t lmu::CSGNodeOperation::hash(size_t seed) const
+{
+	boost::hash_combine(seed, operationType());
+	for (const auto& child : _childs)
+		seed = child.hash(seed);
 
+	return seed;
+}
 
+inline size_t lmu::CSGNodeGeometry::hash(size_t seed) const
+{
+	boost::hash_combine(seed, reinterpret_cast<std::uintptr_t>(_function.get()));
+	return seed;
+}
+
+lmu::CSGNodeSamplingParams::CSGNodeSamplingParams(double maxDistance, double maxAngleDistance, double errorSigma, double samplingStepSize, const Eigen::Vector3d & min, const Eigen::Vector3d & max) :
+	samplingStepSize(samplingStepSize == 0.0 ? maxDistance * 2.0 : samplingStepSize),
+	maxDistance(maxDistance),
+	maxAngleDistance(maxAngleDistance),
+	errorSigma(errorSigma),
+	minDim(min),
+	maxDim(max)
+{
+}

@@ -8,12 +8,14 @@
 #include <igl/per_face_normals.h>
 #include <igl/AABB.h>
 
+
 #include <iostream>
 #include <memory>
 
 #include <string>
 #include <vector>
 
+#include "pointcloud.h"
 
 namespace lmu
 {
@@ -108,17 +110,17 @@ namespace lmu
 			return _mesh;
 		}
 
-		Eigen::MatrixXd& points()
+		PointCloud& points()
 		{
 			return _points;
 		}
 
-		const Eigen::MatrixXd& pointsCRef()
+		const PointCloud& pointsCRef()
 		{
 			return _points;
 		}
 
-		void setPoints(const Eigen::MatrixXd& points)
+		void setPoints(const PointCloud& points)
 		{
 			_points = points;
 		}
@@ -180,7 +182,7 @@ namespace lmu
 
 		Eigen::Vector3d _pos;
 		Mesh _mesh;
-		Eigen::MatrixXd _points;
+		PointCloud _points;
 		std::string _name;
 	};
 

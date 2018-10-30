@@ -69,6 +69,8 @@ namespace lmu
 		virtual ImplicitFunctionPtr function() const = 0;
 		virtual void setFunction(const ImplicitFunctionPtr& f) = 0;
 
+		virtual size_t hash(size_t seed) const = 0;
+
 		virtual Mesh mesh() const = 0;
 	};
 
@@ -158,6 +160,8 @@ namespace lmu
 			return true;
 		}
 
+		virtual size_t hash(size_t seed) const override;
+
 	protected: 
 		std::vector<CSGNode> _childs;
 	};
@@ -232,6 +236,8 @@ namespace lmu
 			return _function->meshCRef();
 		}
 
+		virtual size_t hash(size_t seed) const override;
+
 	protected:
 		ImplicitFunctionPtr _function;
 	private:
@@ -252,7 +258,8 @@ namespace lmu
 	std::vector<ImplicitFunctionPtr> allDistinctFunctions(const CSGNode& node);
 
 	void visit(const CSGNode& node, const std::function<void(const CSGNode& node)>& f);
-	
+	void visit(CSGNode& node, const std::function<void(CSGNode& node)>& f);
+
 	class CSGNode : public ICSGNode 
 	{
 	public:
@@ -398,6 +405,11 @@ namespace lmu
 			ss << "# Num points: " << totalNumPoints << std::endl;
 
 			return ss.str();
+		}
+
+		virtual size_t hash(size_t seed) const override
+		{
+			return _node->hash(seed);
 		}
 
 		bool isValid() const
@@ -573,8 +585,22 @@ namespace lmu
 
 	void optimizeCSGNode(CSGNode& node, double tolerance);
 
-	Eigen::MatrixXd computePointCloud(const CSGNode& node, double stepSize, double maxDistance, double errorSigma,
-		const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+	void convertToTreeWithMaxNChilds(CSGNode& node, int n);
+
+	struct CSGNodeSamplingParams
+	{
+		CSGNodeSamplingParams(double maxDistance, double maxAngleDistance, double errorSigma, double samplingStepSize = 0.0,
+			const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
+
+		double samplingStepSize; 
+		double maxDistance; 
+		double maxAngleDistance;
+		double errorSigma;
+		Eigen::Vector3d minDim;
+		Eigen::Vector3d maxDim;
+	};
+
+	PointCloud computePointCloud(const CSGNode& node, const CSGNodeSamplingParams& params);
 
 	Eigen::VectorXd computeDistanceError(const Eigen::MatrixXd& samplePoints, const CSGNode& referenceNode, const CSGNode& node, bool normalize);
 

@@ -1,16 +1,19 @@
 #include "../include/csgnode_evo.h"
 #include "../include/csgnode_helper.h"
+#include "../include/dnf.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
-
 #include "../include/constants.h"
 
-
 using namespace lmu;
+
+CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const ParameterSet& params);
+CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker);
+
 
 lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph) :
 	_lambda(lambda),
@@ -50,14 +53,15 @@ double lmu::CSGNodeRanker::computeEpsilonScale()
 
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {	
-	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _functions);
+	return rank(node, _functions);
+}
+
+double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
+{
+	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, functions);
 
 	double score = geometryScore - _lambda * numNodes(node);
-		
-	//std::cout << "lambda: " << _lambda << std::endl;
-	//std::cout << "### geometry score: " << geometryScore << std::endl;
-		
-		
+	
 	return score;
 }
 
@@ -149,9 +153,6 @@ CSGNodeCreator::CSGNodeCreator(const std::vector<std::shared_ptr<ImplicitFunctio
 	_rndEngine.seed(_rndDevice());
 }
 
-
-// For a given probability, create a new creature 
-// Otherwise, select a node and create a new sub-tree at the node
 CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 {
 	static std::bernoulli_distribution d{};
@@ -182,19 +183,18 @@ CSGNode CSGNodeCreator::mutate(const CSGNode& node) const
 
 std::vector<lmu::CSGNode> lmu::CSGNodeCreator::crossover(const CSGNode& node1, const CSGNode& node2) const
 {
-static std::bernoulli_distribution db{};
-using parmb_t = decltype(db)::param_type;
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
 
-if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
-{
-	return simpleCrossover(node1, node2);
+	if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
+	{
+		return simpleCrossover(node1, node2);
+	}
+	else
+	{
+		return sharedPrimitiveCrossover(node1, node2);
+	}
 }
-else
-{
-	return sharedPrimitiveCrossover(node1, node2);
-}
-}
-
 
 std::vector<lmu::CSGNode> lmu::CSGNodeCreator::simpleCrossover(const CSGNode & node1, const CSGNode & node2) const
 {
@@ -235,28 +235,39 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(node1) - 1 });
-
+	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(newNode1) - 1 });
+	
 	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);	
-	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, lmu::allDistinctFunctions(*subNode1));
+
+	auto allDistinctFunctions = lmu::allDistinctFunctions(*subNode1);
+
+	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, allDistinctFunctions);
 
 	if (!subNode2)
-		return std::vector<lmu::CSGNode> {node1, node2};
+		return std::vector<lmu::CSGNode> {newNode1, newNode2};
 
-	double score1 = _ranker.rank(*subNode1);
-	double score2 = _ranker.rank(*subNode2);
+	double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
+	double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
 
 	std::cout << "CROSSOVER" << std::endl;
-	std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
+	//std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
 	std::cout << score1 << "     " << score2 << std::endl;
 	
 	if (score1 > score2)
 		*subNode2 = *subNode1;
 	else if (score1 < score2)
 		*subNode1 = *subNode2;
+	else //If both scores are equal, do normal crossover.
+	{
+		std::cout << "NORMAL" << std::endl;
+		int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
+		subNode2 = nodePtrAt(newNode2, nodeIdx2);
+		std::swap(*subNode1, *subNode2);
+	}
 
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
 }
+
 lmu::CSGNode lmu::CSGNodeCreator::create(bool unions) const
 {
 	static std::bernoulli_distribution db{};
@@ -359,39 +370,172 @@ void lmu::CSGNodeCreator::create(lmu::CSGNode& node, int maxDepth, int curDepth)
 	}
 }
 
-bool functionAlreadyUsed(const std::vector<int>& usedFuncIndices, int funcIdx)
-{
-	return std::find(usedFuncIndices.begin(), usedFuncIndices.end(), funcIdx) != usedFuncIndices.end();
-}
-
-int lmu::CSGNodeCreator::getRndFuncIndex(const std::vector<int>& usedFuncIndices) const
-{
-	static std::uniform_int_distribution<> du{};
-	using parmu_t = decltype(du)::param_type;
-
-	int funcIdx;
-	bool again;
-	do
-	{
-		again = false;
-		funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(_functions.size() - 1) });
-
-		if (functionAlreadyUsed(usedFuncIndices, funcIdx))
-		{
-			again = true;
-			break;
-		}
-
-	} while (again);
-
-	return funcIdx;
-}
-
 std::string lmu::CSGNodeCreator::info() const
 {
 	std::stringstream ss;
 	ss << "CSGTree Creator (create new random prob: " << _createNewRandomProb << ", sub tree prob: " << _subtreeProb << ", max tree depth: " << _maxTreeDepth << ")";
 	return ss.str();
+}
+
+
+size_t functionHash(const std::vector<lmu::ImplicitFunctionPtr>& funcs)
+{
+	size_t seed = 0; 
+	for(const auto& func : funcs)
+		boost::hash_combine(seed, func);
+	return seed;
+}
+
+lmu::CSGNodeOptimization lmu::optimizationTypeFromString(std::string type)
+{
+	std::transform(type.begin(), type.end(), type.begin(), ::tolower);
+
+	if (type == "random")
+		return CSGNodeOptimization::RANDOM;
+	else if (type == "traverse")
+		return CSGNodeOptimization::TRAVERSE;
+
+	return CSGNodeOptimization::TRAVERSE;
+}
+
+lmu::CSGNodePopMan::CSGNodePopMan(double optimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph) :
+	_optimizationProb(optimizationProb),
+	_maxFunctions(maxFunctions),
+	_nodeSelectionTries(nodeSelectionTries),
+	_randomIterations(randomIterations),
+	_type(type),
+	_ranker(ranker),
+	_connectionGraph(connectionGraph)
+{
+	_rndEngine.seed(_rndDevice());
+}
+
+CSGNode lmu::CSGNodePopMan::getOptimizedTree(std::vector<ImplicitFunctionPtr> funcs) const
+{
+	std::sort(funcs.begin(), funcs.end(), [](ImplicitFunctionPtr f1, ImplicitFunctionPtr f2) { return std::less<>()(f1.get(), f2.get()); });
+
+	size_t hash = 0;
+	for (const auto& func : funcs)
+		boost::hash_combine(hash, func);
+	
+	auto cachedNode = _nodeLookup.find(hash);
+	if (cachedNode == _nodeLookup.end())
+	{
+		auto node = CSGNode::invalidNode;
+
+		if (funcs.size() == 1)
+		{
+			node = geometry(funcs[0]);		
+		}
+		else if (funcs.size() == 2)
+		{
+			node = computeForTwoFunctions(funcs, _ranker);
+		}
+		else if(funcs.size() > 2)
+		{
+			auto dnf = lmu::computeShapiro(funcs, true, _connectionGraph, { 0.001 });
+			node = lmu::DNFtoCSGNode(dnf);
+			convertToTreeWithMaxNChilds(node, 2);
+		}
+		
+		_nodeLookup.insert(std::make_pair(hash, node));
+
+		return node;
+	}
+	else
+	{
+		return cachedNode->second;
+	}
+}
+
+std::vector<ImplicitFunctionPtr> lmu::CSGNodePopMan::getSuitableFunctions(const std::vector<ImplicitFunctionPtr>& funcs) const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+	
+	if (funcs.size() == 2)
+	{
+		//if functions are not connected, search for a connected one.
+		if (!lmu::areConnected(_connectionGraph, funcs[0], funcs[1]))
+		{
+			int funcIdx = du(_rndEngine, parmu_t{ 0, 1 });
+
+			auto neighbors = lmu::getConnectedImplicitFunctions(_connectionGraph, funcs[funcIdx]);
+
+			int newFuncIdx = du(_rndEngine, parmu_t{ 0, (int)neighbors.size() - 1 });
+
+			auto res = funcs;
+			res[funcIdx == 1 ? 0 : 1] = neighbors[newFuncIdx];
+	
+			return res;
+		}
+	}
+
+	return funcs;
+}
+
+void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const
+{
+}
+
+void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const
+{
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+		
+	for (int i = 0; i < population.size(); ++i)
+	{
+		if (db(_rndEngine, parmb_t{ _optimizationProb }))
+		{
+					
+			auto& node = population[i].creature;
+
+			switch (_type)
+			{
+			case CSGNodeOptimization::TRAVERSE:
+
+				lmu::visit(node, [this](CSGNode& n) 
+				{
+					auto& childs = n.childsRef();
+					if (childs.size() == 2 && childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
+					{
+						std::vector<ImplicitFunctionPtr> funcs = getSuitableFunctions({ childs[0].function(), childs[1].function() });
+						n = getOptimizedTree(funcs);
+					}
+				});
+
+				break;
+
+			case CSGNodeOptimization::RANDOM:
+
+				for (int iter = 0; iter < _randomIterations; ++iter)
+				{
+					for (int tries = 0; tries < _nodeSelectionTries; ++tries)
+					{
+						int subNodeIdx = du(_rndEngine, parmu_t{ 0, numNodes(node) - 1 });
+						CSGNode* subNode = nodePtrAt(node, subNodeIdx);
+						auto funcs = getSuitableFunctions(lmu::allDistinctFunctions(*subNode));
+
+						if (funcs.size() < _maxFunctions)
+						{
+							*subNode = getOptimizedTree(funcs);
+							break;
+						}
+					}
+				}
+
+				break;
+			}
+		}
+	}
+}
+
+std::string lmu::CSGNodePopMan::info() const
+{
+	return "Standard Manipulator";
 }
 
 double lmu::lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes)
@@ -430,12 +574,16 @@ long long binom(int n, int k)
 lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const ParameterSet& p, const lmu::Graph& connectionGraph)
 {
 	bool inParallel = p.getBool("GA", "InParallel", false);
+	bool useCaching = p.getBool("GA", "UseCaching", false);
+
 	int popSize = p.getInt("GA", "PopulationSize", 150);
 	int numBestParents = p.getInt("GA", "NumBestParents", 2);
 	double mutation = p.getDouble("GA", "MutationRate", 0.3);
 	double crossover = p.getDouble("GA", "CrossoverRate", 0.4);
 	double simpleCrossoverProb = p.getDouble("GA", "SimpleCrossoverRate", 1.0);
 	bool initializeWithUnionOfAllFunctions = p.getBool("GA", "InitializeWithUnionOfAllFunctions", false);
+	ScheduleType crossScheduleType = scheduleTypeFromString(p.getStr("GA", "CrossoverScheduleType", "identity"));
+	ScheduleType mutationScheduleType = scheduleTypeFromString(p.getStr("GA", "MutationScheduleType", "identity"));
 
 	int k = p.getInt("Selection", "TournamentK", 2);
 	
@@ -452,11 +600,17 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	double alpha = p.getDouble("Ranking", "Alpha", (M_PI / 180.0) * 35.0);
 	double epsilon = p.getDouble("Ranking", "Epsilon", 0.01);
 
+	int nodeSelectionTries = p.getInt("Optimization", "NodeSelectionTries", 10); 
+	int maxFunctions = p.getInt("Optimization", "MaxFunctions", 4);
+	double optimizationProb = p.getDouble("Optimization", "OptimizationProb", 0.0);
+	CSGNodeOptimization optimizationType = optimizationTypeFromString(p.getStr("Optimization", "OptimizationType", "traverse"));
+	int randomIterations = p.getInt("Optimization", "RandomIterations", 1);
+
 	if (shapes.size() == 1)
 		return lmu::geometry(shapes[0]);
 
 	lmu::CSGNodeGA ga;
-	lmu::CSGNodeGA::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule());
+	lmu::CSGNodeGA::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(crossScheduleType), Schedule(mutationScheduleType), useCaching);
 
 	lmu::CSGNodeTournamentSelector s(k, true);
 	
@@ -469,7 +623,9 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 
-	auto task = ga.runAsync(params, s, c, r, isc);
+	lmu::CSGNodePopMan popMan(optimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
+
+	auto task = ga.runAsync(params, s, c, r, isc, popMan);
 
 	int i;
 	std::cout << "Press a Key and Enter to break." << std::endl;
@@ -483,13 +639,8 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	return res.population[0].creature;
 }
 
-CSGNode computeForTwoClique(const std::vector<ImplicitFunctionPtr>& functions, const ParameterSet& params)
+CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker)
 {
-	double alpha = params.getDouble("Ranking", "Alpha", (M_PI / 180.0) * 35.0);
-	double epsilon = params.getDouble("Ranking", "Epsilon", 0.01);
-
-	lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(functions), epsilon, alpha, functions);
-
 	std::vector<CSGNode> candidates;
 
 	CSGNode un(std::make_shared<UnionOperation>("un"));
@@ -528,6 +679,16 @@ CSGNode computeForTwoClique(const std::vector<ImplicitFunctionPtr>& functions, c
 	return *bestCandidate;
 }
 
+CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const ParameterSet& params)
+{
+	double alpha = params.getDouble("Ranking", "Alpha", (M_PI / 180.0) * 35.0);
+	double epsilon = params.getDouble("Ranking", "Epsilon", 0.01);
+
+	lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(functions), epsilon, alpha, functions);
+
+	return computeForTwoFunctions(functions, ranker);
+}
+
 // Mimic computeShapiroWithPartitions in dnf.cpp
 // Apply a GA to each group of intersecting shapes
 lmu::CSGNode
@@ -551,7 +712,7 @@ lmu::computeGAWithPartitions
 		}
 		else if (shapes.size() == 2)
 		{
-			partRes = computeForTwoClique(shapes, params);
+			partRes = computeForTwoFunctions(shapes, params);
 		}
 		else
 		{

@@ -11,7 +11,7 @@
 #include "..\include\mesh.h"
 
 
-void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
+void lmu::writePointCloud(const std::string& file, PointCloud& points)
 {
 	//if (points.cols() != 6)
 	//	throw std::runtime_error("Number of columns must be 6.");
@@ -31,7 +31,7 @@ void lmu::writePointCloud(const std::string& file, Eigen::MatrixXd& points)
 }
 
 
-void lmu::writePointCloudXYZ(const std::string& file, Eigen::MatrixXd& points)
+void lmu::writePointCloudXYZ(const std::string& file, PointCloud& points)
 {
   std::ofstream s(file); 
 
@@ -46,7 +46,7 @@ void lmu::writePointCloudXYZ(const std::string& file, Eigen::MatrixXd& points)
 }
 
 
-Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
+lmu::PointCloud lmu::readPointCloud(const std::string& file, double scaleFactor)
 {
 	std::ifstream s(file);
 	
@@ -81,7 +81,7 @@ Eigen::MatrixXd lmu::readPointCloud(const std::string& file, double scaleFactor)
 
 // Assume each line contains
 // x y z nx ny nz
-Eigen::MatrixXd lmu::readPointCloudXYZ(const std::string& file, double scaleFactor)
+lmu::PointCloud lmu::readPointCloudXYZ(const std::string& file, double scaleFactor)
 {
   std::ifstream s(file);
 
@@ -97,7 +97,7 @@ Eigen::MatrixXd lmu::readPointCloudXYZ(const std::string& file, double scaleFact
 
   std::cout << numRows << " " << numCols << std::endl;
 
-  Eigen::MatrixXd points(numRows, numCols);
+  PointCloud points(numRows, numCols);
 
   for (int i = 0; i < points.rows(); i++)
     {
@@ -116,7 +116,7 @@ Eigen::MatrixXd lmu::readPointCloudXYZ(const std::string& file, double scaleFact
 }
 
 
-Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, double samplingRate, double errorSigma)
+lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, double samplingRate, double errorSigma)
 {
 	Eigen::Vector3d min = mesh.vertices.colwise().minCoeff();
 	Eigen::Vector3d max = mesh.vertices.colwise().maxCoeff();
@@ -188,7 +188,7 @@ Eigen::MatrixXd lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 
 	std::cout << "Sample points with error." << std::endl;
 
-	Eigen::MatrixXd res;
+	PointCloud res;
 	res.resize(remainingPoints.size(), 6);
 
 	std::random_device rd{};

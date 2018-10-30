@@ -80,9 +80,12 @@ int main(int argc, char *argv[])
   ParameterSet params(argv[3]);
   params.print();
   
-  double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.03);
-  double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.1);
-
+  double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.0);
+  double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.03);
+  double maxAngleDistance = params.getDouble("Sampling", "MaxAngleDistance", M_PI / 18.0);
+  double errorSigma = params.getDouble("Sampling", "ErrorSigma", 0.01);
+  double connectionGraphSamplingStepSize = params.getDouble("Sampling", "ConnectionGraphSamplingStepSize", 0.01);
+  
   std::string pcName = argv[1]; // "model.xyz";
   auto pointCloud = lmu::readPointCloudXYZ(pcName, 1.0);
 
@@ -91,38 +94,21 @@ int main(int argc, char *argv[])
   shapes = lmu::fromFilePRIM(primName);
   auto dims = lmu::computeDimensions(shapes);
 
-  auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), samplingStepSize);
+  auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
 		
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
-  lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance, shapes);
-  //lmu::ransacWithSimMultiplePointOwners(pointCloud.leftCols(3), pointCloud.rightCols(3), maxDistance * 5, shapes);
+  double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, errorSigma, samplingStepSize), shapes);
 
-  int totalNumPoints = 0;
-  for (const auto& shape : shapes)
-  {
-	  int curNumPts = shape->pointsCRef().rows();
-	  totalNumPoints += curNumPts;
-
-	  std::cout << "Shape: " << shape->name() << " Points: " << curNumPts << std::endl;
-  }
-  std::cout << "Points in primitives: " << totalNumPoints << std::endl;
   std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
-	
-  //pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, lmu::computeOutlierTestValues(shapes), FilterBehavior::FILTER_FLAT_SURFACES, false);
-  //shapes.clear();
-  //lmu::ransacWithSim(pointCloud.leftCols(3), pointCloud.rightCols(3), 0.05, shapes);
+  std::cout << "Points in primitives: " << pointsInPrimitiveRate << "%" << std::endl;
 
   lmu::movePointsToSurface(shapes, false, 0.0001);
-
-  //auto dnf = lmu::computeShapiro(shapes, true, lmu::Graph(), { 0.001 });
-  //auto res = lmu::computeCSGNode(shapes, graph, { 0.001 });//lmu::DNFtoCSGNode(dnf);
 
   CSGNode res = op<Union>();
 
   double gradientStepSize = params.getDouble("Shapiro", "GradientStepSize", 0.001);
   SampleParams p{ gradientStepSize };
-
 
   std::string partitionType = argv[4];
   std::string recoveryType = argv[5];
@@ -140,7 +126,7 @@ int main(int argc, char *argv[])
       auto dnf = lmu::computeShapiro(shapes, true, graph, p);
       res = lmu::DNFtoCSGNode(dnf);
     } else if (recoveryType == "ga") {
-      res = createCSGNodeWithGA(shapes, params);
+      res = createCSGNodeWithGA(shapes, params, graph);
       optimizeCSGNodeStructure(res);
 	} else if (recoveryType == "ga2") {
 	  res = createCSGNodeWithGAV2(graph, params);

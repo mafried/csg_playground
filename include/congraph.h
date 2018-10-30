@@ -92,6 +92,8 @@ namespace lmu
 
 	bool areConnected(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f1, const std::shared_ptr<lmu::ImplicitFunction>& f2);
 
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> getConnectedImplicitFunctions(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f);
+
 	//WARNING: NOT CORRECT ANYMORE!
 	bool wasPruned(const lmu::Graph& g, const std::shared_ptr<lmu::ImplicitFunction>& f);
 
