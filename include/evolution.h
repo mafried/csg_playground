@@ -613,6 +613,9 @@ namespace lmu
 			stats.numCacheTries++;
 
 			size_t hash = c.hash(0);
+
+			std::unique_lock<std::mutex> guard(_mutex);
+
 			auto it = _rankLookup.find(hash);
 			if (it != _rankLookup.end())
 			{
@@ -620,7 +623,12 @@ namespace lmu
 				return it->second;
 			}
 
+			guard.unlock();
+
 			double rank = ranker.rank(c);
+
+			guard.lock();
+
 			_rankLookup[hash] = rank;
 			
 			return rank;
@@ -642,6 +650,7 @@ namespace lmu
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 		mutable std::atomic<bool> _stopRequested;
+		mutable std::mutex _mutex;
 	};
 
 	struct ImplicitFunction;
