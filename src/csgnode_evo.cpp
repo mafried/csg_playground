@@ -186,6 +186,8 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::crossover(const CSGNode& node1, c
 	static std::bernoulli_distribution db{};
 	using parmb_t = decltype(db)::param_type;
 
+	std::cout << "Crossover" << std::endl;
+
 	if (db(_rndEngine, parmb_t{ _simpleCrossoverProb }))
 	{
 		return simpleCrossover(node1, node2);
@@ -398,8 +400,9 @@ lmu::CSGNodeOptimization lmu::optimizationTypeFromString(std::string type)
 	return CSGNodeOptimization::TRAVERSE;
 }
 
-lmu::CSGNodePopMan::CSGNodePopMan(double optimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph) :
+lmu::CSGNodePopMan::CSGNodePopMan(double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph) :
 	_optimizationProb(optimizationProb),
+	_preOptimizationProb(preOptimizationProb),
 	_maxFunctions(maxFunctions),
 	_nodeSelectionTries(nodeSelectionTries),
 	_randomIterations(randomIterations),
@@ -488,6 +491,12 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 		
 	for (int i = 0; i < population.size(); ++i)
 	{
+		if (db(_rndEngine, parmb_t{_preOptimizationProb }))
+		{
+			auto& node = population[i].creature;
+			int numOptimizations = optimizeCSGNodeStructure(node);
+		}
+		
 		if (db(_rndEngine, parmb_t{ _optimizationProb }))
 		{
 					
@@ -603,6 +612,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	int nodeSelectionTries = p.getInt("Optimization", "NodeSelectionTries", 10); 
 	int maxFunctions = p.getInt("Optimization", "MaxFunctions", 4);
 	double optimizationProb = p.getDouble("Optimization", "OptimizationProb", 0.0);
+	double preOptimizationProb = p.getDouble("Optimization", "PreOptimizationProb", 0.0);
 	CSGNodeOptimization optimizationType = optimizationTypeFromString(p.getStr("Optimization", "OptimizationType", "traverse"));
 	int randomIterations = p.getInt("Optimization", "RandomIterations", 1);
 
@@ -623,7 +633,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 
-	lmu::CSGNodePopMan popMan(optimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
+	lmu::CSGNodePopMan popMan(optimizationProb, preOptimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
 
 	auto task = ga.runAsync(params, s, c, r, isc, popMan);
 

@@ -85,7 +85,7 @@ namespace lmu
 
 	struct CSGNodePopMan
 	{	
-		CSGNodePopMan(double optimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
+		CSGNodePopMan(double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const;
 		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const;
@@ -96,6 +96,7 @@ namespace lmu
 		CSGNode getOptimizedTree(std::vector<ImplicitFunctionPtr> funcs) const;
 		std::vector<ImplicitFunctionPtr> getSuitableFunctions(const std::vector<ImplicitFunctionPtr>& funcs) const;
 		double _optimizationProb;
+		double _preOptimizationProb;
 		int _maxFunctions;
 		int _nodeSelectionTries;
 		lmu::CSGNodeRanker _ranker;

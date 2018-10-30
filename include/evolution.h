@@ -574,38 +574,69 @@ namespace lmu
 		}
 
 		void rankPopulation(std::vector<RankedCreature>& population, const CreatureRanker& ranker, bool inParallel, bool useCaching, Statistics& stats) const 
-		{				
-			//double minRank = std::numeric_limits<double>::max();
-			//double maxRank = -std::numeric_limits<double>::max();
-			
+		{	
 			if (inParallel)
 			{
 #ifndef _OPENMP 
-				throw std::runtime_error("Cliques should run in parallel but OpenMP is not available.");
+				throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
 #endif
+				if (useCaching)
+				{
+					//Collect all creatures that need to be ranked ( == not in cache).
+					std::vector<std::tuple<size_t,size_t>> creaturesToRank;
+					creaturesToRank.reserve(population.size());
+					for (int i = 0; i < population.size(); ++i)
+					{
+						stats.numCacheTries++;
+						size_t hash = population[i].creature.hash(0);
+
+						auto it = _rankLookup.find(hash);
+						if (it != _rankLookup.end())
+						{
+							stats.numCacheHits++;
+							population[i].rank = it->second;
+						}
+						else
+						{
+							creaturesToRank.push_back(std::make_tuple(i, hash));
+						}
+					}
+
+					//Rank creatures not found in cache.
+#pragma omp parallel for				
+					for (int i = 0; i < creaturesToRank.size(); ++i)
+					{
+						size_t index = std::get<0>(creaturesToRank[i]);
+						double rank = ranker.rank(population[index].creature);
+						population[index].rank = rank;
+
+						size_t hash = std::get<1>(creaturesToRank[i]);
+
+						std::lock_guard<std::mutex> l(_mutex);
+						_rankLookup[hash] = rank;
+					}
+
+				}
+				else //no caching.
+				{
 
 #pragma omp parallel for				
-				for (int i = 0; i < population.size(); ++i)
-				{					
-					population[i].rank = rankCreature(population[i].creature, ranker, useCaching, stats);
+					for (int i = 0; i < population.size(); ++i)
+					{
+						population[i].rank = ranker.rank(population[i].creature);
+					}
 				}
 			}
-			else
+			else // single threaded
 			{
 				for (auto& c : population)
 				{
-					c.rank = rankCreature(c.creature, ranker, useCaching, stats);
-					//minRank = minRank < c.rank ? minRank : c.rank;
-					//maxRank = maxRank > c.rank ? maxRank : c.rank;				
+					c.rank = rankCreatureSingleThreaded(c.creature, ranker, useCaching, stats);								
 				}
 			}
-
-			//normalize rank
-			//for (auto& c : population)			
-			//	c.rank = (c.rank - minRank) / (maxRank - minRank);
 		}
 
-		inline double rankCreature(const Creature& c, const CreatureRanker& ranker, bool useCaching, Statistics& stats) const
+		inline double rankCreatureSingleThreaded(const Creature& c, const CreatureRanker& ranker, bool useCaching, Statistics& stats) const
 		{
 			if (!useCaching)
 				return ranker.rank(c);
@@ -613,22 +644,15 @@ namespace lmu
 			stats.numCacheTries++;
 
 			size_t hash = c.hash(0);
-
-			std::unique_lock<std::mutex> guard(_mutex);
-
+			
 			auto it = _rankLookup.find(hash);
 			if (it != _rankLookup.end())
 			{
 				stats.numCacheHits++;
 				return it->second;
 			}
-
-			guard.unlock();
-
-			double rank = ranker.rank(c);
-
-			guard.lock();
-
+			
+			double rank = ranker.rank(c);			
 			_rankLookup[hash] = rank;
 			
 			return rank;

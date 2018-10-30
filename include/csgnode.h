@@ -581,7 +581,7 @@ namespace lmu
 	Mesh computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), 
 		const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 	
-	void optimizeCSGNodeStructure(CSGNode& node);
+	int optimizeCSGNodeStructure(CSGNode& node);
 
 	void optimizeCSGNode(CSGNode& node, double tolerance);
 

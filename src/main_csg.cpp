@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
   if (partitionType == "none") 
   {
     if (recoveryType == "shapiro") {
-      auto dnf = lmu::computeShapiro(shapes, true, graph, p);
+      auto dnf = lmu::computeShapiro(shapes,true, graph, p);
       res = lmu::DNFtoCSGNode(dnf);
     } else if (recoveryType == "ga") {
       res = createCSGNodeWithGA(shapes, params, graph);
