@@ -505,7 +505,7 @@ namespace lmu
 	
 	CSGNode createOperation(CSGNodeOperationType type, const std::string& name = std::string(), const std::vector<CSGNode>& childs = {});
 
-	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
+	double computeGeometryScore(const CSGNode& node, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs);
 
 	double computeRawDistanceScore(const CSGNode& node, const Eigen::MatrixXd& points);
 	
