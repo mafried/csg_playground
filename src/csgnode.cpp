@@ -476,7 +476,7 @@ void lmu::visit(CSGNode& node, const std::function<void(CSGNode&node)>& f)
 	return 1.0 / (score / 2.0 / (double)numPoints);
 }*/
 
-double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
+double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
 {	
 	int num = 0; 
 
@@ -495,7 +495,7 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
 
-			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p);
+			Eigen::Vector4d distAndGrad = node.signedDistanceAndGradient(p,h);
 
 			double d = distAndGrad[0] / epsilon;
 			
@@ -1092,6 +1092,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		if (childs.size() == 1)
 		{
 			node = childs.front();
+			insertedNullFunc = (node.function() == nullFunc);
 		}
 		//if one operand of the intersection is the nullFunc, intersection's result is the nullFunc.
 		else if (childs.size() == 0 || std::find_if(childs.begin(), childs.end(), [nullFunc](const CSGNode& n) { return n.function() == nullFunc; }) != childs.end())
@@ -1117,41 +1118,42 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		else if (childs.size() == 1)
 		{
 			node = childs.front();
+			insertedNullFunc = (node.function() == nullFunc);
 		}		
 		
 		break;
 
 	case CSGNodeOperationType::Difference:
-
+				
 		if (childs.size() == 0)
-		{
+		{	
 			node = geometry(nullFunc);
 			insertedNullFunc = true;
 		}
 		else if (childs.size() == 1)
 		{
 			node = childs.front();
+			insertedNullFunc = (node.function() == nullFunc);
 		}
 		else if (childs.size() == 2)
-		{
-			if (childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
+		{	
+			if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == childs[1].function())
 			{
-				if (childs[0].function() == childs[1].function())
-				{
-					node = geometry(nullFunc);
-					insertedNullFunc = true;
-				}
-				else if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
-				{	
-					node = opComp({ childs[1] });
-				}
-				else if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
-				{
-					node = childs[0];					
-				}
+				node = geometry(nullFunc);
+				insertedNullFunc = true;
 			}
+			else if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
+			{	
+				node = opComp({ childs[1] });					
+				insertedNullFunc = (node.childsCRef()[0].function() == nullFunc);
+			}
+			else if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
+			{
+				node = childs[0];	
+				insertedNullFunc = (node.function() == nullFunc);
+			}			
 		}
-			
+
 		break;
 	}
 	
@@ -1169,18 +1171,12 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 int lmu::optimizeCSGNodeStructure(CSGNode& node)
 {
 	auto nullFunc = std::make_shared<IFNull>("Null");
+	
 	int i = 0;
-	const int limit = 10; 
-
-	while (optimizeCSGNodeStructureRec(node, nullFunc) && i < limit)
+	while (optimizeCSGNodeStructureRec(node, nullFunc))
 	{	
-		//std::cout << "Optimized structure" << std::endl;
 		i++;
-	}
-
-	if (i >= limit)
-		std::cout << "limit reached." << std::endl;
-
+	}	
 	return i;
 }
 
@@ -1191,13 +1187,13 @@ void lmu::optimizeCSGNode(CSGNode& node, double tolerance)
 	for (const auto& funcNode : funcNodes)
 		funcs.push_back(funcNode->function());
 
-	double score = computeGeometryScore(node, 1.0, 1.0, funcs);
+	double score = computeGeometryScore(node, 1.0, 1.0, 0.001, funcs);
 
 	double closestScoreDelta = std::numeric_limits<double>::max();
 	CSGNodePtr closestScoreFuncNode = nullptr;
 	for (const auto& funcNode : funcNodes)
 	{
-		double funcNodeScore = computeGeometryScore(CSGNode(funcNode), 1.0, 1.0, funcs);
+		double funcNodeScore = computeGeometryScore(CSGNode(funcNode), 1.0, 1.0, 0.001, funcs);
 		if (std::abs(score - funcNodeScore) < closestScoreDelta)
 		{
 			closestScoreDelta = std::abs(score - funcNodeScore);

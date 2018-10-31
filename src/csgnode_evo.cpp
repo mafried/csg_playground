@@ -15,10 +15,11 @@ CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker);
 
 
-lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph) :
+lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph) :
 	_lambda(lambda),
 	_epsilon(epsilon),
 	_alpha(alpha),
+	_h(h),
 	_functions(functions),
 	_earlyOutTest(!connectionGraph.structure.m_vertices.empty()),
 	_connectionGraph(connectionGraph),
@@ -58,7 +59,7 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
 {
-	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, functions);
+	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _h, functions);
 
 	double score = geometryScore - _lambda * numNodes(node);
 	
@@ -506,7 +507,7 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 			{
 			case CSGNodeOptimization::TRAVERSE:
 
-				lmu::visit(node, [this](CSGNode& n) 
+				lmu::visit(node, [this](CSGNode& n)
 				{
 					auto& childs = n.childsRef();
 					if (childs.size() == 2 && childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
@@ -616,6 +617,8 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	CSGNodeOptimization optimizationType = optimizationTypeFromString(p.getStr("Optimization", "OptimizationType", "traverse"));
 	int randomIterations = p.getInt("Optimization", "RandomIterations", 1);
 
+	double gradientStepSize = p.getDouble("Sampling", "GradientStepSize", 0.001);
+
 	if (shapes.size() == 1)
 		return lmu::geometry(shapes[0]);
 
@@ -629,7 +632,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	double lambda = lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 
-	lmu::CSGNodeRanker r(lambda, epsilon, alpha, shapes, connectionGraph);
+	lmu::CSGNodeRanker r(lambda, epsilon, alpha, gradientStepSize, shapes, connectionGraph);
 
 	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 
@@ -693,8 +696,9 @@ CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions
 {
 	double alpha = params.getDouble("Ranking", "Alpha", (M_PI / 180.0) * 35.0);
 	double epsilon = params.getDouble("Ranking", "Epsilon", 0.01);
+	double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
 
-	lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(functions), epsilon, alpha, functions);
+	lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(functions), epsilon, alpha, gradientStepSize, functions);
 
 	return computeForTwoFunctions(functions, ranker);
 }
@@ -746,6 +750,7 @@ std::tuple<long long, double> computeNodesForClique(const Clique& clique, const 
 
 	double alpha = params.getDouble("Ranking", "Alpha", (M_PI / 180.0) * 35.0);
 	double epsilon = params.getDouble("Ranking", "Epsilon", 0.01);
+	double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
 
 	if (clique.functions.empty())
 	{
@@ -757,7 +762,7 @@ std::tuple<long long, double> computeNodesForClique(const Clique& clique, const 
 	}
 	else if (clique.functions.size() == 2)
 	{
-		lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(clique.functions), epsilon, alpha, clique.functions);
+		lmu::CSGNodeRanker ranker(lambdaBasedOnPoints(clique.functions), epsilon, alpha, gradientStepSize, clique.functions);
 		
 		std::vector<CSGNode> candidates;
 

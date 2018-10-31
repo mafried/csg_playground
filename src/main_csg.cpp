@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 
   CSGNode res = op<Union>();
 
-  double gradientStepSize = params.getDouble("Shapiro", "GradientStepSize", 0.001);
+  double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
   SampleParams p{ gradientStepSize };
 
   std::string partitionType = argv[4];

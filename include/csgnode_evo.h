@@ -17,7 +17,7 @@ namespace lmu
 
 	struct CSGNodeRanker
 	{
-		CSGNodeRanker(double lambda, double epsilon, double alpha, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
+		CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
 
 		double rank(const CSGNode& node) const;
 		double rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const;
@@ -29,7 +29,7 @@ namespace lmu
 	private:
 
 		double computeEpsilonScale();
-
+		double _h;
 		double _lambda;
 		std::vector<std::shared_ptr<lmu::ImplicitFunction>> _functions;
 		bool _earlyOutTest;
