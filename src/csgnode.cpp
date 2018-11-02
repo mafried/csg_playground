@@ -1155,28 +1155,65 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		}
 
 		break;
+
+	case CSGNodeOperationType::Complement:
+		if (childs.size() != 1) {
+			std::cout << "Complement operation with more than 1 child\n";
+		}
+
+		insertedNullFunc = (childs[0].function() == nullFunc);
+
+		break;
 	}
 	
 	if (!insertedNullFunc)
 	{
 		for (auto& child : node.childsRef())
 		{
-			insertedNullFunc |= optimizeCSGNodeStructureRec(child, nullFunc);
+			insertedNullFunc = insertedNullFunc || optimizeCSGNodeStructureRec(child, nullFunc);
 		}
 	}
 
 	return insertedNullFunc;
 }
 
+bool containsNullFunc(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc) {
+	if (node.type() == CSGNodeType::Geometry && node.function() == nullFunc) {
+		return true;
+	}
+
+	bool nullFound = false;
+
+	for (auto& child : node.childsRef()) {
+		nullFound = nullFound || containsNullFunc(child, nullFunc);
+	}
+
+	return nullFound;
+}
+
 int lmu::optimizeCSGNodeStructure(CSGNode& node)
 {
 	auto nullFunc = std::make_shared<IFNull>("Null");
 	
+	CSGNode root = node;
+
 	int i = 0;
-	while (optimizeCSGNodeStructureRec(node, nullFunc))
-	{	
-		i++;
-	}	
+	do {
+		while (optimizeCSGNodeStructureRec(node, nullFunc))
+		{
+			i++;
+			if (i > 100) std::cout << i << "\n";
+		}
+
+		if (containsNullFunc(root, nullFunc)) {
+			std::cout << "contains null func - loop\n";
+		}
+		else {
+			//std::cout << "no null func - breaking\n";
+			break;
+		}
+	} while (true);
+
 	return i;
 }
 
