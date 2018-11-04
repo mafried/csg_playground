@@ -1059,6 +1059,23 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 	return mesh;
 }
 
+bool containsNullFunc(const CSGNode& node, const ImplicitFunctionPtr& nullFunc) 
+{
+	if (node.type() == CSGNodeType::Geometry && node.function() == nullFunc)
+	{
+		return true;
+	}
+
+	bool nullFound = false;
+
+	for (const auto& child : node.childsCRef())
+	{
+		nullFound = nullFound || containsNullFunc(child, nullFunc);
+	}
+
+	return nullFound;
+}
+
 void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 {
 	std::vector<CSGNode> funcs;
@@ -1068,10 +1085,14 @@ void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 	childs.erase(std::remove_if(childs.begin(), childs.end(), [](const CSGNode& n) {return n.type() == CSGNodeType::Geometry; }), childs.end());
 
 	std::sort(funcs.begin(), funcs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
-	
+
 	funcs.erase(std::unique(funcs.begin(), funcs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function(); }), funcs.end());
-	
+
 	childs.insert(childs.end(), funcs.begin(), funcs.end());
+	
+	//std::sort(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
+	//childs.erase(std::unique(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function() && n0.function() != nullptr; }), childs.end());
+
 }
 
 bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc)
@@ -1085,6 +1106,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 
 	switch (node.operationType())
 	{
+
 	case CSGNodeOperationType::Intersection:
 				
 		removeAllFunctionDuplicates(childs);
@@ -1092,7 +1114,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		if (childs.size() == 1)
 		{
 			node = childs.front();
-			insertedNullFunc = (node.function() == nullFunc);
+			insertedNullFunc = containsNullFunc(node, nullFunc);
 		}
 		//if one operand of the intersection is the nullFunc, intersection's result is the nullFunc.
 		else if (childs.size() == 0 || std::find_if(childs.begin(), childs.end(), [nullFunc](const CSGNode& n) { return n.function() == nullFunc; }) != childs.end())
@@ -1107,7 +1129,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		
 		removeAllFunctionDuplicates(childs);
 				
-		//Remove all nullfuncs.
+		//Remove all nullfuncs since they do not have any effect in union.
 		childs.erase(std::remove_if(childs.begin(), childs.end(), [nullFunc](const CSGNode& n) {return n.function() == nullFunc; }), childs.end());
 				
 		if (childs.size() == 0)
@@ -1118,8 +1140,8 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		else if (childs.size() == 1)
 		{
 			node = childs.front();
-			insertedNullFunc = (node.function() == nullFunc);
-		}		
+			insertedNullFunc = containsNullFunc(node, nullFunc);
+		}
 		
 		break;
 
@@ -1133,7 +1155,7 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 		else if (childs.size() == 1)
 		{
 			node = childs.front();
-			insertedNullFunc = (node.function() == nullFunc);
+			insertedNullFunc = containsNullFunc(node, nullFunc);
 		}
 		else if (childs.size() == 2)
 		{	
@@ -1142,18 +1164,36 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 				node = geometry(nullFunc);
 				insertedNullFunc = true;
 			}
-			else if (childs[0].type() == CSGNodeType::Geometry && childs[0].function() == nullFunc)
+			else if (childs[0].function() == nullFunc)
 			{	
 				node = opComp({ childs[1] });					
-				insertedNullFunc = (node.childsCRef()[0].function() == nullFunc);
+				insertedNullFunc = containsNullFunc(node, nullFunc);
+
 			}
-			else if (childs[1].type() == CSGNodeType::Geometry && childs[1].function() == nullFunc)
+			else if (childs[1].function() == nullFunc)
 			{
 				node = childs[0];	
-				insertedNullFunc = (node.function() == nullFunc);
-			}			
+				insertedNullFunc = containsNullFunc(node, nullFunc);
+			}
+		}
+		else
+		{
+			std::cout << "Difference with more than two operands detected." << std::endl;
 		}
 
+		break;
+
+	case CSGNodeOperationType::Complement:
+				
+		if (childs.size() == 1 && childs[0].function() == nullFunc)
+		{
+			node = geometry(nullFunc);
+			insertedNullFunc = true;
+		}
+		else if (childs.size() != 1) {
+			std::cout << "Complement operation with more than 1 child\n";
+		}
+		
 		break;
 	}
 	
@@ -1173,9 +1213,13 @@ int lmu::optimizeCSGNodeStructure(CSGNode& node)
 	auto nullFunc = std::make_shared<IFNull>("Null");
 	
 	int i = 0;
+	int limit = 10;
 	while (optimizeCSGNodeStructureRec(node, nullFunc))
 	{	
 		i++;
+
+		if (i > limit)
+			std::cout << "over limit " << i << std::endl;
 	}	
 	return i;
 }
