@@ -1078,7 +1078,7 @@ bool containsNullFunc(const CSGNode& node, const ImplicitFunctionPtr& nullFunc)
 
 void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 {
-	std::vector<CSGNode> funcs;
+	/*std::vector<CSGNode> funcs;
 
 	std::copy_if(childs.begin(), childs.end(), std::back_inserter(funcs), [](const CSGNode& n) {return n.type() == CSGNodeType::Geometry; });
 
@@ -1088,11 +1088,24 @@ void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 
 	funcs.erase(std::unique(funcs.begin(), funcs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function(); }), funcs.end());
 
-	childs.insert(childs.end(), funcs.begin(), funcs.end());
-	
-	//std::sort(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
-	//childs.erase(std::unique(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function() && n0.function() != nullptr; }), childs.end());
+	childs.insert(childs.end(), funcs.begin(), funcs.end());*/
 
+	//auto tmp = childs;
+	
+
+	std::sort(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
+	childs.erase(std::unique(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function() && n0.function() != nullptr; }), childs.end());
+
+	/*if (tmp.size() > childs.size())
+	{
+		for(auto t : tmp)
+			std::cout << (t.function() == nullptr ? "op" : t.function()->name()) << " ";
+		for (auto t : childs)
+			std::cout << (t.function() == nullptr ? "op" : t.function()->name()) << " ";
+
+		std::cout << "-------------" << std::endl;
+
+	}*/
 }
 
 bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc)
