@@ -978,8 +978,6 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 	return std::make_tuple(min, max);
 }
 
-
-
 CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs)
 {
 	auto nfs = lmu::allDistinctFunctions(node);
@@ -991,7 +989,7 @@ CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std
 			return nullptr;
 	}	
 	CSGNode* foundNode = &node;
-
+	
 	for (auto& child : node.childsRef())
 	{
 		auto childNode = findSmallestSubgraphWithImplicitFunctions(child, funcs);
@@ -1098,6 +1096,7 @@ void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 
 	/*if (tmp.size() > childs.size())
 	{
+
 		for(auto t : tmp)
 			std::cout << (t.function() == nullptr ? "op" : t.function()->name()) << " ";
 		for (auto t : childs)
@@ -1232,8 +1231,12 @@ int lmu::optimizeCSGNodeStructure(CSGNode& node)
 		i++;
 
 		if (i > limit)
-			std::cout << "over limit " << i << std::endl;
+			std::cout << "WARNING: over limit " << i << std::endl;
 	}	
+
+	if (containsNullFunc(node, nullFunc))
+		std::cout << "WARNING: tree still contains a null function" << std::endl;
+
 	return i;
 }
 

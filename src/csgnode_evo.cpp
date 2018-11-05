@@ -239,33 +239,32 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 	using parmu_t = decltype(du)::param_type;
 
 	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(newNode1) - 1 });
-	
-	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);	
 
+	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
 	auto allDistinctFunctions = lmu::allDistinctFunctions(*subNode1);
 
 	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, allDistinctFunctions);
-
-	if (!subNode2)
-		return std::vector<lmu::CSGNode> {newNode1, newNode2};
-
-	double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
-	double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
-
-	std::cout << "CROSSOVER" << std::endl;
-	//std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
-	std::cout << score1 << "     " << score2 << std::endl;
-	
-	if (score1 > score2)
-		*subNode2 = *subNode1;
-	else if (score1 < score2)
-		*subNode1 = *subNode2;
-	else //If both scores are equal, do normal crossover.
-	{
-		std::cout << "NORMAL" << std::endl;
+	if (!subNode2) // do normal crossover if no subtree could be found.
+	{		
 		int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
 		subNode2 = nodePtrAt(newNode2, nodeIdx2);
 		std::swap(*subNode1, *subNode2);
+	}
+	else
+	{
+		double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
+		double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
+
+		if (score1 > score2)
+			*subNode2 = *subNode1;
+		else if (score1 < score2)
+			*subNode1 = *subNode2;
+		else //If both scores are equal, do normal crossover.
+		{
+			int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
+			subNode2 = nodePtrAt(newNode2, nodeIdx2);
+			std::swap(*subNode1, *subNode2);
+		}
 	}
 
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
