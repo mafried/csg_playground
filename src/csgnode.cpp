@@ -273,6 +273,31 @@ Mesh lmu::IdentityOperation::mesh() const
 	return Mesh();
 }
 
+CSGNodePtr NoOperation::clone() const
+{
+	return std::make_shared<NoOperation>(*this);
+}
+Eigen::Vector4d NoOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
+{
+	return Eigen::Vector4d(std::numeric_limits<double>::max(), 0.0, 0.0, 0.0);
+}
+double NoOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	return std::numeric_limits<double>::max();
+}
+CSGNodeOperationType NoOperation::operationType() const
+{
+	return CSGNodeOperationType::Identity;
+}
+std::tuple<int, int> NoOperation::numAllowedChilds() const
+{
+	return std::make_tuple(0, 0);
+}
+Mesh lmu::NoOperation::mesh() const
+{
+	return Mesh();
+}
+
 /*
 CSGNodePtr DifferenceRLOperation::clone() const
 {
@@ -339,6 +364,8 @@ std::string lmu::operationTypeToString(CSGNodeOperationType type)
 		return "Identity";
 	case CSGNodeOperationType::Invalid:
 		return "Invalid";
+	case CSGNodeOperationType::Noop:
+		return "Noop";
 	default:
 		return "Undefined Type";
 	}
@@ -371,6 +398,9 @@ CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name
 		return CSGNode(std::make_shared<ComplementOperation>(name, childs));
 	case CSGNodeOperationType::Identity:
 		return CSGNode(std::make_shared<IdentityOperation>(name, childs));
+	case CSGNodeOperationType::Noop:
+		return CSGNode(std::make_shared<NoOperation>(name));
+
 	default:
 		throw std::runtime_error("Operation type is not supported");
 	}
@@ -1224,18 +1254,33 @@ int lmu::optimizeCSGNodeStructure(CSGNode& node)
 {
 	auto nullFunc = std::make_shared<IFNull>("Null");
 	
+	//writeNode(node, "debug_bef.dot");
+	//std::cout << "Optimize Node" << std::endl;
+
 	int i = 0;
 	int limit = 10;
 	while (optimizeCSGNodeStructureRec(node, nullFunc))
 	{	
+		if (node.function() == nullFunc)
+		{
+			std::cout << "added noop." << std::endl;
+			node = opNo();
+			break;
+		}
+		
 		i++;
 
 		if (i > limit)
 			std::cout << "WARNING: over limit " << i << std::endl;
 	}	
 
+	
 	if (containsNullFunc(node, nullFunc))
+	{
 		std::cout << "WARNING: tree still contains a null function" << std::endl;
+		writeNode(node, "debug.dot");
+		std::terminate();
+	}
 
 	return i;
 }

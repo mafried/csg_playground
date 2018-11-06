@@ -495,6 +495,10 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 		{
 			auto& node = population[i].creature;
 			int numOptimizations = optimizeCSGNodeStructure(node);
+			if (!node.isValid())
+			{
+				continue;
+			}
 		}
 		
 		if (db(_rndEngine, parmb_t{ _optimizationProb }))
