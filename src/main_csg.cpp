@@ -87,16 +87,22 @@ int main(int argc, char *argv[])
   double connectionGraphSamplingStepSize = params.getDouble("Sampling", "ConnectionGraphSamplingStepSize", 0.01);
   
   std::string pcName = argv[1]; // "model.xyz";
+
   auto pointCloud = lmu::readPointCloudXYZ(pcName, 1.0);
 
   std::string primName = argv[2]; // "model.prim";
+
   std::vector<ImplicitFunctionPtr> shapes; 
   shapes = lmu::fromFilePRIM(primName);
+  
+  std::cout << "Compute Connection Graph" << std::endl;
+  
   auto dims = lmu::computeDimensions(shapes);
-
   auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
 		
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
+
+  std::cout << "Simulate RANSAC" << std::endl;
 
   double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, errorSigma, samplingStepSize), shapes);
 

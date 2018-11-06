@@ -597,6 +597,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	bool initializeWithUnionOfAllFunctions = p.getBool("GA", "InitializeWithUnionOfAllFunctions", false);
 	ScheduleType crossScheduleType = scheduleTypeFromString(p.getStr("GA", "CrossoverScheduleType", "identity"));
 	ScheduleType mutationScheduleType = scheduleTypeFromString(p.getStr("GA", "MutationScheduleType", "identity"));
+	bool cancellable = p.getBool("GA", "Cancellable", false);
 
 	int k = p.getInt("Selection", "TournamentK", 2);
 	
@@ -641,18 +642,29 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodePopMan popMan(optimizationProb, preOptimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
 
-	auto task = ga.runAsync(params, s, c, r, isc, popMan);
+	if (cancellable)
+	{
 
-	int i;
-	std::cout << "Press a Key and Enter to break." << std::endl;
-	std::cin >>  i;
+		auto task = ga.runAsync(params, s, c, r, isc, popMan);
 
-	ga.stop();
+		int i;
+		std::cout << "Press a Key and Enter to break." << std::endl;
+		std::cin >> i;
 
-	auto res = task.get(); // ga.run(params, s, c, r, isc);// task.get();
+		ga.stop();
 
-	res.statistics.save(statsFile, &res.population[0].creature);
-	return res.population[0].creature;
+		auto res = task.get();
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}
+	else
+	{
+		auto res = ga.run(params, s, c, r, isc, popMan);
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}	
 }
 
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker)
