@@ -32,6 +32,7 @@ namespace lmu
 		Difference,
 		Complement,
 		Identity,
+		Noop,
 		Invalid
 	};
 
@@ -495,6 +496,21 @@ namespace lmu
 		{
 		}
 
+		virtual CSGNodePtr clone() const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
+		virtual CSGNodeOperationType operationType() const override;
+		virtual std::tuple<int, int> numAllowedChilds() const override;
+		virtual Mesh mesh() const override;
+	};
+
+	class NoOperation : public CSGNodeOperation
+	{
+	public:
+		NoOperation(const std::string& name, const std::vector<CSGNode>& childs = {}) :
+			CSGNodeOperation(name, {})
+		{
+		}
 		virtual CSGNodePtr clone() const override;
 		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
 		virtual double signedDistance(const Eigen::Vector3d& p) const override;

@@ -22,3 +22,7 @@ CSGNode lmu::opComp(const std::vector<CSGNode>& childs)
 {
 	return CSGNode(std::make_shared<ComplementOperation>("", childs));
 }
+CSGNode lmu::opNo(const std::vector<CSGNode>& childs)
+{
+	return CSGNode(std::make_shared<NoOperation>("", childs));
+}

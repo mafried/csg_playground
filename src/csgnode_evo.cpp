@@ -239,33 +239,32 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 	using parmu_t = decltype(du)::param_type;
 
 	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(newNode1) - 1 });
-	
-	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);	
 
+	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
 	auto allDistinctFunctions = lmu::allDistinctFunctions(*subNode1);
 
 	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, allDistinctFunctions);
-
-	if (!subNode2)
-		return std::vector<lmu::CSGNode> {newNode1, newNode2};
-
-	double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
-	double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
-
-	std::cout << "CROSSOVER" << std::endl;
-	//std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
-	std::cout << score1 << "     " << score2 << std::endl;
-	
-	if (score1 > score2)
-		*subNode2 = *subNode1;
-	else if (score1 < score2)
-		*subNode1 = *subNode2;
-	else //If both scores are equal, do normal crossover.
-	{
-		std::cout << "NORMAL" << std::endl;
+	if (!subNode2) // do normal crossover if no subtree could be found.
+	{		
 		int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
 		subNode2 = nodePtrAt(newNode2, nodeIdx2);
 		std::swap(*subNode1, *subNode2);
+	}
+	else
+	{
+		double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
+		double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
+
+		if (score1 > score2)
+			*subNode2 = *subNode1;
+		else if (score1 < score2)
+			*subNode1 = *subNode2;
+		else //If both scores are equal, do normal crossover.
+		{
+			int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
+			subNode2 = nodePtrAt(newNode2, nodeIdx2);
+			std::swap(*subNode1, *subNode2);
+		}
 	}
 
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
@@ -496,6 +495,10 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 		{
 			auto& node = population[i].creature;
 			int numOptimizations = optimizeCSGNodeStructure(node);
+			if (!node.isValid())
+			{
+				continue;
+			}
 		}
 		
 		if (db(_rndEngine, parmb_t{ _optimizationProb }))
@@ -594,6 +597,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	bool initializeWithUnionOfAllFunctions = p.getBool("GA", "InitializeWithUnionOfAllFunctions", false);
 	ScheduleType crossScheduleType = scheduleTypeFromString(p.getStr("GA", "CrossoverScheduleType", "identity"));
 	ScheduleType mutationScheduleType = scheduleTypeFromString(p.getStr("GA", "MutationScheduleType", "identity"));
+	bool cancellable = p.getBool("GA", "Cancellable", false);
 
 	int k = p.getInt("Selection", "TournamentK", 2);
 	
@@ -638,18 +642,29 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodePopMan popMan(optimizationProb, preOptimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
 
-	auto task = ga.runAsync(params, s, c, r, isc, popMan);
+	if (cancellable)
+	{
 
-	int i;
-	std::cout << "Press a Key and Enter to break." << std::endl;
-	std::cin >>  i;
+		auto task = ga.runAsync(params, s, c, r, isc, popMan);
 
-	ga.stop();
+		int i;
+		std::cout << "Press a Key and Enter to break." << std::endl;
+		std::cin >> i;
 
-	auto res = task.get(); // ga.run(params, s, c, r, isc);// task.get();
+		ga.stop();
 
-	res.statistics.save(statsFile, &res.population[0].creature);
-	return res.population[0].creature;
+		auto res = task.get();
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}
+	else
+	{
+		auto res = ga.run(params, s, c, r, isc, popMan);
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}	
 }
 
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker)
@@ -999,7 +1014,6 @@ CSGNode lmu::mergeCSGNodeCliqueSimple(CSGNodeClique& clique)
 
 	return *candidateList.front();
 }
-
 
 double computeGeometryScore(const CSGNode& node, double distAngleDeviationRatio, double maxDistance, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
 {

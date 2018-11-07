@@ -85,12 +85,6 @@ target_link_libraries(main_sampling csg_playground_lib igl::core igl::cgal)
 add_executable(main_csg "src/main_csg.cpp")
 target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
 
-
-# Program for csg reconstruction with the wscg18 approach
-#add_executable(main_wscg18 "src/main_wscg18.cpp")
-#target_link_libraries(main_wscg18 csg_playground_lib igl::core igl::cgal)
-
-
 # Program for csg reconstruction with gui
 if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
 	add_executable(main "src/main.cpp")

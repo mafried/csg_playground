@@ -273,6 +273,31 @@ Mesh lmu::IdentityOperation::mesh() const
 	return Mesh();
 }
 
+CSGNodePtr NoOperation::clone() const
+{
+	return std::make_shared<NoOperation>(*this);
+}
+Eigen::Vector4d NoOperation::signedDistanceAndGradient(const Eigen::Vector3d& p, double h) const
+{
+	return Eigen::Vector4d(std::numeric_limits<double>::max(), 0.0, 0.0, 0.0);
+}
+double NoOperation::signedDistance(const Eigen::Vector3d& p) const
+{
+	return std::numeric_limits<double>::max();
+}
+CSGNodeOperationType NoOperation::operationType() const
+{
+	return CSGNodeOperationType::Identity;
+}
+std::tuple<int, int> NoOperation::numAllowedChilds() const
+{
+	return std::make_tuple(0, 0);
+}
+Mesh lmu::NoOperation::mesh() const
+{
+	return Mesh();
+}
+
 /*
 CSGNodePtr DifferenceRLOperation::clone() const
 {
@@ -339,6 +364,8 @@ std::string lmu::operationTypeToString(CSGNodeOperationType type)
 		return "Identity";
 	case CSGNodeOperationType::Invalid:
 		return "Invalid";
+	case CSGNodeOperationType::Noop:
+		return "Noop";
 	default:
 		return "Undefined Type";
 	}
@@ -371,6 +398,9 @@ CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name
 		return CSGNode(std::make_shared<ComplementOperation>(name, childs));
 	case CSGNodeOperationType::Identity:
 		return CSGNode(std::make_shared<IdentityOperation>(name, childs));
+	case CSGNodeOperationType::Noop:
+		return CSGNode(std::make_shared<NoOperation>(name));
+
 	default:
 		throw std::runtime_error("Operation type is not supported");
 	}
@@ -978,8 +1008,6 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 	return std::make_tuple(min, max);
 }
 
-
-
 CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs)
 {
 	auto nfs = lmu::allDistinctFunctions(node);
@@ -991,7 +1019,7 @@ CSGNode* lmu::findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std
 			return nullptr;
 	}	
 	CSGNode* foundNode = &node;
-
+	
 	for (auto& child : node.childsRef())
 	{
 		auto childNode = findSmallestSubgraphWithImplicitFunctions(child, funcs);
@@ -1078,34 +1106,8 @@ bool containsNullFunc(const CSGNode& node, const ImplicitFunctionPtr& nullFunc)
 
 void removeAllFunctionDuplicates(std::vector<CSGNode>& childs)
 {
-	/*std::vector<CSGNode> funcs;
-
-	std::copy_if(childs.begin(), childs.end(), std::back_inserter(funcs), [](const CSGNode& n) {return n.type() == CSGNodeType::Geometry; });
-
-	childs.erase(std::remove_if(childs.begin(), childs.end(), [](const CSGNode& n) {return n.type() == CSGNodeType::Geometry; }), childs.end());
-
-	std::sort(funcs.begin(), funcs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
-
-	funcs.erase(std::unique(funcs.begin(), funcs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function(); }), funcs.end());
-
-	childs.insert(childs.end(), funcs.begin(), funcs.end());*/
-
-	//auto tmp = childs;
-	
-
 	std::sort(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() > n1.function(); });
 	childs.erase(std::unique(childs.begin(), childs.end(), [](const CSGNode& n0, const CSGNode& n1) { return n0.function() == n1.function() && n0.function() != nullptr; }), childs.end());
-
-	/*if (tmp.size() > childs.size())
-	{
-		for(auto t : tmp)
-			std::cout << (t.function() == nullptr ? "op" : t.function()->name()) << " ";
-		for (auto t : childs)
-			std::cout << (t.function() == nullptr ? "op" : t.function()->name()) << " ";
-
-		std::cout << "-------------" << std::endl;
-
-	}*/
 }
 
 bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc)
@@ -1214,42 +1216,45 @@ bool optimizeCSGNodeStructureRec(CSGNode& node, const std::shared_ptr<ImplicitFu
 	{
 		for (auto& child : node.childsRef())
 		{
-			insertedNullFunc = insertedNullFunc || optimizeCSGNodeStructureRec(child, nullFunc);
+			insertedNullFunc |= optimizeCSGNodeStructureRec(child, nullFunc);
 		}
 	}
 
 	return insertedNullFunc;
 }
 
-bool containsNullFunc(CSGNode& node, const std::shared_ptr<ImplicitFunction>& nullFunc) {
-	if (node.type() == CSGNodeType::Geometry && node.function() == nullFunc) {
-		return true;
-	}
-
-	bool nullFound = false;
-
-	for (auto& child : node.childsRef()) {
-		nullFound = nullFound || containsNullFunc(child, nullFunc);
-	}
-
-	return nullFound;
-}
-
 int lmu::optimizeCSGNodeStructure(CSGNode& node)
 {
 	auto nullFunc = std::make_shared<IFNull>("Null");
 	
-	CSGNode root = node;
+	//writeNode(node, "debug_bef.dot");
+	//std::cout << "Optimize Node" << std::endl;
 
 	int i = 0;
 	int limit = 10;
 	while (optimizeCSGNodeStructureRec(node, nullFunc))
 	{	
+		if (node.function() == nullFunc)
+		{
+			std::cout << "added noop." << std::endl;
+			node = opNo();
+			break;
+		}
+		
 		i++;
 
 		if (i > limit)
-			std::cout << "over limit " << i << std::endl;
+			std::cout << "WARNING: over limit " << i << std::endl;
 	}	
+
+	
+	if (containsNullFunc(node, nullFunc))
+	{
+		std::cout << "WARNING: tree still contains a null function" << std::endl;
+		writeNode(node, "debug.dot");
+		std::terminate();
+	}
+
 	return i;
 }
 
