@@ -71,6 +71,7 @@ namespace lmu
 		CSGNodeRankerV2(const lmu::Graph& g, double sizeWeight, double h);
 
 		double rank(const CSGNode& node) const;
+		double rank(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs) const;
 		std::string info() const;
 
 		double computeGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs) const;

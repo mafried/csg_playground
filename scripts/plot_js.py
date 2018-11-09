@@ -196,20 +196,22 @@ def plotContinuousErrorBarForScores(resultPath):
     paper_bgcolor: "rgb(255,255,255)", 
     plot_bgcolor: "rgb(255,255,255)", 
     xaxis: {
-    gridcolor: "rgb(255,255,255)", 
+    gridcolor: "rgb(125,125,125)", 
     showgrid: true, 
-    showline: false, 
+    linecolor: "rgb(125,125,125)", 
+    showline: true, 
     showticklabels: true, 
-    tickcolor: "rgb(255,255,255)", 
+    tickcolor: "rgb(125,125,125)", 
     ticks: "outside", 
     zeroline: false
     }, 
     yaxis: {
-    gridcolor: "rgb(255,255,255)", 
-    showgrid: true, 
-    showline: false, 
+    gridcolor: "rgb(125,125,125)", 
+    showgrid: true,
+    linecolor: "rgb(125,125,125)", 
+    showline: true, 
     showticklabels: true, 
-    tickcolor: "rgb(255,255,255)", 
+    tickcolor: "rgb(125,125,125)", 
     ticks: "outside", 
     zeroline: false
     }

@@ -30,6 +30,22 @@ double lmu::CSGNodeRankerV2::rank(const CSGNode& node) const
 	return geometryScore - _sizeWeight * sizeScore;
 }
 
+double 
+lmu::CSGNodeRankerV2::rank(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs) const 
+{
+  if (!node.isValid())
+    return 0.0;
+  
+  double geometryScore = computeGeometryScore(node, funcs);
+
+  int numRest = IFBudget(node, _ifBudget).numFuncs();
+  int numAvailable = _ifBudget.numFuncs();
+
+  double sizeScore = (double)(numAvailable-numRest) / (double)numAvailable;
+
+  return geometryScore - _sizeWeight * sizeScore;
+}
+
 std::string lmu::CSGNodeRankerV2::info() const
 {
 	return "Size weight: " + std::to_string(_sizeWeight);
@@ -232,27 +248,33 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreatorV2::sharedPrimitiveCrossover(const 
 	int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes(node1) - 1 });
 
 	CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
-	auto subNode1Funcs = lmu::allDistinctFunctions(*subNode1);
+	auto allDistinctFunctions = lmu::allDistinctFunctions(*subNode1);
 
-	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, subNode1Funcs);
+	CSGNode* subNode2 = findSmallestSubgraphWithImplicitFunctions(newNode2, allDistinctFunctions);
 
-	if (!subNode2)
-		return std::vector<lmu::CSGNode> {node1, node2};
+	if (!subNode2) // do normal crossover if no subtree could be found.
+	  {
+	    int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
+	    subNode2 = nodePtrAt(newNode2, nodeIdx2);
+	    std::swap(*subNode1, *subNode2);
+	  }
+	else 
+	  {
+	    double score1 = r.rank(*subNode1, allDistinctFunctions);
+	    double score2 = r.rank(*subNode2, allDistinctFunctions);
 
-	auto subNode2Funcs = lmu::allDistinctFunctions(*subNode2);
+	    if (score1 > score2)
+	      *subNode2 = *subNode1;
+	    else if (score1 < score2)
+	      *subNode1 = *subNode2;
+	    else //If both scores are equal, do normal crossover.
+	      {
+		int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes(newNode2) - 1 });
+		subNode2 = nodePtrAt(newNode2, nodeIdx2);
+		std::swap(*subNode1, *subNode2);
+	      }
 
-	auto funcs = subNode1Funcs.size() > subNode2Funcs.size() ? subNode1Funcs : subNode2Funcs;
-
-	double score1 = r.computeGeometryScore(*subNode1, funcs);
-	double score2 = r.computeGeometryScore(*subNode2, funcs);
-
-	std::cout << "CROSSOVER" << std::endl;
-	std::cout << serializeNode(*subNode1) << "     " << serializeNode(*subNode2) << std::endl;
-	std::cout << score1 << "     " << score2 << std::endl;
-	if (score1 > score2)
-		*subNode2 = *subNode1;
-	else if (score1 < score2)
-		*subNode1 = *subNode2;
+	  }
 
 	return std::vector<lmu::CSGNode>{ newNode1, newNode2};
 }
@@ -328,11 +350,17 @@ std::string lmu::CSGNodeCreatorV2::info() const
 lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const lmu::ParameterSet& p)
 {
 	bool inParallel = p.getBool("GA", "InParallel", false);
+	bool useCaching = p.getBool("GA", "UseCaching", false);
+
 	int popSize = p.getInt("GA", "PopulationSize", 150);
 	int numBestParents = p.getInt("GA", "NumBestParents", 2);
 	double mutation = p.getDouble("GA", "MutationRate", 0.3);
 	double crossover = p.getDouble("GA", "CrossoverRate", 0.4);
 	double simpleCrossoverProb = p.getDouble("GA", "SimpleCrossoverRate", 0.4);
+
+	ScheduleType crossScheduleType = scheduleTypeFromString(p.getStr("GA", "CrossoverScheduleType", "identity"));
+	ScheduleType mutationScheduleType = scheduleTypeFromString(p.getStr("GA", "MutationScheduleType", "identity"));
+	bool cancellable = p.getBool("GA", "Cancellable", false);
 
 	int k = p.getInt("Selection", "TournamentK", 2);
 
@@ -354,14 +382,32 @@ lmu::CSGNode lmu::createCSGNodeWithGAV2(const lmu::Graph& connectionGraph, const
 
 	// New Ranker
 	lmu::CSGNodeGAV2 ga;
-	lmu::CSGNodeGAV2::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule(), false);
+	lmu::CSGNodeGAV2::Parameters params(popSize, numBestParents, mutation, crossover, inParallel, Schedule(), Schedule(), useCaching);
 
 	lmu::CSGNodeRankerV2 r(connectionGraph, sizeWeight, gradientStepSize);
 	
-	auto res = ga.run(params, s, c, r, isc, lmu::EmptyPopulationManipulator<RankedCreature<CSGNode>>());
+	if (cancellable)
+	{
+		auto task = ga.runAsync(params, s, c, r, isc, lmu::EmptyPopulationManipulator<RankedCreature<CSGNode>>());
 
-	res.statistics.save(statsFile, &res.population[0].creature);
-	return res.population[0].creature;
+		int i;
+		std::cout << "Press a Key and Enter to break." << std::endl;
+		std::cin >> i;
+
+		ga.stop();
+
+		auto res = task.get();
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}
+	else
+	{
+		auto res = ga.run(params, s, c, r, isc, lmu::EmptyPopulationManipulator<RankedCreature<CSGNode>>());
+
+		res.statistics.save(statsFile, &res.population[0].creature);
+		return res.population[0].creature;
+	}
 }
 
 void lmu::IFBudgetPerIF::getRestBudget(const lmu::CSGNode& node, IFBudgetPerIF& budget)
