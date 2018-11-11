@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "pointcloud.h"
+#include "congraph.h"
 
 namespace lmu
 {
@@ -67,9 +68,10 @@ namespace lmu
 	{
 		ImplicitFunction(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
 			_transform(transform),
-			_pos(0.0,0.0,0.0),
+			_pos(0.0, 0.0, 0.0),
 			_mesh(mesh),
-			_name(name)
+			_name(name),
+			_scoreWeight(1.0)
 		{
 			_pos = _transform * _pos;
 			_invTrans = transform.inverse();
@@ -172,6 +174,15 @@ namespace lmu
 
 	  virtual std::string serializeParameters() const = 0;
 
+	  double scoreWeight() const
+	  {
+		  return _scoreWeight;
+	  }
+
+	  void setScoreWeight(double w)
+	  {
+		  _scoreWeight = w;
+	  }
 
 	protected: 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
@@ -184,6 +195,8 @@ namespace lmu
 		Mesh _mesh;
 		PointCloud _points;
 		std::string _name;
+
+		double _scoreWeight;
 	};
 
 	struct IFSphere : public ImplicitFunction 
@@ -482,6 +495,9 @@ namespace lmu
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);
 
 	void movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter = false, double threshold = 0.0);
+
+	void reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
+
 
 
 	// Save primitives with the .PRIM file format

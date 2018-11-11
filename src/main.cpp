@@ -582,19 +582,31 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	double maxAngleDistance = M_PI / 18.0;
 	double noiseSigma = 0.01;
 	CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma);
+	double connectionGraphSamplingStepSize = 0.05;
+	double gradientStepSize = 0.001;
 
     auto pointCloud = lmu::computePointCloud(node, samplingParams);
 
 	std::cout << "Points: " << pointCloud.rows() << std::endl;
 
 	auto funcs = allDistinctFunctions(node);
+	auto dims = lmu::computeDimensions(funcs);
+	auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
+
 	double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
 	std::cout << "used points: " << res << "%" << std::endl;
+
+	
+	lmu::reducePoints(funcs, graph, gradientStepSize);
 
 	for (const auto& func : funcs)
 	{
 		viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
+		
 	}
+
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
+	viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 	viewer.data().point_size = 5.0;
 	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);

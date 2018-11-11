@@ -60,6 +60,8 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
 {
 	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _h, functions);
+	
+	//std::cout << geometryScore << " " << (_lambda * numNodes(node)) << std::endl;
 
 	double score = geometryScore - _lambda * numNodes(node);
 	
@@ -553,11 +555,11 @@ std::string lmu::CSGNodePopMan::info() const
 
 double lmu::lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes)
 {
-int numPoints = 0;
-for (const auto& shape : shapes)
-numPoints += shape->points().rows();
+	int numPoints = 0;
+	for (const auto& shape : shapes)
+		numPoints += shape->points().rows() * shape->scoreWeight();
 
-return std::log(numPoints);
+	return std::log(numPoints);
 }
 
 long long binom(int n, int k)

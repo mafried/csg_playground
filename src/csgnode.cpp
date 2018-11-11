@@ -513,6 +513,8 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 	double score = 0.0;
 	for (const auto& func : funcs)
 	{
+		double perFuncScore = 0.0;
+
 		for (int i = 0; i < func->pointsCRef().rows(); ++i)
 		{
 			num++;
@@ -540,10 +542,12 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 						
 			double theta = std::acos(gradientDotN) / alpha;
 
-			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
+			double scoreDelta = (std::exp(-(d*d)) * (double)(gradientDotN > 0.0));//+ std::exp(-(theta*theta)));
 
-			score += scoreDelta;
+			perFuncScore += (scoreDelta * func->scoreWeight());
 		}
+
+		score += perFuncScore;
 	}
 
 	return score;

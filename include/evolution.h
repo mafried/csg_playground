@@ -577,6 +577,8 @@ namespace lmu
 		{	
 			if (inParallel)
 			{
+				size_t numThreads = 0;
+				omp_set_dynamic(0);
 #ifndef _OPENMP 
 				throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
 #endif
@@ -602,10 +604,11 @@ namespace lmu
 						}
 					}
 
-					//Rank creatures not found in cache.
-#pragma omp parallel for				
+					//Rank creatures not found in cache.					
+#pragma omp parallel for									
 					for (int i = 0; i < creaturesToRank.size(); ++i)
 					{
+						numThreads = omp_get_num_threads();
 						size_t index = std::get<0>(creaturesToRank[i]);
 						double rank = ranker.rank(population[index].creature);
 						population[index].rank = rank;
@@ -620,12 +623,15 @@ namespace lmu
 				else //no caching.
 				{
 
-#pragma omp parallel for				
+#pragma omp parallel for	
 					for (int i = 0; i < population.size(); ++i)
 					{
+						numThreads = omp_get_num_threads();
 						population[i].rank = ranker.rank(population[i].creature);
 					}
 				}
+
+				std::cout << "Num threads: " << numThreads << std::endl;
 			}
 			else // single threaded
 			{

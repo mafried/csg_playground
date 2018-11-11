@@ -15,7 +15,7 @@ exePath = "C:/Projekte/csg_playground_build/Release"
 resultPath = "C:/Projekte/csg_playground_build/Release"
 
 CSGConfig = namedtuple("CSGConfig", "points primitives partitioning algorithm config")
-Run = namedtuple("Run", "csgConfig times")
+Run = namedtuple("Run", "csgConfig times desc")
 
 def executeProg(cmd):
     popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
@@ -54,7 +54,11 @@ def run(run):
             # Create ini file
             with open(runDir + "/params.ini", "w") as configfile:
                 run.csgConfig.config.write(configfile)
-                
+				
+			# Create desc file
+            with open(runDir + "/desc.dat", "w") as descfile:
+                descfile.write(run.desc)
+			                
             # Copy points file 
             copyfile(run.csgConfig.points, runDir + "/points.xyz")
                     
@@ -89,7 +93,9 @@ def run(run):
             print("execution failed. Reason: " + str(ex))
 
 ############################################################################################################
-			
+
+# simple crossover with opt
+		
 c = config()
 c["Sampling"] = {
 "MaxDistance": "0.02",
@@ -115,10 +121,12 @@ c["StopCriterion"] = {
 "MaxIterationsWithoutChange":"1000"
 }
             
-r = Run(csgConfig=CSGConfig(points=contentPath + "/model13.xyz", primitives=contentPath + "/model13.prim", partitioning="none", algorithm="ga", config=c), times=3)
+r = Run(csgConfig=CSGConfig(points=contentPath + "/model13.xyz", primitives=contentPath + "/model13.prim", partitioning="none", algorithm="ga", config=c), times=3, desc="simple crossover with opt")
 
 run(r)
 
+# new crossover with opt
+r.desc="new crossover with opt"
 c["GA"] = {
 "SimpleCrossoverRate":"0.0",
 "CrossoverRate":"0.4",
@@ -130,17 +138,8 @@ c["GA"] = {
 
 run(r)
 
-c["GA"] = {
-"SimpleCrossoverRate":"1.0",
-"CrossoverRate":"0.4",
-"MutationRate":"0.3",
-"InParallel":"true",
-"UseCaching":"true",
-"Cancellable":"false"
-} 
-
-run(r)
-
+# simple crossover without opt
+r.desc="simple crossover without opt"
 c["GA"] = {
 "SimpleCrossoverRate":"1.0",
 "CrossoverRate":"0.4",
@@ -157,6 +156,8 @@ c["Optimization"] = {
 
 run(r)
 
+# new crossover without opt
+r.desc="new crossover without opt"
 c["GA"] = {
 "SimpleCrossoverRate":"0.0",
 "CrossoverRate":"0.4",
@@ -168,6 +169,118 @@ c["GA"] = {
 c["Optimization"] = {
 "OptimizationProb":"0.0",
 "PreOptimizationProb":"0.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# without crossover and without opt
+r.desc="without crossover and without opt"
+c["GA"] = {
+"SimpleCrossoverRate":"0.0",
+"CrossoverRate":"0.0",
+"MutationRate":"0.3",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false"
+} 
+c["Optimization"] = {
+"OptimizationProb":"0.0",
+"PreOptimizationProb":"0.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# without crossover and with opt
+r.desc="without crossover and with opt"
+c["GA"] = {
+"SimpleCrossoverRate":"0.0",
+"CrossoverRate":"0.0",
+"MutationRate":"0.3",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false"
+} 
+c["Optimization"] = {
+"OptimizationProb":"1.0",
+"PreOptimizationProb":"1.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# schedule simple crossover with opt
+r.desc="schedule simple crossover with opt"
+c["GA"] = {
+"SimpleCrossoverRate":"0.0",
+"CrossoverRate":"0.7",
+"MutationRate":"0.7",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false",
+"CrossoverScheduleType":"exp"
+} 
+c["Optimization"] = {
+"OptimizationProb":"1.0",
+"PreOptimizationProb":"1.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# schedule new crossover with opt
+r.desc="schedule new crossover with opt"
+c["GA"] = {
+"SimpleCrossoverRate":"1.0",
+"CrossoverRate":"0.7",
+"MutationRate":"0.7",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false",
+"CrossoverScheduleType":"exp"
+} 
+c["Optimization"] = {
+"OptimizationProb":"1.0",
+"PreOptimizationProb":"1.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# schedule simple crossover without opt
+r.desc="schedule simple crossover without opt"
+c["GA"] = {
+"SimpleCrossoverRate":"0.0",
+"CrossoverRate":"0.7",
+"MutationRate":"0.7",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false",
+"CrossoverScheduleType":"exp"
+} 
+c["Optimization"] = {
+"OptimizationProb":"0.0",
+"PreOptimizationProb":"0.0",
+"OptimizationType":"traverse"
+}
+
+run(r)
+
+# schedule new crossover without opt
+r.desc="schedule new crossover without opt"
+c["GA"] = {
+"SimpleCrossoverRate":"1.0",
+"CrossoverRate":"0.7",
+"MutationRate":"0.7",
+"InParallel":"true",
+"UseCaching":"true",
+"Cancellable":"false",
+"CrossoverScheduleType":"exp"
+} 
+c["Optimization"] = {
+"OptimizationProb":"1.0",
+"PreOptimizationProb":"1.0",
 "OptimizationType":"traverse"
 }
 

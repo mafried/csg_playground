@@ -109,12 +109,13 @@ int main(int argc, char *argv[])
   std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
   std::cout << "Points in primitives: " << pointsInPrimitiveRate << "%" << std::endl;
 
-  lmu::movePointsToSurface(shapes, false, 0.0001);
-
   CSGNode res = op<Union>();
 
   double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
   SampleParams p{ gradientStepSize };
+
+  lmu::movePointsToSurface(shapes, false, 0.0001);
+  lmu::reducePoints(shapes, graph, gradientStepSize);
 
   std::string partitionType = argv[4];
   std::string recoveryType = argv[5];
