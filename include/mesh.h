@@ -497,6 +497,7 @@ namespace lmu
 	void movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter = false, double threshold = 0.0);
 
 	void reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
+	void arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
 
 
 

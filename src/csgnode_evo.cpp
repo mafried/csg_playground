@@ -201,7 +201,7 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::crossover(const CSGNode& node1, c
 	}
 }
 
-std::vector<lmu::CSGNode> lmu::CSGNodeCreator::simpleCrossover(const CSGNode & node1, const CSGNode & node2) const
+std::vector<lmu::CSGNode> lmu::CSGNodeCreator::simpleCrossover(const CSGNode& node1, const CSGNode& node2) const
 {
 	if (!node1.isValid() || !node2.isValid())
 		return std::vector<lmu::CSGNode> {node1, node2};
@@ -426,6 +426,8 @@ CSGNode lmu::CSGNodePopMan::getOptimizedTree(std::vector<ImplicitFunctionPtr> fu
 	auto cachedNode = _nodeLookup.find(hash);
 	if (cachedNode == _nodeLookup.end())
 	{
+		//std::cout << "HERE " << funcs.size() << std::endl;
+
 		auto node = CSGNode::invalidNode;
 
 		if (funcs.size() == 1)
@@ -433,7 +435,7 @@ CSGNode lmu::CSGNodePopMan::getOptimizedTree(std::vector<ImplicitFunctionPtr> fu
 			node = geometry(funcs[0]);		
 		}
 		else if (funcs.size() == 2)
-		{
+		{			
 			node = computeForTwoFunctions(funcs, _ranker);
 		}
 		else if(funcs.size() > 2)
@@ -511,13 +513,15 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 			switch (_type)
 			{
 			case CSGNodeOptimization::TRAVERSE:
-
+								
 				lmu::visit(node, [this](CSGNode& n)
 				{
 					auto& childs = n.childsRef();
 					if (childs.size() == 2 && childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 					{
 						std::vector<ImplicitFunctionPtr> funcs = getSuitableFunctions({ childs[0].function(), childs[1].function() });
+						//std::cout << "traverse "<< funcs.size() << std::endl;
+
 						n = getOptimizedTree(funcs);
 					}
 				});
@@ -697,7 +701,9 @@ CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions
 	const CSGNode* bestCandidate = nullptr;
 	for (const auto& candidate : candidates)
 	{
-		double curScore = ranker.rank(candidate);
+		double curScore = ranker.rank(candidate, functions /*TODO CHANGED*/);
+		//double curScore2 = ranker.rank(candidate);
+		//std::cout << curScore << " " << curScore2 << std::endl;
 
 		if (maxScore < curScore)
 		{

@@ -508,22 +508,32 @@ void lmu::visit(CSGNode& node, const std::function<void(CSGNode&node)>& f)
 
 double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs)
 {	
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+	static std::random_device rd;  
+	static std::mt19937 gen(rd());
+
 	int num = 0; 
 
 	double score = 0.0;
+
 	for (const auto& func : funcs)
 	{
+		int numSamples = func->points().rows();//(int)((double)func->points().rows() * 0.01) + 1;
+
 		double perFuncScore = 0.0;
 
-		for (int i = 0; i < func->pointsCRef().rows(); ++i)
+		for (int i = 0; i < numSamples; ++i)
 		{
+			int idx = i;//du(rd, parmu_t{ 0, (int) func->points().rows() - 1 });
+
 			num++;
 
 			//const double* data = func->pointsCRef().data() + i * 6;
 			//Eigen::Vector3d p(data[0], data[1], data[2]);
 			//Eigen::Vector3d n(data[3], data[4], data[5]);
 
-			auto row = func->pointsCRef().row(i);
+			auto row = func->pointsCRef().row(idx);
 			Eigen::Vector3d p = row.head<3>();
 			Eigen::Vector3d n = row.tail<3>();
 
@@ -542,9 +552,9 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 						
 			double theta = std::acos(gradientDotN) / alpha;
 
-			double scoreDelta = (std::exp(-(d*d)) * (double)(gradientDotN > 0.0));//+ std::exp(-(theta*theta)));
+			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
 
-			perFuncScore += (scoreDelta * func->scoreWeight());
+			perFuncScore += (scoreDelta * func->scoreWeight() * (func->points().rows() / numSamples));
 		}
 
 		score += perFuncScore;

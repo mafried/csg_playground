@@ -115,6 +115,7 @@ int main(int argc, char *argv[])
   SampleParams p{ gradientStepSize };
 
   lmu::movePointsToSurface(shapes, false, 0.0001);
+  //lmu::arrangeGradients(shapes, graph, gradientStepSize);
   lmu::reducePoints(shapes, graph, gradientStepSize);
 
   std::string partitionType = argv[4];

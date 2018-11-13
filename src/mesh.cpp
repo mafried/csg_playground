@@ -565,8 +565,12 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 void lmu::reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
 {
+	std::unordered_map<std::shared_ptr<ImplicitFunction>, std::vector<Eigen::Matrix<double, 1, 6>>> selectedPoints;
+
 	for (auto& f : functions)
 	{
+		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+
 		//Check orientation
 		int numSameSide = 0;
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
@@ -578,55 +582,81 @@ void lmu::reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		}
 		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
 			
-		//Find most significant point 
-		int furthestAwayPointIdx = -1;
-		double curLargestDistance = 0.0;
+		for (auto& f2 : functions)
+		{
+			if (f == f2 || !areConnected(graph, f, f2))
+				continue;
+
+			int furthestAwayPointIdx = 0;
+			double curLargestDistance = 0.0;
+			for (int i = 0; i < f->pointsCRef().rows(); ++i)
+			{
+				Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+				Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+				Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+				double d = std::abs(f2->signedDistance(p));
+				if (d > curLargestDistance)
+				{
+					furthestAwayPointIdx = i;
+					curLargestDistance = d;
+				}
+			}
+			
+			auto point = f->points().row(furthestAwayPointIdx);
+			Eigen::Vector3d p = point.leftCols(3);
+			Eigen::Vector3d n = point.rightCols(3);
+			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+			Eigen::Matrix<double, 1, 6> newPoint;
+			newPoint << p.transpose(), (outside ? g : -g).transpose();
+
+			selectedPoints.push_back(newPoint);
+		}
+
+		f->setScoreWeight(f->points().rows() / selectedPoints.size());
+
+		PointCloud pc;
+		pc.resize(selectedPoints.size(), 6);
+		for (int i = 0; i < pc.rows(); ++i)
+		{
+			pc.row(i) = selectedPoints[i];
+		}
+		f->points() = pc;
+
+		//std::cout << f->name() << ": " << (outside ? "Outside" : "Inside") << " " << (g.dot(n) > 0.0 ? "Outside" : "Inside") << std::endl;
+	}
+}
+
+void lmu::arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
+{
+	std::unordered_map<std::shared_ptr<ImplicitFunction>, std::vector<Eigen::Matrix<double, 1, 6>>> selectedPoints;
+
+	for (auto& f : functions)
+	{
+		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+
+		//Check orientation
+		int numSameSide = 0;
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
 			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
 			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-
-			if (outside && g.dot(n) < 0.0)
-				continue; 
-
-			if (!outside && g.dot(n) >= 0.0)
-				continue;
-
-			double accDistance = 0.0;
-			for (auto& f2 : functions)
-			{
-				if (f == f2 || !areConnected(graph, f, f2))
-					continue; 
-
-				accDistance += std::abs(f2->signedDistance(p));				
-			}
-
-			if (accDistance > curLargestDistance)
-			{
-				furthestAwayPointIdx = i;
-				curLargestDistance = accDistance;
-			}
+			numSameSide += g.dot(n) > 0.0;
 		}
-
-		if (furthestAwayPointIdx == -1)
-			throw std::runtime_error("Shape has no most significant point.");
-
-		auto point = f->pointsCRef().row(furthestAwayPointIdx);
+		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
 		
-		Eigen::Vector3d p = point.leftCols(3);
-		Eigen::Vector3d n = point.rightCols(3);
-		Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		{
+			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
 
-		Eigen::Matrix<double, 1, 6> newPoint; 
-		newPoint << p.transpose(), (outside ? g : -g).transpose(); 
+			Eigen::Matrix<double, 1, 6> newPoint;
+			newPoint << p.transpose(), (outside ? g : -g).transpose();
 
-		f->setScoreWeight(f->points().rows());
-		f->points() = newPoint;
-
-		std::cout << f->name() << ": " << (outside ? "Outside" : "Inside") << " " << (g.dot(n) > 0.0 ? "Outside" : "Inside") << std::endl;
-
-
+			f->points().row(i) = newPoint;
+		}
 	}
 }
 
