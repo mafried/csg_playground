@@ -57,13 +57,158 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 	return rank(node, _functions);
 }
 
+double computeGeometryScoreRough(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
+{	
+	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
+	double numCorrectSamples = 0;
+	double numConsideredSamples = 0;
+	const double smallestDelta = 0.0001;
+
+	double totalNumSamples = 0;
+	for (const auto& func : funcs)
+	{
+		totalNumSamples += func->pointsCRef().rows();
+		//std::cout << "FUNC: " << func->name() << std::endl;
+	}
+
+	for (const auto& func : funcs)
+	{
+		double sampleFactor = 1.0;//totalNumSamples / func->pointsCRef().rows();
+
+		for (int i = 0; i < func->pointsCRef().rows(); ++i)
+		{			
+			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(i);
+
+			//std::cout << func->name() << pn << std::endl;
+
+			Eigen::Vector3d sampleP = pn.leftCols(3);
+			Eigen::Vector3d sampleN = pn.rightCols(3);
+
+			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
+			double sampleDistNode = sampleDistGradNode[0];
+			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
+
+			numConsideredSamples += (1.0 * sampleFactor);
+
+			if (std::abs(sampleDistNode - func->pointWeights()[i]) <= smallestDelta && sampleGradNode.dot(sampleN) > 0.0)
+			{
+				numCorrectSamples += (1.0 * sampleFactor);
+			}
+			else
+			{
+				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
+			}
+		}
+	}
+
+	return numCorrectSamples / numConsideredSamples;
+}
+
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
 {
-	double geometryScore = computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _h, functions);
+	/*double x_off = 2.0;
+	Eigen::AngleAxisd rot90x(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0));
+
+	static CSGNode n = op<Union>(
+	{
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2 + x_off, 0, -1)*rot90x), 0.2, 2.8, "Cylinder_2"),
+		
+		op<Union>(
+	{
+		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_2"),
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(x_off, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_0")
+	}),
+
+		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, 0), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
+
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_0"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_1")
+	}),
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_2"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_3")
+	}),
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_4"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_5")
+	}),
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_6"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_7")
+	}),
+
+		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3 + x_off, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_3"),
+
+		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3 + x_off, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
+
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3 + x_off, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
+
+
+		op<Difference>({
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)*rot90x), 0.2, 0.8, "Cylinder_20"),
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -1)*rot90x), 0.1, 1, "Cylinder_30")
+	}),
+
+		op<Union>(
+	{
+		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_20"),
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_00")
+	}),
+
+		geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_10"), //Box close to spheres
+
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_00"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_10")
+	}),
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_20"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_30")
+	}),
+
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_40"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_50")
+	}),
+		op<Difference>(
+	{
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_60"),
+		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_70")
+	}),
+
+		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_30"),
+
+		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_40"),
+
+		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_10"),
+
+	});*/
+
+	double geometryScore = computeGeometryScoreRough(node, functions, _h);//computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _h, functions);
 	
+	
+	
+	std::cout << "geoscore: " << geometryScore << std::endl;
+	double lambda = 0.001 ;
+
+	std::cout << "size score:" << lambda * numNodes(node) << std::endl;
+
 	//std::cout << geometryScore << " " << (_lambda * numNodes(node)) << std::endl;
 
-	double score = geometryScore - _lambda * numNodes(node);
+	double score = geometryScore - lambda * numNodes(node);
 	
 	return score;
 }
@@ -639,10 +784,15 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	
 	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(maxIterWithoutChange, changeDelta, maxIter);
 
-	double lambda = lambdaBasedOnPoints(shapes);
+	double lambda = 0.2;// lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 
 	lmu::CSGNodeRanker r(lambda, epsilon, alpha, gradientStepSize, shapes, connectionGraph);
+
+	//r.rank(CSGNode::invalidNode);
+	//int i;
+	//std::cin >> i;
+
 
 	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 

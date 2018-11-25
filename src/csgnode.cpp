@@ -8,6 +8,7 @@
 
 #include <vector>
 #include <memory>
+#include <array>
 
 #include "boost/graph/graphviz.hpp"
 #include <boost/functional/hash.hpp>
@@ -554,7 +555,7 @@ double lmu::computeGeometryScore(const CSGNode& node, double epsilon, double alp
 
 			double scoreDelta = (std::exp(-(d*d)) + std::exp(-(theta*theta)));
 
-			perFuncScore += (scoreDelta * func->scoreWeight() * (func->points().rows() / numSamples));
+			perFuncScore += (scoreDelta * func->pointWeights()[i] * (func->points().rows() / numSamples));
 		}
 
 		score += perFuncScore;
@@ -1512,3 +1513,316 @@ lmu::CSGNodeSamplingParams::CSGNodeSamplingParams(double maxDistance, double max
 	maxDim(max)
 {
 }
+
+void lmu::reducePointsBasedOnVariance(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
+{
+	double maxVariance = 0.0;
+	double minVariance = std::numeric_limits<double>::max();
+	for (auto& f : functions)
+	{
+		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+		std::vector<double> selectedPointWeights;
+
+		//Check orientation
+		int numSameSide = 0;
+		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		{
+			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+			numSameSide += g.dot(n) > 0.0;
+		}
+		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
+
+		for (auto& f2 : functions)
+		{
+			if (f == f2 || !areConnected(graph, f, f2))
+				continue;
+
+			int idx = 0;
+			double curLargestVariance = 0.0;
+
+			auto g1 = geometry(f);
+			auto g2 = geometry(f2);
+			std::array<CSGNode,2> operations = {opUnion({g1, g2}), opInter({g1,g2})};
+
+			int minDistOpBestPoint = -1;
+
+			std::array<size_t, 2> bestOperationCounter = {0,0};
+
+			for (int i = 0; i < f->pointsCRef().rows(); ++i)
+			{
+				Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+				Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+				Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+				std::array<double, operations.size()> distances;
+				double distSum = 0.0;
+				double minDist = std::numeric_limits<double>::max();
+				int minDistOp = 0;
+				for (int j = 0; j < operations.size(); ++j)
+				{
+					distances[j] = operations[j].signedDistance(p);
+					distSum += distances[j];
+
+					if (std::abs(distances[j]) < minDist)
+					{
+						minDist = std::abs(distances[j]);
+						minDistOp = j;
+					}
+				}
+				double distMean = distSum / operations.size();
+
+				bestOperationCounter[minDistOp]++;
+
+
+				/*double distVar = 0.0;
+				for (int j = 0; j < operations.size(); ++j)
+				{
+					distVar += ((distances[j] - distMean) * (distances[j] - distMean));
+				}*/
+				double distVar = std::abs(distances[0] - distances[1]);
+
+
+				if (distVar > curLargestVariance)
+				{
+					idx = i;
+					curLargestVariance = distVar;
+					minDistOpBestPoint = minDistOp;
+
+					//std::cout << "Var: " << distVar << std::endl;
+				}
+			}
+					
+			auto bestOpIdx = std::max_element(bestOperationCounter.begin(), bestOperationCounter.end()) - bestOperationCounter.begin();
+			
+			std::cout << f->name() << " " << f2->name() << ": " << curLargestVariance << " MinDistIdx: " << minDistOpBestPoint << " " << bestOperationCounter[0] << "|" 
+				<< bestOperationCounter[1] << "|" << bestOperationCounter[2] << std::endl;
+
+			if(bestOpIdx != minDistOpBestPoint)
+				std::cout << "###################################"  << std::endl;
+
+			auto point = f->points().row(idx);
+			Eigen::Vector3d p = point.leftCols(3);
+			Eigen::Vector3d n = point.rightCols(3);
+			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+			Eigen::Matrix<double, 1, 6> newPoint;
+			newPoint << p.transpose(), (outside ? g : -g).transpose();
+
+			selectedPoints.push_back(newPoint);
+			selectedPointWeights.push_back(curLargestVariance);
+
+			if (maxVariance < curLargestVariance)
+				maxVariance = curLargestVariance;
+
+			if (minVariance > curLargestVariance)
+				minVariance = curLargestVariance;
+		}
+
+		//f->setScoreWeight(f->points().rows() / selectedPoints.size());
+
+		PointCloud pc;
+		pc.resize(selectedPoints.size(), 6);
+		for (int i = 0; i < pc.rows(); ++i)
+		{
+			pc.row(i) = selectedPoints[i];
+		}
+		f->points() = pc;
+		f->pointWeights() = selectedPointWeights;
+
+		//std::cout << f->name() << ": " << (outside ? "Outside" : "Inside") << " " << (g.dot(n) > 0.0 ? "Outside" : "Inside") << std::endl;
+	}
+
+	std::cout << "Max Variance: " << maxVariance << std::endl;
+	std::cout << "Min Variance: " << minVariance << std::endl;
+
+	for (auto& f : functions)
+	{
+		for (int i = 0; i < f->pointWeights().size(); ++i)
+		{
+			f->pointWeights()[i] = maxVariance / f->pointWeights()[i];
+			std::cout << f->name() << "-var: " << f->pointWeights()[i] << std::endl;
+		}	
+	}
+}
+
+void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
+{
+	for (auto& f : functions)
+	{
+		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+		std::vector<double> selectedPointWeights;
+
+		//Check orientation
+		int numSameSide = 0;
+		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		{
+			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+			numSameSide += g.dot(n) >= 0.0;
+		}
+		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
+
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+		std::vector<double> pointDistances;
+		std::vector<double> minDistancesToOtherFuncs;
+
+		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		{
+			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);			
+			Eigen::Vector3d g = dg.bottomRows(3);
+			double d = dg(0);
+			
+			double minDistToOtherFuncs = std::numeric_limits<double>::max(); 
+			for (auto& otherFunc : functions)
+			{
+				if (otherFunc == f)
+					continue;
+				double dOther = std::abs(otherFunc->signedDistance(p));
+				if (minDistToOtherFuncs > dOther)
+				{
+					minDistToOtherFuncs = dOther;
+				}
+			}
+		
+			if (((g.dot(n) >= 0.0 && outside) || (g.dot(n) < 0.0 && !outside)))
+			{
+				points.push_back(f->pointsCRef().row(i));
+				minDistancesToOtherFuncs.push_back(minDistToOtherFuncs);
+				pointDistances.push_back((outside ? 1.0 : -1.0)*d);
+			}
+		}
+
+		PointCloud pc;
+		pc.resize(1, 6);
+		size_t idx = std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()));
+
+
+		//Eigen::Matrix<double, 1, 6> newPN;
+		//Eigen::Vector3d newP = (points[idx].leftCols(3) - (pointDistances[idx] * points[idx].rightCols(3)));
+		//newPN << newP.transpose(), points[idx].leftCols(3).transpose();
+
+
+		pc.row(0) = points[idx];
+		f->points() = pc;
+		f->pointWeights() = { pointDistances[idx] };
+	}
+}
+
+	//	for (auto& f2 : functions)
+	//	{
+	//		if (f == f2 || !areConnected(graph, f, f2))
+	//			continue;
+
+	//		int idx = 0;
+	//		double curLargestVariance = 0.0;
+
+	//		auto g1 = geometry(f);
+	//		auto g2 = geometry(f2);
+	//		std::array<CSGNode, 2> operations = { opUnion({ g1, g2 }), opInter({ g1,g2 }) };
+
+	//		int minDistOpBestPoint = -1;
+
+	//		std::array<size_t, 2> bestOperationCounter = { 0,0 };
+
+	//		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+	//		{
+	//			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+	//			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+	//			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+	//			std::array<double, operations.size()> distances;
+	//			double distSum = 0.0;
+	//			double minDist = std::numeric_limits<double>::max();
+	//			int minDistOp = 0;
+	//			for (int j = 0; j < operations.size(); ++j)
+	//			{
+	//				distances[j] = operations[j].signedDistance(p);
+	//				distSum += distances[j];
+
+	//				if (std::abs(distances[j]) < minDist)
+	//				{
+	//					minDist = std::abs(distances[j]);
+	//					minDistOp = j;
+	//				}
+	//			}
+	//			double distMean = distSum / operations.size();
+
+	//			bestOperationCounter[minDistOp]++;
+
+
+	//			/*double distVar = 0.0;
+	//			for (int j = 0; j < operations.size(); ++j)
+	//			{
+	//			distVar += ((distances[j] - distMean) * (distances[j] - distMean));
+	//			}*/
+	//			double distVar = std::abs(distances[0] - distances[1]);
+
+
+	//			if (distVar > curLargestVariance)
+	//			{
+	//				idx = i;
+	//				curLargestVariance = distVar;
+	//				minDistOpBestPoint = minDistOp;
+
+	//				//std::cout << "Var: " << distVar << std::endl;
+	//			}
+	//		}
+
+	//		auto bestOpIdx = std::max_element(bestOperationCounter.begin(), bestOperationCounter.end()) - bestOperationCounter.begin();
+
+	//		std::cout << f->name() << " " << f2->name() << ": " << curLargestVariance << " MinDistIdx: " << minDistOpBestPoint << " " << bestOperationCounter[0] << "|"
+	//			<< bestOperationCounter[1] << "|" << bestOperationCounter[2] << std::endl;
+
+	//		if (bestOpIdx != minDistOpBestPoint)
+	//			std::cout << "###################################" << std::endl;
+
+	//		auto point = f->points().row(idx);
+	//		Eigen::Vector3d p = point.leftCols(3);
+	//		Eigen::Vector3d n = point.rightCols(3);
+	//		Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+
+	//		Eigen::Matrix<double, 1, 6> newPoint;
+	//		newPoint << p.transpose(), (outside ? g : -g).transpose();
+
+	//		selectedPoints.push_back(newPoint);
+	//		selectedPointWeights.push_back(curLargestVariance);
+
+	//		if (maxVariance < curLargestVariance)
+	//			maxVariance = curLargestVariance;
+
+	//		if (minVariance > curLargestVariance)
+	//			minVariance = curLargestVariance;
+	//	}
+
+	//	//f->setScoreWeight(f->points().rows() / selectedPoints.size());
+
+	//	PointCloud pc;
+	//	pc.resize(selectedPoints.size(), 6);
+	//	for (int i = 0; i < pc.rows(); ++i)
+	//	{
+	//		pc.row(i) = selectedPoints[i];
+	//	}
+	//	f->points() = pc;
+	//	f->pointWeights() = selectedPointWeights;
+
+	//	//std::cout << f->name() << ": " << (outside ? "Outside" : "Inside") << " " << (g.dot(n) > 0.0 ? "Outside" : "Inside") << std::endl;
+	//}
+
+	//std::cout << "Max Variance: " << maxVariance << std::endl;
+	//std::cout << "Min Variance: " << minVariance << std::endl;
+
+	//for (auto& f : functions)
+	//{
+	//	for (int i = 0; i < f->pointWeights().size(); ++i)
+	//	{
+	//		f->pointWeights()[i] = maxVariance / f->pointWeights()[i];
+	//		std::cout << f->name() << "-var: " << f->pointWeights()[i] << std::endl;
+	//	}
+	//}
+//}
+

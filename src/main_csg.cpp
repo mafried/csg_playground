@@ -114,9 +114,15 @@ int main(int argc, char *argv[])
   double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
   SampleParams p{ gradientStepSize };
 
-  lmu::movePointsToSurface(shapes, false, 0.0001);
+  
   //lmu::arrangeGradients(shapes, graph, gradientStepSize);
-  lmu::reducePoints(shapes, graph, gradientStepSize);
+
+  //lmu::reducePoints(shapes, graph, gradientStepSize);
+  //lmu::reducePointsBasedOnVariance(shapes, graph, gradientStepSize);
+
+  lmu::filterPoints(shapes, graph, gradientStepSize);
+  //lmu::movePointsToSurface(shapes, true, 0.0001);
+
 
   std::string partitionType = argv[4];
   std::string recoveryType = argv[5];

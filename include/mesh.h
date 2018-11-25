@@ -184,6 +184,11 @@ namespace lmu
 		  _scoreWeight = w;
 	  }
 
+	  std::vector<double>& pointWeights()
+	  {
+		  return _pointWeights;
+	  }
+
 	protected: 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
 		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) = 0;
@@ -195,6 +200,7 @@ namespace lmu
 		Mesh _mesh;
 		PointCloud _points;
 		std::string _name;
+		std::vector<double> _pointWeights;
 
 		double _scoreWeight;
 	};

@@ -356,9 +356,12 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 			for (const auto& row : pointsAndNormals)
 			{
 				points.row(i++) = row;
+
+				//std::cout << func->name() << ": " << row << std::endl;
 			}
 
 			func->setPoints(points);
+			
 		}		
 	}
 

@@ -597,7 +597,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	std::cout << "used points: " << res << "%" << std::endl;
 
 	
-	lmu::reducePoints(funcs, graph, gradientStepSize);
+	lmu::reducePointsBasedOnVariance(funcs, graph, gradientStepSize);
 
 	for (const auto& func : funcs)
 	{

@@ -511,8 +511,7 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::stri
 
 
 void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter, double threshold)
-{
-	
+{	
 	for (auto& func : functions)
 	{
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
@@ -527,26 +526,22 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 			double sampleDistFunction = sampleDistGradFunction[0];
 			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);
-
-			//std::cout << sampleP << std::endl << (sampleP - (sampleGradFunction * sampleDistFunction)) << std::endl;
-			//std::cout << sampleGradFunction << std::endl;
-			//std::cout << "----------" << std::endl;
-
+			
 			Eigen::Matrix<double, 1, 6> newPN;
-
 			Eigen::Vector3d newP = (sampleP - (sampleDistFunction * sampleGradFunction));
-
 			newPN << newP.transpose() , sampleN.transpose();
 								
-			double distAfter = func->signedDistance(sampleP - (sampleDistFunction * sampleGradFunction));
+			double distAfter = func->signedDistance(newP);
 
-			if (filter && std::abs(distAfter) <  threshold)
-			{
+			if (std::abs(distAfter) <  threshold)
+			{				
 				points.push_back(newPN);
 			}
 			else
 			{
-				func->points().row(j) = newPN;
+				//std::cout << func->name() << ": filter " << distAfter << std::endl;
+
+				//func->points().row(j) = newPN;
 			}
 		}
 
@@ -556,8 +551,10 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 			int i = 0;
 			for (const auto& point : points)
-				m.row(i++) = point;
-				
+			{
+				m.row(i) = point;				
+				i++;
+			}				
 			func->points() = m;
 		}
 	}
@@ -628,6 +625,9 @@ void lmu::reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 	}
 }
 
+
+
+
 void lmu::arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
 {
 	std::unordered_map<std::shared_ptr<ImplicitFunction>, std::vector<Eigen::Matrix<double, 1, 6>>> selectedPoints;
@@ -646,6 +646,7 @@ void lmu::arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>&
 			numSameSide += g.dot(n) > 0.0;
 		}
 		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
+		//std::cout << f->name() << ": " << numSameSide << " " << f->pointsCRef().rows() << std::endl;
 		
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
