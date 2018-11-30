@@ -15,19 +15,35 @@ namespace lmu
 {
 	struct ImplicitFunction;
 
+	struct ParetoState
+	{
+		ParetoState();
+
+		void update(const CSGNode& node, double geoScore); 
+		CSGNode getBest() const;
+
+	private: 
+		std::mutex _mutex;
+		std::vector<std::tuple<CSGNode, double>> _bestGeoScoreSizeScoreNodes;
+		double _currentBestGeoScore;
+	};
+
 	struct CSGNodeRanker
 	{
-		CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph());
+		CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph(), std::shared_ptr<ParetoState> ps = nullptr);
 
 		double rank(const CSGNode& node) const;
-		double rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const;
+		double rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel = false) const;
 
 		std::string info() const;
 
 		bool treeIsInvalid(const lmu::CSGNode& node) const;
 
+		int getNumSamplePoints() const;
+
 	private:
 
+		int getNumSamplePoints(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const;
 		double computeEpsilonScale();
 		double _h;
 		double _lambda;
@@ -37,6 +53,10 @@ namespace lmu
 		double _epsilonScale;
 		double _epsilon;
 		double _alpha;
+
+		int _numSamplePoints; 
+
+		std::shared_ptr<ParetoState> _paretoState;
 	};
 
 	using MappingFunction = std::function<double(double)>;

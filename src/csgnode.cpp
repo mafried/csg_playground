@@ -1626,7 +1626,7 @@ void lmu::reducePointsBasedOnVariance(const std::vector<std::shared_ptr<Implicit
 		pc.resize(selectedPoints.size(), 6);
 		for (int i = 0; i < pc.rows(); ++i)
 		{
-			pc.row(i) = selectedPoints[i];
+pc.row(i) = selectedPoints[i];
 		}
 		f->points() = pc;
 		f->pointWeights() = selectedPointWeights;
@@ -1643,7 +1643,7 @@ void lmu::reducePointsBasedOnVariance(const std::vector<std::shared_ptr<Implicit
 		{
 			f->pointWeights()[i] = maxVariance / f->pointWeights()[i];
 			std::cout << f->name() << "-var: " << f->pointWeights()[i] << std::endl;
-		}	
+		}
 	}
 }
 
@@ -1673,11 +1673,11 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
 			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
-			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);			
+			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
 			Eigen::Vector3d g = dg.bottomRows(3);
 			double d = dg(0);
-			
-			double minDistToOtherFuncs = std::numeric_limits<double>::max(); 
+
+			double minDistToOtherFuncs = std::numeric_limits<double>::max();
 			for (auto& otherFunc : functions)
 			{
 				if (otherFunc == f)
@@ -1688,7 +1688,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 					minDistToOtherFuncs = dOther;
 				}
 			}
-		
+
 			if (((g.dot(n) >= 0.0 && outside) || (g.dot(n) < 0.0 && !outside)))
 			{
 				points.push_back(f->pointsCRef().row(i));
@@ -1696,22 +1696,128 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				pointDistances.push_back((outside ? 1.0 : -1.0)*d);
 			}
 		}
+		
+		double maxMinDistanceToOtherFuncs = minDistancesToOtherFuncs[std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()))];
+		
+		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
+		std::vector<double> perFuncPointDistances;
+
+		for (int i = 0; i < functions.size(); ++i)
+		{
+			if (!lmu::areConnected(graph, functions[i], f))
+				continue;
+
+			std::vector<double> pointScores(points.size(), 0.0);
+
+			double maxDistToConnectedFunc = 0.0;
+			for (int j = 0; j < points.size(); ++j)
+			{		
+				Eigen::Vector3d p = points[j].leftCols(3);
+
+				double distToConnectedFunc = std::abs(functions[i]->signedDistance(p));
+				if (distToConnectedFunc > maxDistToConnectedFunc)
+					maxDistToConnectedFunc = distToConnectedFunc;
+			}
+
+			for (int j = 0; j < points.size(); ++j)
+			{
+				Eigen::Vector3d p = points[j].leftCols(3);
+
+				double minDistToOtherFuncs = minDistancesToOtherFuncs[j];
+				double distToConnectedFunc = std::abs(functions[i]->signedDistance(p));
+
+				//std::cout << distToConnectedFunc << std::endl;
+
+				pointScores[j] = /*2.0 **/(minDistToOtherFuncs / maxMinDistanceToOtherFuncs) + (distToConnectedFunc / maxDistToConnectedFunc);
+
+				//std::cout << (minDistToOtherFuncs / maxMinDistanceToOtherFuncs) << " " << (distToConnectedFunc / maxDistToConnectedFunc) << std::endl;
+			}
+
+			size_t idx = std::distance(pointScores.begin(), std::max_element(pointScores.begin(), pointScores.end()));
+			perFuncPoints.push_back(points[idx]);
+			perFuncPointDistances.push_back(pointDistances[idx]);
+		}
 
 		PointCloud pc;
-		pc.resize(1, 6);
-		size_t idx = std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()));
+		pc.resize(perFuncPoints.size(), 6);
+		for (int i = 0; i < perFuncPoints.size(); ++i)
+		{
+			pc.row(i) = perFuncPoints[i];
+		}
 
-
-		//Eigen::Matrix<double, 1, 6> newPN;
-		//Eigen::Vector3d newP = (points[idx].leftCols(3) - (pointDistances[idx] * points[idx].rightCols(3)));
-		//newPN << newP.transpose(), points[idx].leftCols(3).transpose();
-
-
-		pc.row(0) = points[idx];
-		f->points() = pc;
-		f->pointWeights() = { pointDistances[idx] };
+		f->points() = pc;		
+		f->pointWeights() = { perFuncPointDistances };
 	}
 }
+
+/*
+
+void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
+{
+for (auto& f : functions)
+{
+std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+std::vector<double> selectedPointWeights;
+
+//Check orientation
+int numSameSide = 0;
+for (int i = 0; i < f->pointsCRef().rows(); ++i)
+{
+Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
+numSameSide += g.dot(n) >= 0.0;
+}
+bool outside = numSameSide >= f->pointsCRef().rows() / 2;
+
+std::vector<Eigen::Matrix<double, 1, 6>> points;
+std::vector<double> pointDistances;
+std::vector<double> minDistancesToOtherFuncs;
+
+for (int i = 0; i < f->pointsCRef().rows(); ++i)
+{
+Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
+Eigen::Vector3d g = dg.bottomRows(3);
+double d = dg(0);
+
+double minDistToOtherFuncs = std::numeric_limits<double>::max();
+for (auto& otherFunc : functions)
+{
+if (otherFunc == f)
+continue;
+double dOther = std::abs(otherFunc->signedDistance(p));
+if (minDistToOtherFuncs > dOther)
+{
+minDistToOtherFuncs = dOther;
+}
+}
+
+if (((g.dot(n) >= 0.0 && outside) || (g.dot(n) < 0.0 && !outside)))
+{
+points.push_back(f->pointsCRef().row(i));
+minDistancesToOtherFuncs.push_back(minDistToOtherFuncs);
+pointDistances.push_back((outside ? 1.0 : -1.0)*d);
+}
+}
+
+PointCloud pc;
+pc.resize(1, 6);
+size_t idx = std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()));
+
+
+//Eigen::Matrix<double, 1, 6> newPN;
+//Eigen::Vector3d newP = (points[idx].leftCols(3) - (pointDistances[idx] * points[idx].rightCols(3)));
+//newPN << newP.transpose(), points[idx].leftCols(3).transpose();
+
+
+pc.row(0) = points[idx];
+f->points() = pc;
+f->pointWeights() = { pointDistances[idx] };
+}
+}
+*/
 
 	//	for (auto& f2 : functions)
 	//	{

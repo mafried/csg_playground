@@ -14,8 +14,36 @@ using namespace lmu;
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const ParameterSet& params);
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker);
 
+lmu::ParetoState::ParetoState() : 
+	_currentBestGeoScore(0.0)
+{
+}
 
-lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph) :
+void lmu::ParetoState::update(const CSGNode& node, double geoScore)
+{
+	std::lock_guard<std::mutex> l(_mutex);
+
+	if (_currentBestGeoScore < geoScore)
+	{
+		_currentBestGeoScore = geoScore;
+		_bestGeoScoreSizeScoreNodes.clear();
+		std::cout << "New Geo Score: " << geoScore << std::endl;
+	}
+	
+	if (geoScore - _currentBestGeoScore >= -0.000001)
+	{
+		_bestGeoScoreSizeScoreNodes.push_back(std::make_tuple(node, numNodes(node)));
+		std::cout << "Added best candidate" << std::endl;
+	}
+}
+
+CSGNode lmu::ParetoState::getBest() const
+{
+	return std::get<0>(*std::min_element(_bestGeoScoreSizeScoreNodes.begin(), _bestGeoScoreSizeScoreNodes.end(),
+		[](const std::tuple<CSGNode, double>& n1, const std::tuple<CSGNode, double>& n2) { return std::get<1>(n1) < std::get<1>(n2); }));
+}
+
+lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph, std::shared_ptr<ParetoState> ps) :
 	_lambda(lambda),
 	_epsilon(epsilon),
 	_alpha(alpha),
@@ -23,8 +51,18 @@ lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, d
 	_functions(functions),
 	_earlyOutTest(!connectionGraph.structure.m_vertices.empty()),
 	_connectionGraph(connectionGraph),
-	_epsilonScale(computeEpsilonScale())
+	_epsilonScale(computeEpsilonScale()),
+	_numSamplePoints(getNumSamplePoints(_functions)),
+	_paretoState(ps)
 {
+}
+
+int lmu::CSGNodeRanker::getNumSamplePoints(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
+{
+	int numSamplePoints = 0; 
+	for (const auto& func : functions)
+		numSamplePoints += func->points().rows();
+	return numSamplePoints;
 }
 
 double lmu::CSGNodeRanker::computeEpsilonScale()
@@ -54,10 +92,10 @@ double lmu::CSGNodeRanker::computeEpsilonScale()
 
 double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {	
-	return rank(node, _functions);
+	return rank(node, _functions, true);
 }
 
-double computeGeometryScoreRough(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
+double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
 {	
 	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
 	double numCorrectSamples = 0;
@@ -104,113 +142,21 @@ double computeGeometryScoreRough(const CSGNode& node, const std::vector<Implicit
 	return numCorrectSamples / numConsideredSamples;
 }
 
-double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions) const
+int lmu::CSGNodeRanker::getNumSamplePoints() const
 {
-	/*double x_off = 2.0;
-	Eigen::AngleAxisd rot90x(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0));
+	return _numSamplePoints;
+}
 
-	static CSGNode n = op<Union>(
+double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel) const
+{
+	double geometryScore = computeNormalizedGeometryScore(node, functions, _h);
+	
+	if (isCompleteModel && _paretoState)
 	{
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2 + x_off, 0, -1)*rot90x), 0.2, 2.8, "Cylinder_2"),
+		_paretoState->update(node, geometryScore);
+	}
 		
-		op<Union>(
-	{
-		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_2"),
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(x_off, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_0")
-	}),
-
-		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(x_off, 0, 0), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_1"), //Box close to spheres
-
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_0"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_1")
-	}),
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.2), 0.2, "Sphere_2"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, 1.0, 0.6), 0.4, "Sphere_3")
-	}),
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_4"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_5")
-	}),
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_6"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_7")
-	}),
-
-		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3 + x_off, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_3"),
-
-		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3 + x_off, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_4"),
-
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3 + x_off, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_1"),
-
-
-		op<Difference>({
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.2, 0, -1)*rot90x), 0.2, 0.8, "Cylinder_20"),
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -1)*rot90x), 0.1, 1, "Cylinder_30")
-	}),
-
-		op<Union>(
-	{
-		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0, 0, -0.5), Eigen::Vector3d(0.5,1.0,1.0),2, "Box_20"),
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0, 0, -1)*rot90x), 0.5, 0.5, "Cylinder_00")
-	}),
-
-		geo<IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(1.0,2.0,0.2),2, "Box_10"), //Box close to spheres
-
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.2), 0.2, "Sphere_00"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, 1.0, 0.6), 0.4, "Sphere_10")
-	}),
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.2), 0.2, "Sphere_20"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, 1.0, 0.6), 0.4, "Sphere_30")
-	}),
-
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.2), 0.2, "Sphere_40"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5, -1.0, 0.6), 0.4, "Sphere_50")
-	}),
-		op<Difference>(
-	{
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.2), 0.2, "Sphere_60"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5, -1.0, 0.6), 0.4, "Sphere_70")
-	}),
-
-		geo<IFBox>((Eigen::Affine3d)(Eigen::Translation3d(-0.3, 0, -0.5)), Eigen::Vector3d(0.2,0.8,0.9),2, "Box_30"),
-
-		geo<IFBox>((Eigen::Affine3d)Eigen::Translation3d(0.3, 0, -0.5), Eigen::Vector3d(0.2,0.8,1.0),2, "Box_40"),
-
-		geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4, 0.2, "Cylinder_10"),
-
-	});*/
-
-	double geometryScore = computeGeometryScoreRough(node, functions, _h);//computeGeometryScore(node, _epsilon * _epsilonScale, _alpha, _h, functions);
-	
-	
-	
-	std::cout << "geoscore: " << geometryScore << std::endl;
-	double lambda = 0.001 ;
-
-	std::cout << "size score:" << lambda * numNodes(node) << std::endl;
-
-	//std::cout << geometryScore << " " << (_lambda * numNodes(node)) << std::endl;
-
-	double score = geometryScore - lambda * numNodes(node);
-	
-	return score;
+	return geometryScore;
 }
 
 std::string lmu::CSGNodeRanker::info() const
@@ -628,6 +574,26 @@ std::vector<ImplicitFunctionPtr> lmu::CSGNodePopMan::getSuitableFunctions(const 
 
 void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const
 {
+	double allowedGeoError = 0.10;
+
+	std::vector<double> sizeScores(population.size());
+
+	double maxSize = 0.0;
+	for (int i = 0; i < population.size(); ++i)
+	{
+		auto& node = population[i].creature;
+
+		sizeScores[i] = (double)numNodes(node);
+		if (maxSize < sizeScores[i])
+			maxSize = sizeScores[i];
+	}
+
+	double smallestGeoScoreDelta = 1.0 / ((double)_ranker.getNumSamplePoints() + 1.0); // + 1.0 to make it a bit smaller.
+
+	for (int i = 0; i < population.size(); ++i)
+	{
+		population[i].rank = population[i].rank - (sizeScores[i] / maxSize * smallestGeoScoreDelta * 100.0 * allowedGeoError);
+	}
 }
 
 void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const
@@ -638,6 +604,10 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 		
+#ifndef _OPENMP 
+		throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
+#endif
+#pragma omp parallel for
 	for (int i = 0; i < population.size(); ++i)
 	{
 		if (db(_rndEngine, parmb_t{_preOptimizationProb }))
@@ -787,7 +757,9 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	double lambda = 0.2;// lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
 
-	lmu::CSGNodeRanker r(lambda, epsilon, alpha, gradientStepSize, shapes, connectionGraph);
+	auto ps = std::make_shared<lmu::ParetoState>();
+
+	lmu::CSGNodeRanker r(lambda, epsilon, alpha, gradientStepSize, shapes, connectionGraph, ps);
 
 	//r.rank(CSGNode::invalidNode);
 	//int i;
@@ -812,14 +784,14 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		auto res = task.get();
 
 		res.statistics.save(statsFile, &res.population[0].creature);
-		return res.population[0].creature;
+		return ps->getBest(); //res.population[0].creature;
 	}
 	else
 	{
 		auto res = ga.run(params, s, c, r, isc, popMan);
 
 		res.statistics.save(statsFile, &res.population[0].creature);
-		return res.population[0].creature;
+		return ps->getBest(); //res.population[0].creature;
 	}	
 }
 

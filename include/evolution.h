@@ -469,11 +469,12 @@ namespace lmu
 				rankPopulation(population, ranker, params.rankingInParallel, params.useCaching, stats);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 
+				std::cout << "After Rank manipulation." << std::endl;
+				popMan.manipulateAfterRanking(population);
+
 				sortPopulation(population);
 				stats.sortingDurations.push_back(stats.iterationDuration.tick());
-
-				popMan.manipulateAfterRanking(population);
-			
+							
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
