@@ -33,7 +33,7 @@ void lmu::ParetoState::update(const CSGNode& node, double geoScore)
 	if (geoScore - _currentBestGeoScore >= -0.000001)
 	{
 		_bestGeoScoreSizeScoreNodes.push_back(std::make_tuple(node, numNodes(node)));
-		std::cout << "Added best candidate" << std::endl;
+		std::cout << "Added best candidate with Geo Score: " << geoScore << std::endl;
 	}
 }
 
@@ -41,6 +41,11 @@ CSGNode lmu::ParetoState::getBest() const
 {
 	return std::get<0>(*std::min_element(_bestGeoScoreSizeScoreNodes.begin(), _bestGeoScoreSizeScoreNodes.end(),
 		[](const std::tuple<CSGNode, double>& n1, const std::tuple<CSGNode, double>& n2) { return std::get<1>(n1) < std::get<1>(n2); }));
+}
+
+std::ostream& lmu::operator<<(std::ostream& out, const Rank& r)
+{
+	return out << "geo: " << r.geo << " size: " << r.size << " combined: " << r.combined;
 }
 
 lmu::CSGNodeRanker::CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph, std::shared_ptr<ParetoState> ps) :
@@ -90,7 +95,7 @@ double lmu::CSGNodeRanker::computeEpsilonScale()
 	return (max - min).norm();
 }
 
-double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
+Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 {	
 	return rank(node, _functions, true);
 }
@@ -100,7 +105,7 @@ double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<Imp
 	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
 	double numCorrectSamples = 0;
 	double numConsideredSamples = 0;
-	const double smallestDelta = 0.0001;
+	const double smallestDelta = 0.00001;
 
 	double totalNumSamples = 0;
 	for (const auto& func : funcs)
@@ -147,7 +152,7 @@ int lmu::CSGNodeRanker::getNumSamplePoints() const
 	return _numSamplePoints;
 }
 
-double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel) const
+Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel) const
 {
 	double geometryScore = computeNormalizedGeometryScore(node, functions, _h);
 	
@@ -156,7 +161,7 @@ double lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std:
 		_paretoState->update(node, geometryScore);
 	}
 		
-	return geometryScore;
+	return Rank(geometryScore, 0.0, 0.0);
 }
 
 std::string lmu::CSGNodeRanker::info() const
@@ -345,8 +350,8 @@ std::vector<lmu::CSGNode> lmu::CSGNodeCreator::sharedPrimitiveCrossover(const CS
 	}
 	else
 	{
-		double score1 = _ranker.rank(*subNode1, allDistinctFunctions);
-		double score2 = _ranker.rank(*subNode2, allDistinctFunctions);
+		double score1 = _ranker.rank(*subNode1, allDistinctFunctions).geo;
+		double score2 = _ranker.rank(*subNode2, allDistinctFunctions).geo;
 
 		if (score1 > score2)
 			*subNode2 = *subNode1;
@@ -572,7 +577,7 @@ std::vector<ImplicitFunctionPtr> lmu::CSGNodePopMan::getSuitableFunctions(const 
 	return funcs;
 }
 
-void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const
+void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
 {
 	double allowedGeoError = 0.10;
 
@@ -590,13 +595,17 @@ void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNo
 
 	double smallestGeoScoreDelta = 1.0 / ((double)_ranker.getNumSamplePoints() + 1.0); // + 1.0 to make it a bit smaller.
 
+
+	std::cout << "delta: " << (1.0 * smallestGeoScoreDelta * 100.0 * allowedGeoError) << std::endl;
+
 	for (int i = 0; i < population.size(); ++i)
 	{
-		population[i].rank = population[i].rank - (sizeScores[i] / maxSize * smallestGeoScoreDelta * 100.0 * allowedGeoError);
+		population[i].rank.size = sizeScores[i];
+		population[i].rank.combined = population[i].rank.geo - (population[i].rank.size / maxSize * smallestGeoScoreDelta * 100.0 * allowedGeoError);
 	}
 }
 
-void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const
+void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
 {
 	static std::bernoulli_distribution db{};
 	using parmb_t = decltype(db)::param_type;
@@ -604,10 +613,10 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 		
-#ifndef _OPENMP 
-		throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
-#endif
-#pragma omp parallel for
+//#ifndef _OPENMP 
+//		throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
+//#endif
+//#pragma omp parallel for
 	for (int i = 0; i < population.size(); ++i)
 	{
 		if (db(_rndEngine, parmb_t{_preOptimizationProb }))
@@ -752,7 +761,9 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodeTournamentSelector s(k, true);
 	
-	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(maxIterWithoutChange, changeDelta, maxIter);
+	lmu::CSGNodeNoFitnessIncreaseStopCriterion isc(maxIterWithoutChange, Rank(changeDelta), maxIter);
+
+	lmu::GeometryStopCriterion gsc(maxIter, maxIterWithoutChange, 1.0);
 
 	double lambda = 0.2;// lambdaBasedOnPoints(shapes);
 	std::cout << "lambda: " << lambda << std::endl;
@@ -773,7 +784,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	if (cancellable)
 	{
 
-		auto task = ga.runAsync(params, s, c, r, isc, popMan);
+		auto task = ga.runAsync(params, s, c, r, gsc, popMan);
 
 		int i;
 		std::cout << "Press a Key and Enter to break." << std::endl;
@@ -788,7 +799,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	}
 	else
 	{
-		auto res = ga.run(params, s, c, r, isc, popMan);
+		auto res = ga.run(params, s, c, r, gsc, popMan);
 
 		res.statistics.save(statsFile, &res.population[0].creature);
 		return ps->getBest(); //res.population[0].creature;
@@ -823,7 +834,7 @@ CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions
 	const CSGNode* bestCandidate = nullptr;
 	for (const auto& candidate : candidates)
 	{
-		double curScore = ranker.rank(candidate, functions /*TODO CHANGED*/);
+		double curScore = ranker.rank(candidate, functions /*TODO CHANGED*/).geo;
 		//double curScore2 = ranker.rank(candidate);
 		//std::cout << curScore << " " << curScore2 << std::endl;
 
@@ -856,35 +867,83 @@ lmu::computeGAWithPartitions
 {
 	lmu::CSGNode res = lmu::op<Union>();
 
-	//for (const auto& pi: get<1>(partition)) {
-	//  res.addChild(lmu::geometry(pi));
-	//}
+	bool inParallel = params.getBool("GA", "PerPartitionInParallel", false);
 
-	for (const auto& p : partitions)
+	TimeTicker t;
+
+	std::mutex m; 
+
+	if (inParallel)
 	{
-		std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(p);
-
-		lmu::CSGNode partRes(nullptr);
-		if (shapes.size() == 1)
+#ifndef _OPENMP 
+		throw std::runtime_error("GA should run in parallel but OpenMP is not available.");
+#endif
+#pragma omp parallel for									
+		for (int i = 0; i < partitions.size(); ++i)
 		{
-			partRes = geometry(shapes.front());
-		}
-		else if (shapes.size() == 2)
-		{
-			partRes = computeForTwoFunctions(shapes, params);
-		}
-		else
-		{
-			partRes = lmu::createCSGNodeWithGA(shapes, params, p);
-		}
-    
-		if (partitions.size() == 1)
-			return partRes;
+			std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(partitions[i]);
 
-		res.addChild(partRes);
-  }
+			lmu::CSGNode partRes(nullptr);
+			if (shapes.size() == 1)
+			{
+				partRes = geometry(shapes.front());
+			}
+			else if (shapes.size() == 2)
+			{
+				partRes = computeForTwoFunctions(shapes, params);
+			}
+			else
+			{
+				partRes = lmu::createCSGNodeWithGA(shapes, params, partitions[i]);
+			}
 
-  return res;
+			if (partitions.size() == 1)
+			{
+				std::lock_guard<std::mutex> l(m);
+				res = partRes;
+				break;
+			}
+
+			m.lock();
+			res.addChild(partRes);
+			m.unlock();
+		}
+	}
+	else
+	{
+		for (const auto& p : partitions)
+		{
+			std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(p);
+
+			lmu::CSGNode partRes(nullptr);
+			if (shapes.size() == 1)
+			{
+				partRes = geometry(shapes.front());
+			}
+			else if (shapes.size() == 2)
+			{
+				partRes = computeForTwoFunctions(shapes, params);
+			}
+			else
+			{
+				partRes = lmu::createCSGNodeWithGA(shapes, params, p);
+			}
+
+			if (partitions.size() == 1)
+			{
+				res = partRes;
+				break;
+			}
+
+			res.addChild(partRes);
+		}
+	}
+
+	convertToTreeWithMaxNChilds(res, 2);
+
+	std::cout << "GA Duration: " << t.tick() << std::endl;
+	 
+	return res;
 }
 
 
@@ -935,7 +994,7 @@ std::tuple<long long, double> computeNodesForClique(const Clique& clique, const 
 		const CSGNode* bestCandidate = nullptr;
 		for (const auto& candidate : candidates)
 		{
-			double curScore = ranker.rank(candidate);
+			double curScore = ranker.rank(candidate).geo;
 			std::cout << candidate.name() << " for " << clique.functions[0]->name() << " " << clique.functions[1]->name() << " rank: " << curScore /*<< " tree rank: " << ranker2.rank( trees[i++]) */ << std::endl;
 
 			if (maxScore < curScore)

@@ -142,8 +142,8 @@ int main(int argc, char *argv[])
     } else if (recoveryType == "ga") {
       res = createCSGNodeWithGA(shapes, params, graph);
       optimizeCSGNodeStructure(res);
-	} else if (recoveryType == "ga2") {
-	  res = createCSGNodeWithGAV2(graph, params);
+	//} else if (recoveryType == "ga2") {
+	  //res = createCSGNodeWithGAV2(graph, params);
 	  //optimizeCSGNodeStructure(res); Some issues here
     } else {
       std::cerr << "Invalid recovery type" << std::endl;
@@ -170,8 +170,8 @@ int main(int argc, char *argv[])
       res = lmu::computeShapiroWithPartitions(partitions, p);
     } else if (recoveryType == "ga") {
       res = lmu::computeGAWithPartitions(partitions, params);
-	} else if (recoveryType == "ga2") {
-		res = lmu::computeGAWithPartitionsV2(partitions, params);
+	//} else if (recoveryType == "ga2") {
+	//	res = lmu::computeGAWithPartitionsV2(partitions, params);
 	}
 	else {
       std::cerr << "Invalid recovery type" << std::endl;

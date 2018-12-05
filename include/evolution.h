@@ -82,26 +82,24 @@ namespace lmu
 		}
 	};
 
-	template<typename Creature>
+	template<typename Creature, typename Rank = double>
 	struct RankedCreature
 	{
-		RankedCreature(const Creature& c, double rank = unranked()) :
+		RankedCreature(const Creature& c, Rank rank = unranked()) :
 			creature(c),
 			rank(rank)
 		{
 		}		
 
-		static double unranked() 
+		static Rank unranked() 
 		{
-			return std::numeric_limits<double>::min();
+			return Rank(-std::numeric_limits<double>::max());
 		}
 
 		Creature creature;
-		double rank;
+		Rank rank;		
 	};
-
-	const double worstRank = -std::numeric_limits<double>::max();
-
+		
 	template<typename RankedCreature>
 	struct TournamentSelector
 	{
@@ -183,10 +181,10 @@ namespace lmu
 		int _maxIterations;
 	};
 
-	template<typename RankedCreature>
+	template<typename RankedCreature, typename Rank = double>
 	struct NoFitnessIncreaseStopCriterion
 	{
-		NoFitnessIncreaseStopCriterion(int maxCount, double delta, int maxIterations) :
+		NoFitnessIncreaseStopCriterion(int maxCount, Rank delta, int maxIterations) :
 			_maxCount(maxCount),
 			_delta(delta),
 			_maxIterations(maxIterations),
@@ -205,7 +203,7 @@ namespace lmu
 			if (population.empty())
 				return true;
 
-			double currentBestRank = population[0].rank;
+			Rank currentBestRank = population[0].rank;
 
 			if(currentBestRank - _lastBestRank <= _delta)
 			{
@@ -233,8 +231,8 @@ namespace lmu
 		int _maxCount;
 		int _currentCount;
 		int _maxIterations;
-		double _delta;
-		double _lastBestRank;
+		Rank _delta;
+		Rank _lastBestRank;
 	};
 
 	template<typename RankedCreature>
@@ -255,16 +253,16 @@ namespace lmu
 	};
 
 	template<
-		typename Creature, typename CreatureCreator, typename CreatureRanker,
-		typename ParentSelector = TournamentSelector<RankedCreature<Creature>>,
-		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature>>,
-		typename PopulationManipulator = EmptyPopulationManipulator<RankedCreature<Creature>>
+		typename Creature, typename CreatureCreator, typename CreatureRanker, typename Rank = double,
+		typename ParentSelector = TournamentSelector<RankedCreature<Creature, Rank>>,
+		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature, Rank>>,
+		typename PopulationManipulator = EmptyPopulationManipulator<RankedCreature<Creature, Rank>>
 	>		
 	class GeneticAlgorithm
 	{
 	public:
 
-		using RankedCreature = RankedCreature<Creature>;
+		using RankedCreature = RankedCreature<Creature, Rank>;
 
 		struct Parameters
 		{
@@ -311,7 +309,9 @@ namespace lmu
 				numCrossovers(0),
 				numCrossoverTries(0),
 				numCacheHits(0),
-				numCacheTries(0)
+				numCacheTries(0),
+				bestScore(0.0),
+				worstScore(std::numeric_limits<double>::max())
 			{
 			}
 
@@ -324,11 +324,11 @@ namespace lmu
 			int numCacheHits; 
 			int numCacheTries;
 
-			double bestScore;
-			double worstScore;
-			std::vector<double> bestCandidateScores;
+			Rank bestScore;
+			Rank worstScore;
+			std::vector<Rank> bestCandidateScores;
 
-			std::vector<double> worstCandidateScores;
+			std::vector<Rank> worstCandidateScores;
 			std::vector<long long> rankingDurations;
 			std::vector<long long> sortingDurations;
 			std::vector<long long> optDurations;
@@ -339,8 +339,8 @@ namespace lmu
 
 			void update()
 			{
-				bestScore = bestCandidateScores.empty() ? 0.0 : bestCandidateScores.back();
-				worstScore = worstCandidateScores.empty() ? 0.0 : worstCandidateScores.back();
+				bestScore = bestCandidateScores.empty() ? Rank(0.0) : bestCandidateScores.back();
+				worstScore = worstCandidateScores.empty() ? Rank(0.0) : worstCandidateScores.back();
 			}
 
 			void print()
@@ -503,6 +503,8 @@ namespace lmu
 				mutationRate = params.mutationRate * params.mutationSchedule.getFactor(iterationCount);
 			}
 
+			std::cout << "End." << std::endl;
+
 			stats.totalDuration.tick();
 						
 			return Result(population, stats);
@@ -611,7 +613,7 @@ namespace lmu
 					{
 						numThreads = omp_get_num_threads();
 						size_t index = std::get<0>(creaturesToRank[i]);
-						double rank = ranker.rank(population[index].creature);
+						Rank rank = ranker.rank(population[index].creature);
 						population[index].rank = rank;
 
 						size_t hash = std::get<1>(creaturesToRank[i]);
@@ -643,7 +645,7 @@ namespace lmu
 			}
 		}
 
-		inline double rankCreatureSingleThreaded(const Creature& c, const CreatureRanker& ranker, bool useCaching, Statistics& stats) const
+		inline Rank rankCreatureSingleThreaded(const Creature& c, const CreatureRanker& ranker, bool useCaching, Statistics& stats) const
 		{
 			if (!useCaching)
 				return ranker.rank(c);
@@ -659,7 +661,7 @@ namespace lmu
 				return it->second;
 			}
 			
-			double rank = ranker.rank(c);			
+			Rank rank = ranker.rank(c);			
 			_rankLookup[hash] = rank;
 			
 			return rank;
@@ -677,7 +679,7 @@ namespace lmu
 			});
 		}
 
-		mutable std::unordered_map<size_t, double> _rankLookup;
+		mutable std::unordered_map<size_t, Rank> _rankLookup;
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 		mutable std::atomic<bool> _stopRequested;

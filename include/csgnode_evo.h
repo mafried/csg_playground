@@ -28,12 +28,75 @@ namespace lmu
 		double _currentBestGeoScore;
 	};
 
+	struct Rank
+	{
+		Rank(double geo, double size, double combined) : 
+			geo(geo),
+			size(size),
+			combined(combined)
+		{
+		}
+
+		Rank() : 
+			Rank(0.0)
+		{
+		}
+
+		explicit Rank(double v) :
+			Rank(v, v, v)
+		{
+		}
+
+		double geo; 
+		double size;
+		double combined;
+
+		friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.combined < rhs.combined; }
+		friend inline bool operator> (const Rank& lhs, const Rank& rhs) { return rhs < lhs; }
+		friend inline bool operator<=(const Rank& lhs, const Rank& rhs) { return !(lhs > rhs); }
+		friend inline bool operator>=(const Rank& lhs, const Rank& rhs) { return !(lhs < rhs); }
+		friend inline bool operator==(const Rank& lhs, const Rank& rhs) { return lhs.combined == rhs.combined; }
+		friend inline bool operator!=(const Rank& lhs, const Rank& rhs) { return !(lhs == rhs); }
+
+		Rank& operator+=(const Rank& rhs) 
+		{							
+			geo += rhs.geo;
+			size += rhs.size; 
+			combined += rhs.combined;
+
+			return *this;
+		}
+		
+		Rank& operator-=(const Rank& rhs)
+		{
+			geo -= rhs.geo;
+			size -= rhs.size;
+			combined -= rhs.combined;
+
+			return *this;
+		}
+
+		friend Rank operator+(Rank lhs, const Rank& rhs) 
+		{
+			lhs += rhs; 
+			return lhs;
+		}
+
+		friend Rank operator-(Rank lhs, const Rank& rhs)
+		{
+			lhs -= rhs;
+			return lhs;
+		}
+	};
+
+	std::ostream& operator<<(std::ostream& out, const Rank& r);
+
 	struct CSGNodeRanker
 	{
 		CSGNodeRanker(double lambda, double epsilon, double alpha, double h, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, const lmu::Graph& connectionGraph = lmu::Graph(), std::shared_ptr<ParetoState> ps = nullptr);
 
-		double rank(const CSGNode& node) const;
-		double rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel = false) const;
+		Rank rank(const CSGNode& node) const;
+		Rank rank(const CSGNode& node, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& functions, bool isCompleteModel = false) const;
 
 		std::string info() const;
 
@@ -107,8 +170,8 @@ namespace lmu
 	{	
 		CSGNodePopMan(double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
 
-		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode>>& population) const;
-		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode>>& population) const;
+		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
+		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
 		std::string info() const;
 
 	private: 
@@ -128,13 +191,62 @@ namespace lmu
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 	};
+			
+	struct GeometryStopCriterion
+	{
+		GeometryStopCriterion(int maxIterations, int maxIterationsWithoutSizeImprovement, double targetGeometryScore = 1.0) :
+			_maxIterations(maxIterations),
+			_targetGeometryScore(targetGeometryScore),
+			_maxIterationsWithoutSizeImprovement(maxIterationsWithoutSizeImprovement),
+			_currentBestSizeRank(std::numeric_limits<double>::max()),
+			_sameSizeScoreCounter(0)
+		{
+		}
+
+		bool shouldStop(const std::vector<RankedCreature<CSGNode, Rank>>& population, int iterationCount)
+		{
+			Rank currentBestRank = population[0].rank;
+
+			if (currentBestRank.geo < _targetGeometryScore)
+				return iterationCount >= _maxIterations;
+
+			if (currentBestRank.size >= _currentBestSizeRank)
+			{
+				_sameSizeScoreCounter++;
+			}
+			else if (currentBestRank.size < _currentBestSizeRank)
+			{
+				_sameSizeScoreCounter = 0;
+				_currentBestSizeRank = currentBestRank.size;
+			}
+
+			std::cout << "Current best geo: " << currentBestRank.geo  << " Current best size: " << _currentBestSizeRank << " Iterations:" << iterationCount << " of " << _maxIterations << 
+				" Same size iterations: " << _sameSizeScoreCounter << " of " << _maxIterationsWithoutSizeImprovement  <<  std::endl;
+			return iterationCount >= _maxIterations || _sameSizeScoreCounter >= _maxIterationsWithoutSizeImprovement;
+		}
+
+		std::string info() const
+		{
+			std::stringstream ss;
+			ss << "GeometryStopCriterion Selector (n=" << _maxIterations << ")";
+			return ss.str();
+		}
+
+	private:
+		int _maxIterations;
+		int _maxIterationsWithoutSizeImprovement;
+		double _targetGeometryScore;
+		double _currentBestSizeRank;
+		int _sameSizeScoreCounter;
+	};
+
 	
-	using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode>>;
+	using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode, Rank>>;
 
-	using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode>>;
-	using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode>>;
+	using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
+	using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode, Rank>, Rank>;
 
-	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, CSGNodeTournamentSelector, CSGNodeNoFitnessIncreaseStopCriterion, CSGNodePopMan>;
+	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank, CSGNodeTournamentSelector, GeometryStopCriterion, CSGNodePopMan>;
 
 	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::ParameterSet& p, const lmu::Graph& connectionGraph = Graph());
 
