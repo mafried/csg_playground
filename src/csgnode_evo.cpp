@@ -14,33 +14,65 @@ using namespace lmu;
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const ParameterSet& params);
 CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::CSGNodeRanker& ranker);
 
+double getSizeScore(const CSGNode& node)
+{
+	return numNodes(node);
+}
+
+double getDepthScore(const CSGNode& node)
+{
+	return depth(node);
+}
+
+
 lmu::ParetoState::ParetoState() : 
-	_currentBestGeoScore(0.0)
+	_currentBestGeoScore(0.0),
+	_currentBestSizeScore(std::numeric_limits<double>::max()),
+	_currentBestDepthScore(std::numeric_limits<double>::max()),
+	_currentBestNode(CSGNode::invalidNode)
 {
 }
 
 void lmu::ParetoState::update(const CSGNode& node, double geoScore)
 {
 	std::lock_guard<std::mutex> l(_mutex);
+		
+	if(std::abs(geoScore - _currentBestGeoScore) <= std::numeric_limits<double>::epsilon()) //ok for small values 
+	{
+		double sizeScore = getSizeScore(node);
+		
+		if(std::abs(sizeScore - _currentBestSizeScore) <= std::numeric_limits<double>::epsilon())
+		{
+			double depthScore = getDepthScore(node);
 
-	if (_currentBestGeoScore < geoScore)
+			if (depthScore < _currentBestDepthScore)
+			{
+				_currentBestDepthScore = depthScore; 
+				_currentBestNode = node;
+			}
+		}
+		else if (sizeScore < _currentBestSizeScore)
+		{
+			_currentBestSizeScore = sizeScore;
+			_currentBestDepthScore = getDepthScore(node);
+			_currentBestNode = node;
+		}
+	}
+	else if (geoScore > _currentBestGeoScore)
 	{
 		_currentBestGeoScore = geoScore;
-		_bestGeoScoreSizeScoreNodes.clear();
-		std::cout << "New Geo Score: " << geoScore << std::endl;
-	}
-	
-	if (geoScore - _currentBestGeoScore >= -0.000001)
-	{
-		_bestGeoScoreSizeScoreNodes.push_back(std::make_tuple(node, numNodes(node)));
-		std::cout << "Added best candidate with Geo Score: " << geoScore << std::endl;
+		_currentBestSizeScore = getSizeScore(node);
+		_currentBestDepthScore = getDepthScore(node);
+		_currentBestNode = node;
 	}
 }
 
 CSGNode lmu::ParetoState::getBest() const
 {
-	return std::get<0>(*std::min_element(_bestGeoScoreSizeScoreNodes.begin(), _bestGeoScoreSizeScoreNodes.end(),
-		[](const std::tuple<CSGNode, double>& n1, const std::tuple<CSGNode, double>& n2) { return std::get<1>(n1) < std::get<1>(n2); }));
+	//return std::get<0>(*std::min_element(_bestGeoScoreSizeScoreNodes.begin(), _bestGeoScoreSizeScoreNodes.end(),
+	//	[](const std::tuple<CSGNode, double>& n1, const std::tuple<CSGNode, double>& n2) { return std::get<1>(n1) < std::get<1>(n2); }));
+
+	return _currentBestNode;
 }
 
 std::ostream& lmu::operator<<(std::ostream& out, const Rank& r)
@@ -100,6 +132,7 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 	/*double x_off = 2.0;
 	Eigen::AngleAxisd rot90x(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0));
 
+	auto sphere5 = geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_5");
 
 	auto n = op<Union>(
 	{
@@ -131,8 +164,11 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 		op<Difference>(
 	{
 		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_4"),
-		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(-0.5 + x_off, -1.0, 0.6), 0.4, "Sphere_5")
+		sphere5
 	}),
+
+		sphere5,
+
 		op<Difference>(
 	{
 		geo<IFSphere>((Eigen::Affine3d)Eigen::Translation3d(0.5 + x_off, -1.0, 0.2), 0.2, "Sphere_6"),
@@ -191,7 +227,7 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 
 	});
 
-	auto r = rank(node, _functions, true);
+	auto r = rank(n, _functions, true);
 
 	std::cout << "                               RANK: " << r << std::endl;
 
@@ -264,7 +300,7 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node, const std::vector<std::s
 		_paretoState->update(node, geometryScore);
 	}
 		
-	return Rank(geometryScore, 0.0, 0.0);
+	return Rank(geometryScore, 0.0, 0.0, 0.0);
 }
 
 std::string lmu::CSGNodeRanker::info() const
@@ -683,16 +719,24 @@ std::vector<ImplicitFunctionPtr> lmu::CSGNodePopMan::getSuitableFunctions(const 
 void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
 {	
 	std::vector<double> sizeScores(population.size());
+	std::vector<double> depthScores(population.size());
 
 	double maxSize = 0.0;
 	double maxGeom = 0.0;
+	double maxDepth = 0.0;
+
 	for (int i = 0; i < population.size(); ++i)
 	{
 		auto& node = population[i].creature;
 
-		sizeScores[i] = (double)numNodes(node);
+		sizeScores[i] = getSizeScore(node);
+		depthScores[i] = getDepthScore(node);
+
 		if (maxSize < sizeScores[i])
 			maxSize = sizeScores[i];
+
+		if (maxDepth < depthScores[i])
+			maxDepth = depthScores[i];
 
 		if (maxGeom < population[i].rank.geo)
 		{
@@ -700,16 +744,18 @@ void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNo
 		}
 	}
 
-	double smallestGeoScoreDelta = 1.0 / ((double)_ranker.getNumSamplePoints() + 1.0); // + 1.0 to make it a bit smaller.
+	//double smallestGeoScoreDelta = 1.0 / ((double)_ranker.getNumSamplePoints() + 1.0); // + 1.0 to make it a bit smaller.
 
-	double allowedGeoError = 0.1;//std::min(0.10, 1.0 - maxGeom);
+	double allowedGeoError = 0.15;//0.05//std::min(0.10, 1.0 - maxGeom);
+	double sizeDepthRatio = 0.7;
 
-	std::cout << "delta: " << (1.0 * smallestGeoScoreDelta * 100.0 * allowedGeoError) << std::endl;
+	//std::cout << "delta: " << (1.0 * smallestGeoScoreDelta * 100.0 * allowedGeoError) << std::endl;
 
 	for (int i = 0; i < population.size(); ++i)
 	{
 		population[i].rank.size = sizeScores[i];
-		population[i].rank.combined = population[i].rank.geo - (population[i].rank.size / maxSize * 0.1);
+		population[i].rank.depth = depthScores[i];
+		population[i].rank.combined = population[i].rank.geo - (sizeDepthRatio * population[i].rank.size / maxSize + (1.0-sizeDepthRatio)*population[i].rank.depth / maxDepth) * allowedGeoError;
 	}
 }
 

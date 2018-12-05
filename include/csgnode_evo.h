@@ -15,24 +15,12 @@ namespace lmu
 {
 	struct ImplicitFunction;
 
-	struct ParetoState
-	{
-		ParetoState();
-
-		void update(const CSGNode& node, double geoScore); 
-		CSGNode getBest() const;
-
-	private: 
-		std::mutex _mutex;
-		std::vector<std::tuple<CSGNode, double>> _bestGeoScoreSizeScoreNodes;
-		double _currentBestGeoScore;
-	};
-
 	struct Rank
 	{
-		Rank(double geo, double size, double combined) : 
+		Rank(double geo, double size, double depth, double combined) : 
 			geo(geo),
 			size(size),
+			depth(depth),
 			combined(combined)
 		{
 		}
@@ -43,12 +31,13 @@ namespace lmu
 		}
 
 		explicit Rank(double v) :
-			Rank(v, v, v)
+			Rank(v, v, v,v)
 		{
 		}
 
 		double geo; 
 		double size;
+		double depth;
 		double combined;
 
 		friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.combined < rhs.combined; }
@@ -62,6 +51,7 @@ namespace lmu
 		{							
 			geo += rhs.geo;
 			size += rhs.size; 
+			depth += rhs.depth;
 			combined += rhs.combined;
 
 			return *this;
@@ -71,6 +61,7 @@ namespace lmu
 		{
 			geo -= rhs.geo;
 			size -= rhs.size;
+			depth -= rhs.depth;
 			combined -= rhs.combined;
 
 			return *this;
@@ -90,6 +81,23 @@ namespace lmu
 	};
 
 	std::ostream& operator<<(std::ostream& out, const Rank& r);
+
+	struct ParetoState
+	{
+		ParetoState();
+
+		void update(const CSGNode& node, double geoScore);
+		CSGNode getBest() const;
+
+	private:
+		std::mutex _mutex;
+		std::vector<std::tuple<CSGNode, double>> _bestGeoScoreSizeScoreNodes;
+		double _currentBestGeoScore;
+		double _currentBestSizeScore;
+		double _currentBestDepthScore;
+		CSGNode _currentBestNode;
+	};
+
 
 	struct CSGNodeRanker
 	{

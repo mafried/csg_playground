@@ -1728,8 +1728,8 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 
 				//std::cout << distToConnectedFunc << std::endl;
 
-				pointScores[j] = /*2.0 **/(minDistToOtherFuncs / maxMinDistanceToOtherFuncs) + (distToConnectedFunc / maxDistToConnectedFunc);
-
+				//pointScores[j] = /*2.0 **/(minDistToOtherFuncs / maxMinDistanceToOtherFuncs) + (distToConnectedFunc / maxDistToConnectedFunc);
+				pointScores[j] = std::min(minDistToOtherFuncs, distToConnectedFunc);
 				//std::cout << (minDistToOtherFuncs / maxMinDistanceToOtherFuncs) << " " << (distToConnectedFunc / maxDistToConnectedFunc) << std::endl;
 			}
 
