@@ -36,6 +36,8 @@ namespace lmu
 		Invalid
 	};
 
+	CSGNodeOperationType operationTypeFromString(std::string type);
+
 	std::string operationTypeToString(CSGNodeOperationType type);
 	std::string nodeTypeToString(CSGNodeType type);
 	

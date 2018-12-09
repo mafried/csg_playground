@@ -372,6 +372,34 @@ std::string lmu::operationTypeToString(CSGNodeOperationType type)
 	}
 }
 
+CSGNodeOperationType lmu::operationTypeFromString(std::string type)
+{
+	auto parsedType = CSGNodeOperationType::Unknown;
+
+	std::transform(type.begin(), type.end(), type.begin(), ::tolower);
+	
+	if (type == "union")
+		parsedType = CSGNodeOperationType::Union;
+	else if (type == "difference" || type == "subtract")
+		parsedType = CSGNodeOperationType::Difference;
+	else if (type == "intersection" || type == "intersect")
+		parsedType = CSGNodeOperationType::Intersection;
+	else if (type == "unknown")
+		parsedType = CSGNodeOperationType::Unknown;
+	else if (type == "complement")
+		parsedType = CSGNodeOperationType::Complement;
+	else if (type == "identity")
+		parsedType = CSGNodeOperationType::Identity;
+	else if (type == "invalid")
+		parsedType = CSGNodeOperationType::Invalid;
+	else if (type == "noop")
+		parsedType = CSGNodeOperationType::Noop;
+
+
+
+	return parsedType;
+}
+
 std::string lmu::nodeTypeToString(CSGNodeType type)
 {
 	switch (type)
@@ -403,7 +431,7 @@ CSGNode lmu::createOperation(CSGNodeOperationType type, const std::string & name
 		return CSGNode(std::make_shared<NoOperation>(name));
 
 	default:
-		throw std::runtime_error("Operation type is not supported");
+		throw std::runtime_error("Operation type is not supported: " + operationTypeToString(type) + ".");
 	}
 }
 

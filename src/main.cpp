@@ -578,7 +578,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 });
 
 	//double samplingStepSize = 0.03; 
-	double maxDistance = 0.03;
+	/*double maxDistance = 0.03;
 	double maxAngleDistance = M_PI / 18.0;
 	double noiseSigma = 0.01;
 	CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma);
@@ -603,7 +603,18 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	{
 		viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
 		
-	}
+	}*/
+
+try
+{
+	node = fromJSONFile("C:/Projekte/csg_playground_build/Release/tree.json");
+}
+catch (const std::exception& ex)
+{
+	std::cout << "ERROR: " << ex.what() << std::endl;
+}
+
+writeNode(node, "tree.dot");
 
 	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);

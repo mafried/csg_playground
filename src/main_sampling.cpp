@@ -34,12 +34,33 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  int nodeIdx = std::stoi(argv[1]);
+  int nodeIdx = -1; 
+  std::string modelPath;
+  try
+  {
+	  nodeIdx = std::stoi(argv[1]);
+  }
+  catch (const std::exception& e)
+  {
+	  modelPath = std::string(argv[1]);
+  }
 
   Eigen::AngleAxisd rot90x(M_PI / 2.0, Vector3d(0.0, 0.0, 1.0));
   CSGNode node(nullptr);
 
-  if (nodeIdx == 0)
+  if (nodeIdx == -1)
+  {
+	  try
+	  {
+		  node = fromJSONFile(modelPath);
+	  }
+	  catch (const std::exception& ex)
+	  {
+		  std::cerr << "Could not load CSG tree from file '" << modelPath << "'. Reason: " << ex.what() << std::endl;
+		  return -1;
+	  }
+  }
+  else if (nodeIdx == 0)
     {
       node =
 	op<Union>(

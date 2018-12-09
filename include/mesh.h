@@ -315,8 +315,8 @@ namespace lmu
 		inline double signedDistanceLocalInline(const Eigen::Vector3d& localP)
 		{
 			double l = Eigen::Vector2d(localP.x(), localP.z()).norm();
-			double dx = std::abs(l) - _height;
-			double dy = std::abs(localP.y()) - _height;
+			//double dx = std::abs(l) - _height;
+			//double dy = std::abs(localP.y()) - _height;
 			return std::max(l - _radius, abs(localP.y()) - _height / 2.0);// std::min(std::max(dx, dy), 0.0) + Eigen::Vector2d(std::max(dx, 0.0), std::max(dy, 0.0)).norm();
 		}
 

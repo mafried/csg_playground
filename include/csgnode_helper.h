@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 
+#include "json.hpp"
 #include "csgnode.h"
 
 namespace lmu
@@ -34,6 +35,11 @@ namespace lmu
 	CSGNode opInter(const std::vector<CSGNode>& childs = {});
 	CSGNode opComp(const std::vector<CSGNode>& childs = {});
 	CSGNode opNo(const std::vector<CSGNode>& childs = {});
+
+	using json = nlohmann::json;
+
+	CSGNode fromJSON(const json& json);
+	CSGNode fromJSONFile(const std::string& file);
 }
 
 #endif
