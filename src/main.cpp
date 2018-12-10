@@ -577,34 +577,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 
 });
 
-	//double samplingStepSize = 0.03; 
-	/*double maxDistance = 0.03;
-	double maxAngleDistance = M_PI / 18.0;
-	double noiseSigma = 0.01;
-	CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma);
-	double connectionGraphSamplingStepSize = 0.05;
-	double gradientStepSize = 0.001;
-
-    auto pointCloud = lmu::computePointCloud(node, samplingParams);
-
-	std::cout << "Points: " << pointCloud.rows() << std::endl;
-
-	auto funcs = allDistinctFunctions(node);
-	auto dims = lmu::computeDimensions(funcs);
-	auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
-
-	double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
-	std::cout << "used points: " << res << "%" << std::endl;
-
 	
-	lmu::filterPoints(funcs, graph, gradientStepSize);
-
-	for (const auto& func : funcs)
-	{
-		viewer.data().add_points(func->pointsCRef().leftCols(3), func->pointsCRef().rightCols(3));
-		
-	}*/
-
 try
 {
 	node = fromJSONFile("C:/Projekte/csg_playground_build/Release/tree.json");
@@ -613,6 +586,70 @@ catch (const std::exception& ex)
 {
 	std::cout << "ERROR: " << ex.what() << std::endl;
 }
+
+double samplingStepSize = 0.5; 
+double maxDistance = 0.2;
+double maxAngleDistance = M_PI / 18.0;
+double noiseSigma = 0.01;
+CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
+double connectionGraphSamplingStepSize = 0.2;
+double gradientStepSize = 0.001;
+
+auto pointCloud = lmu::computePointCloud(node, samplingParams);
+
+std::cout << "Points: " << pointCloud.rows() << std::endl;
+
+auto funcs = allDistinctFunctions(node);
+auto dims = lmu::computeDimensions(funcs);
+auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
+
+writeConnectionGraph("cg.dot", graph);
+
+double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
+std::cout << "used points: " << res << "%" << std::endl;
+
+/*for (const auto& func : funcs)
+{	
+
+	viewer.data().add_points(func->pointsCRef().leftCols(3), Eigen::Matrix<double, 1, 3>(0, 0, 0));//;func->pointsCRef().rightCols(3));
+	
+}*/
+
+lmu::filterPoints(funcs, graph, gradientStepSize);
+
+int i = 0;
+for (const auto& func : funcs)
+{
+	Eigen::Matrix<double, 1, 3> c; 
+
+
+	switch (i % 6)
+	{
+	case 0: 
+		c = Eigen::Matrix<double, 1, 3>(1, 0, 0);
+		break;
+	case 1:
+		c = Eigen::Matrix<double, 1, 3>(1, 0, 1);
+		break; 
+	case 2:
+		c = Eigen::Matrix<double, 1, 3>(1, 1, 0);
+		break;
+	case 3:
+		c = Eigen::Matrix<double, 1, 3>(1, 1, 1);
+		break;
+	case 4:
+		c = Eigen::Matrix<double, 1, 3>(0, 0, 1);
+		break;
+	case 5:
+		c = Eigen::Matrix<double, 1, 3>(0, 1, 1);
+		break;
+	}
+
+	viewer.data().add_points(func->pointsCRef().leftCols(3), c);//;func->pointsCRef().rightCols(3));
+
+	i++;
+}
+
 
 writeNode(node, "tree.dot");
 

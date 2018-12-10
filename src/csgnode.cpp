@@ -1696,7 +1696,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
 		std::vector<double> pointDistances;
 		std::vector<double> minDistancesToOtherFuncs;
-
+		
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
@@ -1723,8 +1723,19 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				minDistancesToOtherFuncs.push_back(minDistToOtherFuncs);
 				pointDistances.push_back((outside ? 1.0 : -1.0)*d);
 			}
+		}		
+
+
+		/*PointCloud pc;
+		pc.resize(points.size(), 6);
+		for (int i = 0; i < points.size(); ++i)
+		{
+			pc.row(i) = points[i];
 		}
-		
+
+		f->points() = pc;		
+		*/
+
 		double maxMinDistanceToOtherFuncs = minDistancesToOtherFuncs[std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()))];
 		
 		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
@@ -1757,8 +1768,14 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				//std::cout << distToConnectedFunc << std::endl;
 
 				//pointScores[j] = /*2.0 **/(minDistToOtherFuncs / maxMinDistanceToOtherFuncs) + (distToConnectedFunc / maxDistToConnectedFunc);
-				pointScores[j] = std::min(minDistToOtherFuncs, distToConnectedFunc);
+				pointScores[j] = distToConnectedFunc;// std::min(minDistToOtherFuncs, distToConnectedFunc);
 				//std::cout << (minDistToOtherFuncs / maxMinDistanceToOtherFuncs) << " " << (distToConnectedFunc / maxDistToConnectedFunc) << std::endl;
+			}
+
+			if (points.empty())
+			{
+				std::cout << "Warning! Function " << f->name() << " has no points." << std::endl;
+				continue;
 			}
 
 			size_t idx = std::distance(pointScores.begin(), std::max_element(pointScores.begin(), pointScores.end()));

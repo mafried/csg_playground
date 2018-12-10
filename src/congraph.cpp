@@ -129,8 +129,8 @@ void createConnectionGraphRec(const std::vector<std::shared_ptr<lmu::ImplicitFun
 	
 	boost::dynamic_bitset<> isIn(funcs.size());
 	
-	for (int i = 0; i < funcs.size(); ++i)	
-		isIn[i] = funcs[i]->signedDistance(p) < 0.0;	
+	for (int i = 0; i < funcs.size(); ++i)
+		isIn[i] = funcs[i]->signedDistance(p) < s.x(); // < 0
 	
 	for (int i = 0; i < funcs.size(); ++i)
 		overlaps[i] = isIn[i] ? overlaps[i] | isIn : overlaps[i]; // overlaps[i] | isIn;
