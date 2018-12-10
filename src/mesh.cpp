@@ -466,7 +466,7 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::stri
 
       res.push_back(std::make_shared<IFSphere>(t, radius, name, disp));
 
-    } else if (name.find("box") != std::string::npos) {
+    } else if (name.find("box") != std::string::npos || name.find("cube") != std::string::npos) {
       // transform size displacement
       Eigen::Affine3d t;
       // row 1
