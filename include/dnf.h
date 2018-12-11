@@ -49,6 +49,8 @@ namespace lmu
 	struct SampleParams
 	{
 		double h;
+		double distThreshold;
+		double angleThreshold;
 	};
 
 	std::ostream& operator <<(std::ostream& stream, const Clause& c);

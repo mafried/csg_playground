@@ -112,7 +112,11 @@ int main(int argc, char *argv[])
   CSGNode res = op<Union>();
 
   double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
-  SampleParams p{ gradientStepSize };
+  double distThreshold = params.getDouble("Sampling", "DistanceThreshold", 0.9);
+  double angleThreshold = params.getDouble("Sampling", "AngleThreshold", 0.9);
+
+
+  SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
 
   
   //lmu::arrangeGradients(shapes, graph, gradientStepSize);

@@ -746,7 +746,7 @@ void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNo
 
 	//double smallestGeoScoreDelta = 1.0 / ((double)_ranker.getNumSamplePoints() + 1.0); // + 1.0 to make it a bit smaller.
 
-	double allowedGeoError = 0.1;//0.05//std::min(0.10, 1.0 - maxGeom);
+	double allowedGeoError = 0.05;//0.05//std::min(0.10, 1.0 - maxGeom);
 	double sizeDepthRatio = 0.7;
 
 	//std::cout << "delta: " << (1.0 * smallestGeoScoreDelta * 100.0 * allowedGeoError) << std::endl;

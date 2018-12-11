@@ -163,7 +163,7 @@ double getInOutThreshold(const std::vector<double>& qualityValues)
 	return resultingbreaksArray[1];*/
 }
 
-std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<std::tuple<lmu::Clause, double, double>>& clauseQualityPairs)
+std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<std::tuple<lmu::Clause, double, double>>& clauseQualityPairs, double distThreshold, double angleThreshold)
 {
 	std::vector<double> distQualityValues;
 	std::vector<double> angleQualityValues;
@@ -173,19 +173,16 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 
 	std::transform(clauseQualityPairs.begin(), clauseQualityPairs.end(), std::back_inserter(angleQualityValues),
 		[](auto p) { return std::get<2>(p); });
-
-
-	double distT = 0.6; //getInOutThreshold(distQualityValues);
-	double angleT = 0.6; // getInOutThreshold(angleQualityValues);
 	
-
-	std::cout << "DIST T: " << distT << " ANGLE T: " << angleT;
+	//double distT = 0.9; //getInOutThreshold(distQualityValues);
+	//double angleT = 0.9; // getInOutThreshold(angleQualityValues);
+	//std::cout << "DIST T: " << distT << " ANGLE T: " << angleT;
 	
 	std::vector<std::tuple<lmu::Clause, size_t>> validClauses;
 
 	for (size_t i = 0; i < clauseQualityPairs.size(); ++i)
 	{
-		if (std::get<1>(clauseQualityPairs[i]) >= distT && std::get<2>(clauseQualityPairs[i]) >= angleT)
+		if (std::get<1>(clauseQualityPairs[i]) >= distThreshold && std::get<2>(clauseQualityPairs[i]) >= angleThreshold)
 			validClauses.push_back(std::make_tuple(std::get<0>(clauseQualityPairs[i]), i));
 	}
 
@@ -418,7 +415,7 @@ std::tuple<lmu::DNF, std::vector<lmu::ImplicitFunctionPtr>> identifyPrimeImplica
 	//Create a DNF that contains a clause for each primitive.
 	lmu::DNF dnf; 
 	std::vector<int> functionDeleteMarker(functions.size(),0);
-	auto validClauses = getValidClauses(clauses);
+	auto validClauses = getValidClauses(clauses, params.distThreshold, params.angleThreshold);
 	int i = 0; //New index.
 	for (const auto& validClause :validClauses)
 	{
@@ -486,7 +483,7 @@ lmu::DNF lmu::computeShapiro(const std::vector<ImplicitFunctionPtr>& functions, 
 	}
 
 	//Check for validity of all found clauses
-	for (const auto& validClause : getValidClauses(clauses))
+	for (const auto& validClause : getValidClauses(clauses, params.distThreshold, params.angleThreshold))
 		dnf.clauses.push_back(std::get<0>(validClause));
 
 	std::cout << "Done Shapiro." << std::endl;

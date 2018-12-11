@@ -588,7 +588,7 @@ catch (const std::exception& ex)
 }
 
 double samplingStepSize = 0.5; 
-double maxDistance = 0.2;
+double maxDistance = 0.1;
 double maxAngleDistance = M_PI / 18.0;
 double noiseSigma = 0.01;
 CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
@@ -616,6 +616,12 @@ std::cout << "used points: " << res << "%" << std::endl;
 }*/
 
 lmu::filterPoints(funcs, graph, gradientStepSize);
+
+double distThreshold = 0.9;
+double angleThreshold = 0.9;
+
+SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
+lmu::getUnionPartitionsByPrimeImplicants(graph, p);
 
 int i = 0;
 for (const auto& func : funcs)
