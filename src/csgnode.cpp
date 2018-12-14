@@ -1682,7 +1682,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
 		std::vector<double> selectedPointWeights;
 
-		//Check orientation
+		//Check orientation.
 		int numSameSide = 0;
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
@@ -1693,9 +1693,9 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		}
 		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
 
+		//filter wrong orientation.
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
 		std::vector<double> pointDistances;
-		std::vector<double> minDistancesToOtherFuncs;
 		
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
@@ -1704,84 +1704,84 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
 			Eigen::Vector3d g = dg.bottomRows(3);
 			double d = dg(0);
-
-			double minDistToOtherFuncs = std::numeric_limits<double>::max();
-			for (auto& otherFunc : functions)
-			{
-				if (otherFunc == f)
-					continue;
-				double dOther = std::abs(otherFunc->signedDistance(p));
-				if (minDistToOtherFuncs > dOther)
-				{
-					minDistToOtherFuncs = dOther;
-				}
-			}
-
+		
 			if (((g.dot(n) >= 0.0 && outside) || (g.dot(n) < 0.0 && !outside)))
 			{
-				points.push_back(f->pointsCRef().row(i));
-				minDistancesToOtherFuncs.push_back(minDistToOtherFuncs);
+				points.push_back(f->pointsCRef().row(i));				
 				pointDistances.push_back((outside ? 1.0 : -1.0)*d);
 			}
 		}		
 
-
-		/*PointCloud pc;
-		pc.resize(points.size(), 6);
-		for (int i = 0; i < points.size(); ++i)
-		{
-			pc.row(i) = points[i];
-		}
-
-		f->points() = pc;		
-		*/
-
-		double maxMinDistanceToOtherFuncs = minDistancesToOtherFuncs[std::distance(minDistancesToOtherFuncs.begin(), std::max_element(minDistancesToOtherFuncs.begin(), minDistancesToOtherFuncs.end()))];
-		
 		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
-		std::vector<double> perFuncPointDistances;
+		std::vector<double> perFuncDistances;
 
 		for (int i = 0; i < functions.size(); ++i)
 		{
 			if (!lmu::areConnected(graph, functions[i], f))
 				continue;
+				
+			size_t idxMaxDistance;
+			size_t idxMinDistance; 
+			double minDistance = std::numeric_limits<double>::max(); 
+			double maxDistance = 0.0;
+			Eigen::Vector3d pmax, pmin;
 
-			std::vector<double> pointScores(points.size(), 0.0);
 
-			double maxDistToConnectedFunc = 0.0;
-			for (int j = 0; j < points.size(); ++j)
-			{		
-				Eigen::Vector3d p = points[j].leftCols(3);
-
-				double distToConnectedFunc = std::abs(functions[i]->signedDistance(p));
-				if (distToConnectedFunc > maxDistToConnectedFunc)
-					maxDistToConnectedFunc = distToConnectedFunc;
-			}
-
+			std::vector<std::tuple<double, size_t>> cds; 
 			for (int j = 0; j < points.size(); ++j)
 			{
-				Eigen::Vector3d p = points[j].leftCols(3);
+				Eigen::Vector3d p = points[j].leftCols(3).transpose();
 
-				double minDistToOtherFuncs = minDistancesToOtherFuncs[j];
-				double distToConnectedFunc = std::abs(functions[i]->signedDistance(p));
+				double d = (functions[i]->pos() - p).squaredNorm();
+								
+				cds.push_back(std::make_tuple(d, j));
 
-				//std::cout << distToConnectedFunc << std::endl;
+				if (minDistance > d)
+				{
+					minDistance = d; 
+					idxMinDistance = j; 
+					pmin = p;
+				}
 
-				//pointScores[j] = /*2.0 **/(minDistToOtherFuncs / maxMinDistanceToOtherFuncs) + (distToConnectedFunc / maxDistToConnectedFunc);
-				pointScores[j] = distToConnectedFunc;// std::min(minDistToOtherFuncs, distToConnectedFunc);
-				//std::cout << (minDistToOtherFuncs / maxMinDistanceToOtherFuncs) << " " << (distToConnectedFunc / maxDistToConnectedFunc) << std::endl;
+				if (maxDistance < d)
+				{
+					maxDistance = d;
+					idxMaxDistance = j;
+					pmax = p;
+				}
 			}
 
-			if (points.empty())
-			{
-				std::cout << "Warning! Function " << f->name() << " has no points." << std::endl;
-				continue;
-			}
+			//if (f->name() == "cube_0")
+			//{
+				std::cout << "D: " << f->signedDistance(pmax) << " " << f->signedDistance(pmin) <<  pmax << std::endl;
+			//}
+				//std::cout << "D: " << functions[i]->name() << " " << pointDistances[idxMaxDistance] << " " << pointDistances[idxMinDistance] << " " 
+				//<< f->signedDistance(pmin) << " " << pmin << " " << f->signedDistance(pmax) << std::endl;
 
-			size_t idx = std::distance(pointScores.begin(), std::max_element(pointScores.begin(), pointScores.end()));
-			perFuncPoints.push_back(points[idx]);
-			perFuncPointDistances.push_back(pointDistances[idx]);
+
+			//std::cout << f->signedDistance(points[idxMaxDistance].leftCols(3)) << std::endl;
+			//std::cout << f->signedDistance(points[idxMinDistance].leftCols(3)) << std::endl;
+
+			std::sort(cds.begin(), cds.end(), [](const auto& p1, const auto& p2) {return std::get<0>(p1) > std::get<0>(p2);});
+			
+			idxMaxDistance = std::get<1>(cds.front());
+			idxMinDistance = std::get<1>(cds.back());
+
+			size_t idxMedDistance = std::get<1>(cds.at(cds.size() / 2));
+
+			perFuncDistances.push_back(pointDistances[idxMaxDistance]);
+			perFuncDistances.push_back(pointDistances[idxMinDistance]);
+			perFuncDistances.push_back(pointDistances[idxMedDistance]);
+
+			//perFuncDistances.push_back((outside ? 1.0 : -1.0)*f->signedDistance(points[idxMaxDistance].leftCols(3).transpose()));
+			//perFuncDistances.push_back((outside ? 1.0 : -1.0)*f->signedDistance(points[idxMinDistance].leftCols(3).transpose()));
+
+			perFuncPoints.push_back(points[idxMaxDistance]);
+			perFuncPoints.push_back(points[idxMinDistance]);		
+			perFuncPoints.push_back(points[idxMedDistance]);
 		}
+	
+		std::cout << f->name() << ": " << perFuncPoints.size() << std::endl;
 
 		PointCloud pc;
 		pc.resize(perFuncPoints.size(), 6);
@@ -1791,7 +1791,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		}
 
 		f->points() = pc;		
-		f->pointWeights() = { perFuncPointDistances };
+		f->pointWeights() = perFuncDistances;
 	}
 }
 

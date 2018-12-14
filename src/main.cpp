@@ -587,26 +587,46 @@ catch (const std::exception& ex)
 	std::cout << "ERROR: " << ex.what() << std::endl;
 }
 
-double samplingStepSize = 0.5; 
-double maxDistance = 0.1;
+double samplingStepSize = 0.2; 
+double maxDistance = 0.01;
 double maxAngleDistance = M_PI / 18.0;
-double noiseSigma = 0.01;
+double noiseSigma = 0.0;
 CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
 double connectionGraphSamplingStepSize = 0.2;
 double gradientStepSize = 0.001;
 
-auto pointCloud = lmu::computePointCloud(node, samplingParams);
+//auto pointCloud = lmu::computePointCloud(node, samplingParams);
+auto pointCloud = lmu::readPointCloudXYZ("C:/Projekte/csg_playground_build/Release/model.xyz" , 1.0);
+auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
 
 std::cout << "Points: " << pointCloud.rows() << std::endl;
 
-auto funcs = allDistinctFunctions(node);
+//auto funcs = allDistinctFunctions(node);
 auto dims = lmu::computeDimensions(funcs);
 auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
 
 writeConnectionGraph("cg.dot", graph);
 
 double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
-std::cout << "used points: " << res << "%" << std::endl;
+
+
+
+//std::cout << "used points: " << res << "%" << std::endl;
+
+for (const auto& f1 : funcs)
+{
+	std::cout << f1->name() << " connected with: ";
+
+	for (const auto& f2 : funcs)
+	{		
+		if (lmu::areConnected(graph, f1, f2))
+		{
+			std::cout << " " << f2->name();
+		}
+	}
+
+	std::cout << std::endl;
+}
 
 /*for (const auto& func : funcs)
 {	
@@ -621,12 +641,19 @@ double distThreshold = 0.9;
 double angleThreshold = 0.9;
 
 SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
-lmu::getUnionPartitionsByPrimeImplicants(graph, p);
+//lmu::getUnionPartitionsByPrimeImplicants(graph, p);
 
 int i = 0;
 for (const auto& func : funcs)
 {
+	//if (/*func->name() != "cylinder_0" && func->name() != "cube_0" && func->name() != "cube_2" && */func->name() != "cube_4" && func->name() != "cylinder_0")
+	//	continue;
+	//if (func->name() != "cube_0")
+	//	continue;
+
 	Eigen::Matrix<double, 1, 3> c; 
+
+
 
 
 	switch (i % 6)

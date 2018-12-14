@@ -206,7 +206,7 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 	int totalNumCorrectSamples = 0;
 	int totalNumConsideredSamples = 0;
 
-	const double smallestDelta = 0.000000001;
+	const double smallestDelta = 0.0001;
 
 	std::vector<Eigen::Matrix<double, 1, 2>> consideredPoints;
 

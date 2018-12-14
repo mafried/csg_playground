@@ -312,7 +312,9 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 
 	size_t accessedPoints = 0; 
 	size_t usedPoints = 0;
-	double cosMaxAngleDistance = std::cos(params.maxAngleDistance);
+	//double cosMaxAngleDistance = std::cos(params.maxAngleDistance);
+
+	std::vector<Eigen::Matrix<double, 1, 6>> restPoints;
 
 	for (int i = 0; i < points.rows(); ++i)
 	{
@@ -321,17 +323,17 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		lmu::ImplicitFunctionPtr curFunc = nullptr;
 		double curMaxDelta = std::numeric_limits<double>::max();
 
-		for (auto const& func : knownFunctions)
+		for (const auto& func : knownFunctions)
 		{
 			Eigen::Vector3d p = points.row(i).leftCols(3).transpose();
 			Eigen::Vector3d n = points.row(i).rightCols(3).transpose();
 			
 			Eigen::Vector4d v = func->signedDistanceAndGradient(p);
 			double absD = std::abs(v[0]);			
-			Eigen::Vector3d g = v.bottomRows(3).transpose();
-			double absDAngleCos = std::abs(n.dot(g));
+			Eigen::Vector3d g = v.bottomRows(3);// .transpose();
+			//double absDAngleCos = std::abs(n.dot(g));
 
-			if (absD <= params.maxDistance + 3.0 * params.errorSigma && absDAngleCos > cosMaxAngleDistance && absD < curMaxDelta)
+			if (absD <= params.maxDistance + 3.0 * params.errorSigma && /*absDAngleCos >= cosMaxAngleDistance*/n.dot(g) > 0.0 && absD < curMaxDelta)
 			{
 				curMaxDelta = absD;
 				curFunc = func;
@@ -341,6 +343,36 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		if (curFunc)
 		{			
 			pointsAndNormalsMap[curFunc].push_back(points.row(i));
+			usedPoints++;
+		}
+		else
+		{
+			restPoints.push_back(points.row(i));
+		}
+	}
+
+	for (const auto& point : restPoints)
+	{
+		lmu::ImplicitFunctionPtr curFunc = nullptr;
+		double curMaxDelta = std::numeric_limits<double>::max();
+
+		for (auto const& func : knownFunctions)
+		{
+			Eigen::Vector3d p = point.leftCols(3).transpose();
+			Eigen::Vector3d n = point.rightCols(3).transpose();
+
+			double absD = std::abs(func->signedDistance(p));
+		
+			if (absD <= params.maxDistance + 3.0 * params.errorSigma && absD < curMaxDelta)
+			{
+				curMaxDelta = absD;
+				curFunc = func;
+			}
+		}
+
+		if (curFunc)
+		{
+			pointsAndNormalsMap[curFunc].push_back(point);
 			usedPoints++;
 		}
 	}

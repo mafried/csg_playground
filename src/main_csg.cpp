@@ -99,7 +99,22 @@ int main(int argc, char *argv[])
   
   auto dims = lmu::computeDimensions(shapes);
   auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
-		
+	
+  for (const auto& f1 : shapes)
+  {
+	  std::cout << f1->name() << " connected with: ";
+
+	  for (const auto& f2 : shapes)
+	  {
+		  if (lmu::areConnected(graph, f1, f2))
+		  {
+			  std::cout << " " << f2->name();
+		  }
+	  }
+
+	  std::cout << std::endl;
+  }
+
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
   std::cout << "Simulate RANSAC" << std::endl;
