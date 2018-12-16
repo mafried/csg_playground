@@ -306,10 +306,10 @@ void lmu::ransacWithSimMultiplePointOwners(const Eigen::MatrixXd & points, const
 	}
 }
 
-double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams& params, const std::vector<std::shared_ptr<ImplicitFunction>>& knownFunctions)
+double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams& params, const CSGNode& node)
 {
 	std::unordered_map<lmu::ImplicitFunctionPtr, std::vector<Eigen::Matrix<double, 1, 6>>> pointsAndNormalsMap;
-
+	auto knownFunctions = allDistinctFunctions(node);
 	size_t accessedPoints = 0; 
 	size_t usedPoints = 0;
 	//double cosMaxAngleDistance = std::cos(params.maxAngleDistance);
@@ -323,11 +323,11 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		lmu::ImplicitFunctionPtr curFunc = nullptr;
 		double curMaxDelta = std::numeric_limits<double>::max();
 
+		Eigen::Vector3d p = points.row(i).leftCols(3).transpose();
+		Eigen::Vector3d n = points.row(i).rightCols(3).transpose();
+
 		for (const auto& func : knownFunctions)
-		{
-			Eigen::Vector3d p = points.row(i).leftCols(3).transpose();
-			Eigen::Vector3d n = points.row(i).rightCols(3).transpose();
-			
+		{			
 			Eigen::Vector4d v = func->signedDistanceAndGradient(p);
 			double absD = std::abs(v[0]);			
 			Eigen::Vector3d g = v.bottomRows(3);// .transpose();
@@ -355,12 +355,11 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 	{
 		lmu::ImplicitFunctionPtr curFunc = nullptr;
 		double curMaxDelta = std::numeric_limits<double>::max();
+		Eigen::Vector3d p = point.leftCols(3).transpose();
+		Eigen::Vector3d n = point.rightCols(3).transpose();
 
 		for (auto const& func : knownFunctions)
-		{
-			Eigen::Vector3d p = point.leftCols(3).transpose();
-			Eigen::Vector3d n = point.rightCols(3).transpose();
-
+		{		
 			double absD = std::abs(func->signedDistance(p));
 		
 			if (absD <= params.maxDistance + 3.0 * params.errorSigma && absD < curMaxDelta)
@@ -383,17 +382,40 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		{
 			const auto& pointsAndNormals = pointsAndNormalsMap[func];
 
-			PointCloud points(pointsAndNormals.size(), 6);
+			size_t size = 0;
+			for (const auto& row : pointsAndNormals)
+			{
+				Eigen::Vector3d p = row.leftCols(3).transpose();
+
+				if (std::abs(node.signedDistance(p)) != std::abs(func->signedDistance(p)))
+				{
+					continue;
+				}
+
+				size++;
+			}
+
+			PointCloud points(size, 6);
 			int i = 0;
 			for (const auto& row : pointsAndNormals)
 			{
+				Eigen::Vector3d p = row.leftCols(3).transpose();
+
+				if (std::abs(node.signedDistance(p)) != std::abs(func->signedDistance(p)))
+				{
+					continue;
+				}
+				else
+				{
+					//std::cout << "HHERE" << std::endl;
+				}
+
 				points.row(i++) = row;
 
 				//std::cout << func->name() << ": " << row << std::endl;
 			}
 
-			func->setPoints(points);
-			
+			func->setPoints(points);			
 		}		
 	}
 

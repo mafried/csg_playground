@@ -588,16 +588,18 @@ catch (const std::exception& ex)
 }
 
 double samplingStepSize = 0.2; 
-double maxDistance = 0.01;
+double maxDistance = 0.1;
 double maxAngleDistance = M_PI / 18.0;
 double noiseSigma = 0.0;
 CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
 double connectionGraphSamplingStepSize = 0.2;
 double gradientStepSize = 0.001;
 
-//auto pointCloud = lmu::computePointCloud(node, samplingParams);
-auto pointCloud = lmu::readPointCloudXYZ("C:/Projekte/csg_playground_build/Release/model.xyz" , 1.0);
-auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
+auto pointCloud = lmu::computePointCloud(node, samplingParams);
+auto funcs = lmu::allDistinctFunctions(node);
+//auto pointCloud = lmu::readPointCloudXYZ("C:/Projekte/csg_playground_build/Release/model.xyz" , 1.0);
+//auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
+
 
 std::cout << "Points: " << pointCloud.rows() << std::endl;
 
@@ -607,11 +609,14 @@ auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(di
 
 writeConnectionGraph("cg.dot", graph);
 
-double res = lmu::ransacWithSim(pointCloud, samplingParams, funcs);
-
-
-
+//double res = lmu::ransacWithSim(pointCloud, samplingParams, node);
 //std::cout << "used points: " << res << "%" << std::endl;
+
+auto pointClouds = lmu::readPointCloudXYZPerFunc("C:/Projekte/csg_playground_build/Release/model.xyz", 1.0);
+for (auto& f : funcs)
+{
+	f->setPoints(pointClouds[f->name()]);
+}
 
 for (const auto& f1 : funcs)
 {
@@ -637,6 +642,10 @@ for (const auto& f1 : funcs)
 
 lmu::filterPoints(funcs, graph, gradientStepSize);
 
+double score = lmu::computeNormalizedGeometryScore(node, funcs, gradientStepSize);
+
+std::cout << "SCORE: " << score << std::endl;
+
 double distThreshold = 0.9;
 double angleThreshold = 0.9;
 
@@ -652,10 +661,7 @@ for (const auto& func : funcs)
 	//	continue;
 
 	Eigen::Matrix<double, 1, 3> c; 
-
-
-
-
+	
 	switch (i % 6)
 	{
 	case 0: 

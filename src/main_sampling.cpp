@@ -10,7 +10,7 @@
 #include "pointcloud.h"
 #include "csgnode_helper.h"
 #include "constants.h"
-
+#include "ransac.h"
 
 using namespace lmu;
 
@@ -501,13 +501,24 @@ int main(int argc, char *argv[])
   std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;
 
   std::string pcName = modelBasename + ".xyz"; //"model.xyz";
-  lmu::writePointCloudXYZ(pcName, pointCloud);
 
   std::vector<ImplicitFunctionPtr> shapes; 
   for (const auto& geoNode : allGeometryNodePtrs(node)) {
     shapes.push_back(geoNode->function());
     std::cout << "Shape: " << geoNode->function()->name() << std::endl;
   }
+
+  std::cout << "Simulate RANSAC" << std::endl;
+  double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize), node);
+  std::cout << "Points in Primitive: " << pointsInPrimitiveRate << "%." << std::endl;
+
+  std::unordered_map<std::string, PointCloud> pcs; 
+  for (const auto& s : shapes)
+  {
+	  pcs[s->name()] = s->points();
+  }
+  lmu::writePointCloudXYZ(pcName, pcs);
+
   std::string primName = modelBasename + ".prim"; //"model.prim";
   lmu::writePrimitives(primName, shapes);
 

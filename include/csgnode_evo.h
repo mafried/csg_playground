@@ -279,6 +279,8 @@ namespace lmu
 	double lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes);
 	
     CSGNode computeGAWithPartitions(const std::vector<Graph>& partitions, const lmu::ParameterSet& p);
+
+	double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h);
 }
 
 #endif

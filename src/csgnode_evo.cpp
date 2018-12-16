@@ -132,7 +132,7 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 	return rank(node, _functions, true);
 }
 
-double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
+double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
 {
 	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
 	double numCorrectSamples = 0;
@@ -173,7 +173,7 @@ double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<Imp
 			}
 			else
 			{
-				//std::cout << func->name() << " i: " << i << " " << sampleDistNode << " " << func->pointWeights()[i] << " " << sampleGradNode.dot(sampleN) << std::endl;
+				//std::cout << func->name() << ": " << "(" << sampleP.x() << "," << sampleP.y() << "," << sampleP.z() << ") " << sampleDistNode << " " << func->pointWeights()[i] << " " << sampleGradNode.dot(sampleN) << std::endl;
 
 				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
 

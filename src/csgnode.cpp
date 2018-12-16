@@ -1717,7 +1717,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 
 		for (int i = 0; i < functions.size(); ++i)
 		{
-			if (!lmu::areConnected(graph, functions[i], f))
+			if (!lmu::areConnected(graph, functions[i], f) || points.empty())
 				continue;
 				
 			size_t idxMaxDistance;
@@ -1751,17 +1751,6 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				}
 			}
 
-			//if (f->name() == "cube_0")
-			//{
-				std::cout << "D: " << f->signedDistance(pmax) << " " << f->signedDistance(pmin) <<  pmax << std::endl;
-			//}
-				//std::cout << "D: " << functions[i]->name() << " " << pointDistances[idxMaxDistance] << " " << pointDistances[idxMinDistance] << " " 
-				//<< f->signedDistance(pmin) << " " << pmin << " " << f->signedDistance(pmax) << std::endl;
-
-
-			//std::cout << f->signedDistance(points[idxMaxDistance].leftCols(3)) << std::endl;
-			//std::cout << f->signedDistance(points[idxMinDistance].leftCols(3)) << std::endl;
-
 			std::sort(cds.begin(), cds.end(), [](const auto& p1, const auto& p2) {return std::get<0>(p1) > std::get<0>(p2);});
 			
 			idxMaxDistance = std::get<1>(cds.front());
@@ -1772,13 +1761,15 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			perFuncDistances.push_back(pointDistances[idxMaxDistance]);
 			perFuncDistances.push_back(pointDistances[idxMinDistance]);
 			perFuncDistances.push_back(pointDistances[idxMedDistance]);
-
-			//perFuncDistances.push_back((outside ? 1.0 : -1.0)*f->signedDistance(points[idxMaxDistance].leftCols(3).transpose()));
-			//perFuncDistances.push_back((outside ? 1.0 : -1.0)*f->signedDistance(points[idxMinDistance].leftCols(3).transpose()));
-
+			
 			perFuncPoints.push_back(points[idxMaxDistance]);
 			perFuncPoints.push_back(points[idxMinDistance]);		
 			perFuncPoints.push_back(points[idxMedDistance]);
+
+			std::cout << "(" << points[idxMaxDistance].x() << "," << points[idxMaxDistance].y() << "," << points[idxMaxDistance].z() << ")" << " D max: " << f->signedDistance(points[idxMaxDistance].leftCols(3).transpose()) << " " << pointDistances[idxMaxDistance] << std::endl;
+			std::cout << "(" << points[idxMinDistance].x() << "," << points[idxMinDistance].y() << "," << points[idxMinDistance].z() << ")" << " D min: " << f->signedDistance(points[idxMinDistance].leftCols(3).transpose()) << " " << pointDistances[idxMinDistance] << std::endl;
+			std::cout << "(" << points[idxMedDistance].x() << "," << points[idxMedDistance].y() << "," << points[idxMedDistance].z() << ")" << " D med: " << f->signedDistance(points[idxMedDistance].leftCols(3).transpose()) << " " << pointDistances[idxMedDistance] << std::endl;
+
 		}
 	
 		std::cout << f->name() << ": " << perFuncPoints.size() << std::endl;

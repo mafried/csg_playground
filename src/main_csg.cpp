@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
   
   std::string pcName = argv[1]; // "model.xyz";
 
-  auto pointCloud = lmu::readPointCloudXYZ(pcName, 1.0);
+  auto pointClouds = lmu::readPointCloudXYZPerFunc(pcName, 1.0);
 
   std::string primName = argv[2]; // "model.prim";
 
@@ -117,12 +117,15 @@ int main(int argc, char *argv[])
 
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
-  std::cout << "Simulate RANSAC" << std::endl;
+  for (auto& f : shapes)
+  {
+	  f->setPoints(pointClouds[f->name()]);
+  }
+  //std::cout << "Simulate RANSAC" << std::endl;
+  //double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, errorSigma, samplingStepSize), node);
 
-  double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, errorSigma, samplingStepSize), shapes);
-
-  std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
-  std::cout << "Points in primitives: " << pointsInPrimitiveRate << "%" << std::endl;
+  //std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
+  //std::cout << "Points in primitives: " << pointsInPrimitiveRate << "%" << std::endl;
 
   CSGNode res = op<Union>();
 

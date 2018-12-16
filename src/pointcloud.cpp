@@ -45,6 +45,90 @@ void lmu::writePointCloudXYZ(const std::string& file, PointCloud& points)
     }
 }
 
+void lmu::writePointCloudXYZ(const std::string& file, const std::unordered_map<std::string, PointCloud>& points)
+{
+	std::ofstream s(file);
+
+	for (const auto& f : points)
+	{
+		s << "p" << std::endl;
+		s << f.first << std::endl;
+
+		const auto& pts = f.second;
+
+		for (int i = 0; i < pts.rows(); i++)
+		{
+			for (int j = 0; j < pts.cols(); j++)
+			{
+				s << pts.row(i).col(j) << " ";
+			}
+			s << std::endl;
+		}
+	}
+}
+
+lmu::PointCloud createPC(const std::vector<std::vector<double>>& data, double scaleFactor)
+{
+	size_t numRows = data.size();
+	size_t numCols = 6;
+
+	lmu::PointCloud points(numRows, numCols);
+
+	for (int i = 0; i < points.rows(); i++)
+	{
+		for (int j = 0; j < points.cols(); j++)
+		{
+			double v = data[i][j];
+
+			if (j < 3)
+				v = v * scaleFactor;
+
+			points(i, j) = v;
+		}
+	}
+
+	return points;
+}
+
+std::unordered_map<std::string, lmu::PointCloud> lmu::readPointCloudXYZPerFunc(const std::string& file, double scaleFactor)
+{
+	std::ifstream s(file);
+	std::unordered_map<std::string, lmu::PointCloud> res; 
+	std::vector<std::vector<double>> pwn;
+	std::string primitiveName;
+
+	std::cout << "Start reading point clouds." << std::endl;
+
+	std::streampos oldpos = 0;
+
+	while (!s.eof() && oldpos != std::streampos(-1)) 
+	{
+		oldpos = s.tellg();  
+		std::string isPrimitive;
+		s >> isPrimitive;
+		if (isPrimitive != "p")
+		{
+			s.seekg(oldpos);
+			std::vector<double> tmp(6);
+			s >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3] >> tmp[4] >> tmp[5];
+			pwn.push_back(tmp);
+		}
+		else
+		{
+			if (!primitiveName.empty())
+			{
+				std::cout << "Read points for primitive " << primitiveName << " " << pwn.size() << std::endl;
+				res.insert({ primitiveName, createPC(pwn, scaleFactor) });
+				pwn.clear();				
+			}
+			s >> primitiveName;
+		}		
+	}
+	
+	res[primitiveName] = createPC(pwn, scaleFactor);
+
+	return res;
+}
 
 lmu::PointCloud lmu::readPointCloud(const std::string& file, double scaleFactor)
 {
