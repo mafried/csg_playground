@@ -9,6 +9,8 @@
 
 #include "..\include\pointcloud.h"
 #include "..\include\mesh.h"
+#include "..\include\csgnode.h"
+
 
 
 void lmu::writePointCloud(const std::string& file, PointCloud& points)
@@ -200,7 +202,7 @@ lmu::PointCloud lmu::readPointCloudXYZ(const std::string& file, double scaleFact
 }
 
 
-lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, double samplingRate, double errorSigma)
+lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, const lmu::CSGNode& node, double delta, double samplingRate, double errorSigma)
 {
 	Eigen::Vector3d min = mesh.vertices.colwise().minCoeff();
 	Eigen::Vector3d max = mesh.vertices.colwise().maxCoeff();
@@ -238,42 +240,6 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	igl::point_mesh_squared_distance(samplingPoints, mesh.vertices, mesh.indices, sqrD, I, C);
 
 	std::vector<Eigen::Vector3d> remainingPoints;
-	std::vector<Eigen::Vector3d> remainingNormals;
-
-	for (int i = 0; i < numSamplingPoints; i++)
-	{
-		if (sqrD(i) < delta)
-		{
-			remainingPoints.push_back(samplingPoints.row(i));
-
-			int faceIndex = I.row(i).x();
-			if (faceIndex < 0 || faceIndex >= mesh.indices.rows())
-			{
-				std::cout << "Invalid face index: " << faceIndex << " available rows: " << mesh.indices.rows() << std::endl;
-				remainingNormals.push_back(Eigen::Vector3d(0, 0, 0));
-				continue;
-			}
-
-			auto face = mesh.indices.row(faceIndex);
-			
-			int vertexIndex = face.x();
-
-			if (vertexIndex < 0 || vertexIndex >= mesh.normals.rows())
-			{
-				std::cout << "Invalid vertex index: " << vertexIndex << " available rows: " << mesh.normals.rows() << std::endl;
-				remainingNormals.push_back(Eigen::Vector3d(0, 0, 0));
-				continue;
-			}
-
-			auto normal = mesh.normals.row(vertexIndex);		
-			remainingNormals.push_back(normal);
-		}
-	}
-
-	std::cout << "Sample points with error." << std::endl;
-
-	PointCloud res;
-	res.resize(remainingPoints.size(), 6);
 
 	std::random_device rd{};
 	std::mt19937 gen{ rd() };
@@ -282,13 +248,34 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	std::normal_distribution<> dy{ 0.0 , errorSigma };
 	std::normal_distribution<> dz{ 0.0 , errorSigma };
 
+	for (int i = 0; i < numSamplingPoints; i++)
+	{
+		Eigen::Vector3d noise = Eigen::Vector3d(dx(gen), dy(gen), dz(gen));
+		Eigen::Vector3d samplingPoint = samplingPoints.row(i).leftCols(3).transpose();
+		samplingPoint += noise;
+		
+		double sd = node.signedDistance(samplingPoint);
 
+		if (std::sqrt(sqrD(i)) < delta && std::abs(sd) < delta)
+		{
+			remainingPoints.push_back(samplingPoint);
+		}
+	}
+
+	std::cout << "Sample points with error." << std::endl;
+
+	PointCloud res;
+	res.resize(remainingPoints.size(), 6);
+
+	
 	i = 0;
 	for (const auto& point : remainingPoints)
-	{
-		res.block<1, 3>(i, 0) = point;// +Eigen::Vector3d(dx(gen), dy(gen), dz(gen));
+	{	
+		res.block<1, 3>(i, 0) = point;
 
-		res.block<1, 3>(i, 3) = remainingNormals[i];
+		Eigen::Vector3d normal = node.signedDistanceAndGradient(point).bottomRows(3).transpose();
+		
+		res.block<1, 3>(i, 3) = normal;
 
 		i++;
 	}

@@ -1,5 +1,7 @@
 #include "..\include\csgnode.h"
 #include "..\include\csgnode_helper.h"
+#include "..\include\dnf.h"
+#include "..\include\curvature.h"
 
 #include <limits>
 #include <fstream>
@@ -1677,12 +1679,28 @@ pc.row(i) = selectedPoints[i];
 
 void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
 {
+	auto outlierTestValues = computeOutlierTestValues(functions, h);
+
+	size_t nPoints = 0;
 	for (auto& f : functions)
 	{
-		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
-		std::vector<double> selectedPointWeights;
+		nPoints += f->pointsCRef().rows();
+	}
+	PointCloud mergedPC(nPoints, 6);
+	int i = 0;
+	for (auto& f : functions)
+	{
+		for (int j = 0; j < f->pointsCRef().rows(); ++j)
+		{
+			mergedPC.row(i++) = f->pointsCRef().row(j);
+		}
+	}
+	auto curvatures = estimateCurvature(mergedPC, 1.0);	
+	int curveIdx = 0;
 
-		//Check orientation.
+	//Check and set orientation.
+	for (auto& f : functions)
+	{						
 		int numSameSide = 0;
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
@@ -1693,25 +1711,113 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		}
 		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
 
-		//filter wrong orientation.
-		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		std::vector<double> pointDistances;
-		
+		f->setNormalsPointOutside(outside);
+	}
+	
+	//Project points.
+	for (auto& f : functions)
+	{
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
 			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
 			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
+			Eigen::Vector3d g = dg.bottomRows(3).normalized();
+			double d = dg(0);
+
+			p = p - (g*d);
+
+			f->points().row(i) << p.transpose(), (f->normalsPointOutside() ? g : -1.0 * g).transpose();
+		}
+		std::cout << "projected. " << std::endl;
+	}
+
+	for (auto& f : functions)
+	{
+		auto outlierTestValue = outlierTestValues[f];
+		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
+		std::vector<double> selectedPointWeights;
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+		std::vector<double> pointDistances;
+		auto geo = geometry(f);
+		double median = std::get<1>(outlierTestValue);
+		double maxDelta = std::get<0>(outlierTestValue);
+
+		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		{
+			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
+			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
 			Eigen::Vector3d g = dg.bottomRows(3);
 			double d = dg(0);
-		
-			if (((g.dot(n) >= 0.0 && outside) || (g.dot(n) < 0.0 && !outside)))
-			{
-				points.push_back(f->pointsCRef().row(i));				
-				pointDistances.push_back((outside ? 1.0 : -1.0)*d);
-			}
-		}		
 
+			if (std::abs(f->signedDistance(p)) > 0.000001)
+			{
+				continue;
+			}
+
+			bool co = false;
+			for (int j = 0; j < functions.size(); ++j)
+			{
+				if (functions[j] == f)
+					continue;
+
+				if (std::abs(d) > std::abs(functions[j]->signedDistance(p)))
+				{
+					co = true;					
+					break;
+				}
+			}
+			//if (co) continue;
+								
+			bool nc = false;
+			for (int i = 0; i < functions.size(); ++i)
+			{
+				if (functions[i] == f)
+					continue;
+
+				if (!lmu::areConnected(graph, functions[i], f))
+					continue;
+							
+				if (std::abs(functions[i]->signedDistance(p)) < 0.000001)
+				{
+					bool f1Outside = f->normalsPointOutside();
+					bool f2Outside = functions[i]->normalsPointOutside();
+
+					Eigen::Vector4d g1 = f->signedDistanceAndGradient(p, h).bottomRows(3);
+					Eigen::Vector4d g2 = functions[i]->signedDistanceAndGradient(p, h).bottomRows(3);
+
+					//std::cout << "CLOSE" << std::endl;
+
+					if (f1Outside != f2Outside )//&& g1.dot(g2) < 0.0)
+					{
+						//std::cout << "----------------------------------------NOW " << g1.dot(g2) << std::endl;
+						nc = true;
+						break;
+					}
+				}
+			}
+			if (nc) continue;
+			
+
+			Eigen::Matrix<double, 1, 6> pg;
+			pg << p.transpose(), g.transpose();
+			points.push_back(pg);
+			pointDistances.push_back((f->normalsPointOutside() ? 1.0 : -1.0)*d);
+		}
+
+		/*std::cout << "pc ready. pts: " << points.size() << std::endl;
+
+		PointCloud pc1(points.empty() ? 1 : points.size(), 6);
+		for (int i = 0; i < points.size(); ++i)
+		{
+			pc1.row(i) = points[i];
+		}
+		f->points() = pc1;
+		
+		std::cout << "pc set. " << std::endl;
+
+		continue;*/
+	
 		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
 		std::vector<double> perFuncDistances;
 
@@ -1774,16 +1880,38 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 	
 		std::cout << f->name() << ": " << perFuncPoints.size() << std::endl;
 
+		/*if (f->name() == "cylinder_0") //this point is too close to cylinder_1 => add check
+		{
+			
+			auto p = perFuncPoints[1];
+
+			std::cout << "=========================" << p << std::endl;
+			
+			perFuncPoints.clear();
+			perFuncPoints.push_back(p);
+		}
+		else
+		{
+			perFuncPoints.clear();
+		}*/
+
 		PointCloud pc;
 		pc.resize(perFuncPoints.size(), 6);
 		for (int i = 0; i < perFuncPoints.size(); ++i)
 		{
 			pc.row(i) = perFuncPoints[i];
+
+			lmu::Curvature c = lmu::curvature(perFuncPoints[i].leftCols(3), geo, h * 10.0);
+			double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+			std::cout << f->name() << " dev: " << deviationFromFlatness << std::endl;
+
 		}
 
-		f->points() = pc;		
+		f->points() = pc;
 		f->pointWeights() = perFuncDistances;
 	}
+
+	std::cout << "DONE" << std::endl;
 }
 
 /*

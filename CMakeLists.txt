@@ -38,10 +38,10 @@ include_directories(${PROJECT_SOURCE_DIR}/include/)
 include_directories(${PROJECT_SOURCE_DIR}/third_party/inih) 
 
 #PCL
-#find_package(PCL 1.8 REQUIRED COMPONENTS common io sample_consensus keypoints)
-#include_directories(${PCL_INCLUDE_DIRS})
-#link_directories(${PCL_LIBRARY_DIRS})
-#add_definitions(${PCL_DEFINITIONS})
+find_package(PCL 1.8 REQUIRED COMPONENTS common io features search kdtree keypoints)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 #OpenMP
 find_package(OpenMP)
@@ -73,7 +73,7 @@ endif()
 
 # Compile the lib
 add_library(csg_playground_lib STATIC ${CSG_LIB_HEADERS} ${CSG_LIB_SOURCES})
-target_link_libraries(csg_playground_lib igl::core igl::cgal)
+target_link_libraries(csg_playground_lib igl::core igl::cgal ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES})
 
 
 # Program for sampling models
@@ -88,5 +88,5 @@ target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
 # Program for csg reconstruction with gui
 if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
 	add_executable(main "src/main.cpp")
-	target_link_libraries(main csg_playground_lib igl::core igl::cgal igl::core igl::opengl_glfw)
+	target_link_libraries(main csg_playground_lib igl::core igl::cgal igl::core igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES})
 endif()

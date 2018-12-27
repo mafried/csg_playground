@@ -132,6 +132,8 @@ namespace lmu
 
 	Eigen::VectorXd computeCurvature(const Eigen::MatrixXd & samplePoints, const CSGNode & node, double h, bool normalize);
 
+	Eigen::Matrix<double, -1, 5>  estimateCurvature(const PointCloud& pc, double searchRadius);
+
 }
 
 #endif 

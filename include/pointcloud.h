@@ -9,6 +9,7 @@
 namespace lmu
 {
   struct Mesh;
+  class CSGNode;
   
   using PointCloud = Eigen::Matrix<double, Eigen::Dynamic, 6, Eigen::RowMajor>;
 
@@ -19,9 +20,8 @@ namespace lmu
   PointCloud readPointCloud(const std::string& file, double scaleFactor=1.0);
   PointCloud readPointCloudXYZ(const std::string& file, double scaleFactor=1.0);
   std::unordered_map<std::string, PointCloud> readPointCloudXYZPerFunc(const std::string& file, double scaleFactor = 1.0);
-
   
-  PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
+  PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, const lmu::CSGNode& node, double delta, double samplingRate, double errorSigma);
   
   Eigen::MatrixXd getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable);
 

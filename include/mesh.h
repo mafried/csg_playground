@@ -184,6 +184,16 @@ namespace lmu
 		  _scoreWeight = w;
 	  }
 
+	  bool normalsPointOutside() const
+	  {
+		  return _normalsPointOutside;
+	  }
+
+	  void setNormalsPointOutside(bool outside)
+	  {
+		  _normalsPointOutside = outside;
+	  }
+
 	  std::vector<double>& pointWeights()
 	  {
 		  return _pointWeights;
@@ -203,6 +213,8 @@ namespace lmu
 		std::vector<double> _pointWeights;
 
 		double _scoreWeight;
+
+		bool _normalsPointOutside;
 	};
 
 	struct IFSphere : public ImplicitFunction 

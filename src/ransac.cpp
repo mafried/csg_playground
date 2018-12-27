@@ -326,6 +326,64 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		Eigen::Vector3d p = points.row(i).leftCols(3).transpose();
 		Eigen::Vector3d n = points.row(i).rightCols(3).transpose();
 
+
+		Eigen::Vector4d v = node.signedDistanceAndGradient(p);
+		double absNodeD = std::abs(v[0]);
+		Eigen::Vector3d nodeG = v.bottomRows(3);// .transpose();
+
+		/*double delta = 0.1;
+		Eigen::Vector3d p0 = p; p0.x() = p0.x() + delta;
+		Eigen::Vector3d p1 = p; p1.x() = p1.x() - delta;
+		Eigen::Vector3d p2 = p; p2.y() = p2.y() + delta;
+		Eigen::Vector3d p3 = p; p3.y() = p3.y() - delta;
+		Eigen::Vector3d p4 = p; p4.z() = p4.z() + delta;
+		Eigen::Vector3d p5 = p; p5.z() = p5.z() - delta;
+
+		std::array<Eigen::Vector3d,6> pts = { p0,p1,p2,p3,p4,p5 };
+
+		//std::cout << "-----------------" << std::endl;
+		//std::cout << p << std::endl << p0 << std::endl;
+
+		bool continuityNotGiven = false;
+		for (const auto& pi : pts)
+		{
+			if (std::abs(node.signedDistance(p) - node.signedDistance(pi)) > delta)
+			{
+				//std::cout << "HERE";
+				continuityNotGiven = true;
+				break;
+			}
+		}
+		if (continuityNotGiven) continue;
+		*/
+
+		/*
+		if (absNodeD > params.maxDistance + 3.0 * params.errorSigma))
+		{
+			continue;
+		}
+		*/
+
+		/*
+		bool co = false;
+		for (const auto& f1 : knownFunctions)
+		{
+			for (const auto& f2 : knownFunctions)
+			{
+				if (f1 == f2)
+					continue;
+
+				if (std::abs(f1->signedDistance(p) - f2->signedDistance(p)) < 0.000001)
+				{
+					co = true;
+					break;
+				}				
+			}
+			if (co) break;
+		}
+		if (co) continue;
+		*/
+
 		for (const auto& func : knownFunctions)
 		{			
 			Eigen::Vector4d v = func->signedDistanceAndGradient(p);
@@ -333,7 +391,7 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 			Eigen::Vector3d g = v.bottomRows(3);// .transpose();
 			//double absDAngleCos = std::abs(n.dot(g));
 
-			if (absD <= params.maxDistance + 3.0 * params.errorSigma && /*absDAngleCos >= cosMaxAngleDistance*/n.dot(g) > 0.0 && absD < curMaxDelta)
+			if (absD <= params.maxDistance + 3.0 * params.errorSigma && /*absDAngleCos >= cosMaxAngleDistance n.dot(g) > 0.0 && */absD < curMaxDelta)
 			{
 				curMaxDelta = absD;
 				curFunc = func;
@@ -351,7 +409,7 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 		}
 	}
 
-	for (const auto& point : restPoints)
+	/*for (const auto& point : restPoints)
 	{
 		lmu::ImplicitFunctionPtr curFunc = nullptr;
 		double curMaxDelta = std::numeric_limits<double>::max();
@@ -374,7 +432,7 @@ double lmu::ransacWithSim(const PointCloud& points, const CSGNodeSamplingParams&
 			pointsAndNormalsMap[curFunc].push_back(point);
 			usedPoints++;
 		}
-	}
+	}*/
 
 	for (auto const& func : knownFunctions)
 	{

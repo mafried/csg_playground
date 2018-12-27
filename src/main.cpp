@@ -633,17 +633,13 @@ for (const auto& f1 : funcs)
 	std::cout << std::endl;
 }
 
-/*for (const auto& func : funcs)
-{	
-
-	viewer.data().add_points(func->pointsCRef().leftCols(3), Eigen::Matrix<double, 1, 3>(0, 0, 0));//;func->pointsCRef().rightCols(3));
-	
-}*/
+//for (const auto& func : funcs)
+//{
+//	viewer.data().add_points(func->pointsCRef().leftCols(3), Eigen::Matrix<double, 1, 3>(0, 0, 0));//;func->pointsCRef().rightCols(3));	
+//}
 
 lmu::filterPoints(funcs, graph, gradientStepSize);
-
 double score = lmu::computeNormalizedGeometryScore(node, funcs, gradientStepSize);
-
 std::cout << "SCORE: " << score << std::endl;
 
 double distThreshold = 0.9;
@@ -655,9 +651,9 @@ SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
 int i = 0;
 for (const auto& func : funcs)
 {
-	//if (/*func->name() != "cylinder_0" && func->name() != "cube_0" && func->name() != "cube_2" && */func->name() != "cube_4" && func->name() != "cylinder_0")
-	//	continue;
-	//if (func->name() != "cube_0")
+	std::cout << "================ " << func->name() << " " << func->points().rows() << std::endl;
+
+	//if (func->name() != "cube_6")
 	//	continue;
 
 	Eigen::Matrix<double, 1, 3> c; 
@@ -684,15 +680,69 @@ for (const auto& func : funcs)
 		break;
 	}
 
-	viewer.data().add_points(func->pointsCRef().leftCols(3), c);//;func->pointsCRef().rightCols(3));
+	/*if (func->name() == "cube_0" && std::abs(func->points().row(10).x() - 0.243841) < 0.0001)
+	{
+		std::cout << "##################--#################" << std::endl;
+		viewer.data().add_points(func->points().row(10).leftCols(3), c);//;func->pointsCRef().rightCols(3));
+	}*/
+
+	viewer.data().add_points(func->points().leftCols(3), c);//;func->pointsCRef().rightCols(3));
+
+	/*if (func->name() == "cylinder_0")
+	{
+		auto p = func->pointsCRef().row(1).leftCols(3);
+
+		viewer.data().add_points(p, c);//;func->pointsCRef().rightCols(3));
+
+		lmu::Curvature c = lmu::curvature(p.transpose(), node, 0.0001);
+		double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+
+		std::cout << "DEV: " << deviationFromFlatness << std::endl;
+	}*/
 
 	i++;
 }
 
+/*for (auto& pc : pointClouds)
+{	
+	auto curvatures = estimateCurvature(pc.second, 0.3);
 
-writeNode(node, "tree.dot");
+	Eigen::Matrix<double, -1, 1> c(curvatures.rows(), 1);
 
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
+	for (int i = 0; i < curvatures.rows(); ++i)
+	{
+		auto cur = curvatures.row(i);
+
+		double dev = std::sqrt(cur.x() * cur.x() + cur.y() * cur.y());
+
+		if (dev > 0.0)
+			pc.second.row(i) << 0, 0, 0, 0, 0, 0; 
+
+		c.row(i) << dev;
+	}
+
+	viewer.data().add_points(pc.second.leftCols(3), c);//curvatures.leftCols(2));
+}*/
+
+/*size_t nPoints = 0;
+for (const auto& pc : pointClouds)
+	nPoints += pc.second.rows(); 
+PointCloud mergedPC(nPoints,6);
+i = 0;
+for (const auto& pc : pointClouds)
+{
+	for (int j = 0; j < pc.second.rows(); ++j)
+	{
+		mergedPC.row(i++) = pc.second.row(j);
+	}
+}
+auto curvatures = estimateCurvature(mergedPC, 0.3);
+
+viewer.data().add_points(mergedPC.leftCols(3), curvatures.leftCols(2));//;func->pointsCRef().rightCols(3));
+*/
+	writeNode(node, "tree.dot");
+
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 	viewer.data().point_size = 5.0;

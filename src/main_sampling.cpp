@@ -497,7 +497,11 @@ int main(int argc, char *argv[])
 
   CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
 
-  auto pointCloud = lmu::computePointCloud(node, samplingParams);
+  auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+  
+  auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);
+  
+  //lmu::computePointCloud(node, samplingParams);
   std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;
 
   std::string pcName = modelBasename + ".xyz"; //"model.xyz";

@@ -134,7 +134,6 @@ Rank lmu::CSGNodeRanker::rank(const lmu::CSGNode& node) const
 
 double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h)
 {
-	//auto funcs = lmu::getImplicitFunctions(_connectionGraph);
 	double numCorrectSamples = 0;
 	double numConsideredSamples = 0;
 	const double smallestDelta = 0.001;
@@ -156,24 +155,28 @@ double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vecto
 		{			
 			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(i);
 
-			//std::cout << func->name() << pn << std::endl;
-
 			Eigen::Vector3d sampleP = pn.leftCols(3);
-			Eigen::Vector3d sampleN = pn.rightCols(3);
-
+			//Eigen::Vector3d sampleN = pn.rightCols(3);
+			//Eigen::Vector3d p = sampleP - (func->pointWeights()[i] * sampleN.normalized());
+			
 			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
 			double sampleDistNode = sampleDistGradNode[0];
 			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
+			Eigen::Vector3d sampleGradFunc = func->signedDistanceAndGradient(sampleP, h).bottomRows(3);
+						
+			bool outside = sampleGradFunc.dot(sampleGradNode) >= 0.0;
 
 			numConsideredSamples += (1.0 * sampleFactor);
 					
-			if (std::abs(sampleDistNode - func->pointWeights()[i]) <= smallestDelta && sampleGradNode.dot(sampleN) > 0.0)
+			if (std::abs(sampleDistNode /*- func->pointWeights()[i]*/) <= smallestDelta && outside == func->normalsPointOutside())//&& sampleGradNode.dot(sampleN) > 0.0)
 			{
 				numCorrectSamples += (1.0 * sampleFactor);
 			}
 			else
 			{
-				//std::cout << func->name() << ": " << "(" << sampleP.x() << "," << sampleP.y() << "," << sampleP.z() << ") " << sampleDistNode << " " << func->pointWeights()[i] << " " << sampleGradNode.dot(sampleN) << std::endl;
+				//std::cout << func->name() << ": " << i << " "  << "(" << sampleP.x() << "," << sampleP.y() << "," 
+				//	<< sampleP.z() << ")" << " SampleDist: " << sampleDistNode << " FuncDist: " << func->pointWeights()[i] << " FG: " 
+				//	<< sampleGradFunc << " GN: " << sampleGradNode << std::endl;
 
 				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
 

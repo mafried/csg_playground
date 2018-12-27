@@ -63,7 +63,8 @@ lmu::CSGNode readNode(const json& json)
 
 		auto center = readVec3(params.at("center"));
 
-		auto rotation = readVec3(params.at("rotation"));
+		auto rotIter = params.find("rotation");
+		auto rotation = rotIter == params.end() ? Eigen::Vector3d(0,0,0) : readVec3(*rotIter);
 		Eigen::AngleAxisd rotx(rotation.x(), Eigen::Vector3d(1.0, 0.0, 0.0));
 		Eigen::AngleAxisd roty(rotation.y(), Eigen::Vector3d(0.0, 1.0, 0.0));
 		Eigen::AngleAxisd rotz(rotation.z(), Eigen::Vector3d(0.0, 0.0, 1.0));
