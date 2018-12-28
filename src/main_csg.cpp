@@ -80,10 +80,10 @@ int main(int argc, char *argv[])
   ParameterSet params(argv[3]);
   params.print();
   
-  double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.0);
-  double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.03);
-  double maxAngleDistance = params.getDouble("Sampling", "MaxAngleDistance", M_PI / 18.0);
-  double errorSigma = params.getDouble("Sampling", "ErrorSigma", 0.01);
+  //double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.0);
+  //double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.03);
+  //double maxAngleDistance = params.getDouble("Sampling", "MaxAngleDistance", M_PI / 18.0);
+  //double errorSigma = params.getDouble("Sampling", "ErrorSigma", 0.01);
   double connectionGraphSamplingStepSize = params.getDouble("Sampling", "ConnectionGraphSamplingStepSize", 0.01);
   
   std::string pcName = argv[1]; // "model.xyz";
@@ -116,6 +116,8 @@ int main(int argc, char *argv[])
   }
 
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
+
+  std::cout << "CONNECTION GRAPH Vertices: " << numVertices(graph) << " , Edges: " << numEdges(graph) << std::endl;
 
   for (auto& f : shapes)
   {

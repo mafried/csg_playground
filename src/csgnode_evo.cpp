@@ -791,7 +791,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	int k = p.getInt("Selection", "TournamentK", 2);
 	
 	int maxIter = p.getInt("StopCriterion", "MaxIterations", 500);
-	int maxIterWithoutChange = p.getInt("StopCriterion", "MaxIterationsWithoutChange", 200);
+	int maxIterWithoutChange = p.getInt("StopCriterion", "MaxIterationsWithoutChange", 8 * numEdges(connectionGraph));
 	double changeDelta = p.getDouble("StopCriterion", "ChangeDelta", 0.01);
 
 	std::string statsFile = p.getStr("Statistics", "File", "stats.dat");

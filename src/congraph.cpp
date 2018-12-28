@@ -119,18 +119,36 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 
 void createConnectionGraphRec(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& funcs, const Eigen::Vector3d & min, const Eigen::Vector3d & max, double minCellSize, std::vector<boost::dynamic_bitset<>>& overlaps)
 {
-	//std::cout << "part: " << std::endl << min << std::endl << max << std::endl;
-
-	if ((max - min).norm() < minCellSize)
-		return;
-
 	Eigen::Vector3d s = (max - min);
 	Eigen::Vector3d p = min + 0.5 * s;
-	
 	boost::dynamic_bitset<> isIn(funcs.size());
-	
-	for (int i = 0; i < funcs.size(); ++i)
+
+	if ((max - min).norm() < minCellSize)
+	{
+		for (int i = 0; i < funcs.size(); ++i)
+		{
+			isIn[i] = 
+				funcs[i]->signedDistance(min) < 0.0 ||
+				funcs[i]->signedDistance(max) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(s.x(), 0.0, 0.0)) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(0.0, s.y(), 0.0)) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(0.0, 0.0, s.z())) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(s.x(), s.y(), 0.0)) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(s.x(), 0.0, s.z())) < 0.0 ||
+				funcs[i]->signedDistance(min + Eigen::Vector3d(0.0, s.y(), s.z())) < 0.0;
+		}
+
+		for (int i = 0; i < funcs.size(); ++i)
+		{
+			overlaps[i] = isIn[i] ? overlaps[i] | isIn : overlaps[i];
+		}
+
+		return;
+	}
+
+	for (int i = 0; i < funcs.size(); ++i)	
 		isIn[i] = funcs[i]->signedDistance(p) < 0.0;//s.x(); // < 0
+	
 	
 	for (int i = 0; i < funcs.size(); ++i)
 		overlaps[i] = isIn[i] ? overlaps[i] | isIn : overlaps[i]; // overlaps[i] | isIn;

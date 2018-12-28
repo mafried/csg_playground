@@ -215,6 +215,9 @@ namespace lmu
 		{
 			Rank currentBestRank = population[0].rank;
 
+			std::cout << "Current best geo: " << currentBestRank.geo << " Current best size: " << _currentBestSizeRank << " Iterations:" << iterationCount << " of " << _maxIterations <<
+				" Same size iterations: " << _sameSizeScoreCounter << " of " << _maxIterationsWithoutSizeImprovement << std::endl;
+
 			if (currentBestRank.geo < _targetGeometryScore)
 				return iterationCount >= _maxIterations;
 
@@ -228,8 +231,6 @@ namespace lmu
 				_currentBestSizeRank = currentBestRank.size;
 			}
 
-			std::cout << "Current best geo: " << currentBestRank.geo  << " Current best size: " << _currentBestSizeRank << " Iterations:" << iterationCount << " of " << _maxIterations << 
-				" Same size iterations: " << _sameSizeScoreCounter << " of " << _maxIterationsWithoutSizeImprovement  <<  std::endl;
 			return iterationCount >= _maxIterations || _sameSizeScoreCounter >= _maxIterationsWithoutSizeImprovement;
 		}
 
