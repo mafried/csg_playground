@@ -1725,7 +1725,8 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			Eigen::Vector3d g = dg.bottomRows(3).normalized();
 			double d = dg(0);
 
-			p = p - (g*d);
+			p = p - (g*d);						
+			g = f->signedDistanceAndGradient(p, h).bottomRows(3).normalized();
 
 			f->points().row(i) << p.transpose(), (f->normalsPointOutside() ? g : -1.0 * g).transpose();
 		}
@@ -1750,7 +1751,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			Eigen::Vector3d g = dg.bottomRows(3);
 			double d = dg(0);
 
-			if (std::abs(f->signedDistance(p)) > 0.000001)
+			if (std::abs(d) > 0.000001)
 			{
 				continue;
 			}
@@ -1761,13 +1762,14 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				if (functions[j] == f)
 					continue;
 
-				if (std::abs(d) > std::abs(functions[j]->signedDistance(p)))
+				if (std::abs(d) >= std::abs(functions[j]->signedDistance(p)))
 				{
+					std::cout << "HERE-------------------" << std::endl;
 					co = true;					
 					break;
 				}
 			}
-			//if (co) continue;
+			if (co) continue;
 								
 			bool nc = false;
 			for (int i = 0; i < functions.size(); ++i)
@@ -1778,7 +1780,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				if (!lmu::areConnected(graph, functions[i], f))
 					continue;
 							
-				if (std::abs(functions[i]->signedDistance(p)) < 0.000001)
+				if (std::abs(functions[i]->signedDistance(p)) < 0.1)
 				{
 					bool f1Outside = f->normalsPointOutside();
 					bool f2Outside = functions[i]->normalsPointOutside();

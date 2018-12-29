@@ -163,6 +163,14 @@ double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vecto
 			double sampleDistNode = sampleDistGradNode[0];
 			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
 			Eigen::Vector3d sampleGradFunc = func->signedDistanceAndGradient(sampleP, h).bottomRows(3);
+
+			sampleGradNode.x() = sampleGradNode.x() == -0.0 ? 0.0 : sampleGradNode.x();
+			sampleGradNode.y() = sampleGradNode.y() == -0.0 ? 0.0 : sampleGradNode.y();
+			sampleGradNode.z() = sampleGradNode.z() == -0.0 ? 0.0 : sampleGradNode.z();
+
+			sampleGradFunc.x() = sampleGradFunc.x() == -0.0 ? 0.0 : sampleGradFunc.x();
+			sampleGradFunc.y() = sampleGradFunc.y() == -0.0 ? 0.0 : sampleGradFunc.y();
+			sampleGradFunc.z() = sampleGradFunc.z() == -0.0 ? 0.0 : sampleGradFunc.z();
 						
 			bool outside = sampleGradFunc.dot(sampleGradNode) >= 0.0;
 
@@ -176,7 +184,7 @@ double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vecto
 			{
 				//std::cout << func->name() << ": " << i << " "  << "(" << sampleP.x() << "," << sampleP.y() << "," 
 				//	<< sampleP.z() << ")" << " SampleDist: " << sampleDistNode << " FuncDist: " << func->pointWeights()[i] << " FG: " 
-				//	<< sampleGradFunc << " GN: " << sampleGradNode << std::endl;
+				//	<< sampleGradFunc << " GN: " << sampleGradNode << " Outside: " << outside << " F Outside: " << func->normalsPointOutside() << " " << sampleGradFunc.dot(sampleGradNode) << std::endl;
 
 				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
 

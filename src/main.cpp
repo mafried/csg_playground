@@ -592,7 +592,7 @@ double maxDistance = 0.1;
 double maxAngleDistance = M_PI / 18.0;
 double noiseSigma = 0.0;
 CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
-double connectionGraphSamplingStepSize = 0.2;
+double connectionGraphSamplingStepSize = 1.0;
 double gradientStepSize = 0.001;
 
 auto pointCloud = lmu::computePointCloud(node, samplingParams);
@@ -613,10 +613,22 @@ writeConnectionGraph("cg.dot", graph);
 //std::cout << "used points: " << res << "%" << std::endl;
 
 auto pointClouds = lmu::readPointCloudXYZPerFunc("C:/Projekte/csg_playground_build/Release/model.xyz", 1.0);
+std::vector<ImplicitFunctionPtr> filteredFuncs;
+
 for (auto& f : funcs)
 {
 	f->setPoints(pointClouds[f->name()]);
+
+	if (f->points().rows() == 0)
+	{
+		std::cout << "WARNING: Primitive " << f->name() << " has no points and is filtered out." << std::endl;
+	}
+	else
+	{
+		filteredFuncs.push_back(f);
+	}
 }
+funcs = filteredFuncs;
 
 for (const auto& f1 : funcs)
 {
@@ -680,11 +692,11 @@ for (const auto& func : funcs)
 		break;
 	}
 
-	/*if (func->name() == "cube_0" && std::abs(func->points().row(10).x() - 0.243841) < 0.0001)
+	if (func->name() == "cylinder_30")// && std::abs(func->points().row(10).x() - 0.243841) < 0.0001)
 	{
 		std::cout << "##################--#################" << std::endl;
-		viewer.data().add_points(func->points().row(10).leftCols(3), c);//;func->pointsCRef().rightCols(3));
-	}*/
+		viewer.data().add_points(func->points().row(4).leftCols(3), c);//;func->pointsCRef().rightCols(3));
+	}
 
 	viewer.data().add_points(func->points().leftCols(3), c);//;func->pointsCRef().rightCols(3));
 
@@ -742,7 +754,7 @@ viewer.data().add_points(mergedPC.leftCols(3), curvatures.leftCols(2));//;func->
 */
 	writeNode(node, "tree.dot");
 
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 	viewer.data().point_size = 5.0;

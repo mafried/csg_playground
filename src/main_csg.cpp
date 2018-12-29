@@ -92,8 +92,23 @@ int main(int argc, char *argv[])
 
   std::string primName = argv[2]; // "model.prim";
 
-  std::vector<ImplicitFunctionPtr> shapes; 
+  std::vector<ImplicitFunctionPtr> shapes, filteredShapes; 
   shapes = lmu::fromFilePRIM(primName);
+  
+  for (const auto& s : shapes)
+  {
+	  s->setPoints(pointClouds[s->name()]);
+
+	  if (s->points().rows() == 0)
+	  {
+		  std::cout << "WARNING: Primitive " << s->name() << " has no points and is filtered out." << std::endl;
+	  }
+	  else
+	  {
+		  filteredShapes.push_back(s);
+	  }
+  }
+  shapes = filteredShapes;
   
   std::cout << "Compute Connection Graph" << std::endl;
   
@@ -118,24 +133,13 @@ int main(int argc, char *argv[])
   lmu::writeConnectionGraph("connectionGraph.dot", graph);
 
   std::cout << "CONNECTION GRAPH Vertices: " << numVertices(graph) << " , Edges: " << numEdges(graph) << std::endl;
-
-  for (auto& f : shapes)
-  {
-	  f->setPoints(pointClouds[f->name()]);
-  }
-  //std::cout << "Simulate RANSAC" << std::endl;
-  //double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, errorSigma, samplingStepSize), node);
-
-  //std::cout << "Complete point cloud size: " << pointCloud.rows() << std::endl;
-  //std::cout << "Points in primitives: " << pointsInPrimitiveRate << "%" << std::endl;
-
+   
   CSGNode res = op<Union>();
 
   double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
   double distThreshold = params.getDouble("Sampling", "DistanceThreshold", 0.9);
   double angleThreshold = params.getDouble("Sampling", "AngleThreshold", 0.9);
-
-
+  
   SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
 
   
