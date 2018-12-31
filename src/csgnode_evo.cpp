@@ -154,37 +154,36 @@ double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vecto
 		for (int i = 0; i < func->pointsCRef().rows(); ++i)
 		{			
 			Eigen::Matrix<double, 1, 6> pn = func->pointsCRef().row(i);
-
 			Eigen::Vector3d sampleP = pn.leftCols(3);
-			//Eigen::Vector3d sampleN = pn.rightCols(3);
-			//Eigen::Vector3d p = sampleP - (func->pointWeights()[i] * sampleN.normalized());
-			
+			Eigen::Vector3d sampleN = pn.rightCols(3);
+
 			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, h);
 			double sampleDistNode = sampleDistGradNode[0];
 			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
-			Eigen::Vector3d sampleGradFunc = func->signedDistanceAndGradient(sampleP, h).bottomRows(3);
+			//Eigen::Vector3d sampleGradFunc = func->signedDistanceAndGradient(sampleP, h).bottomRows(3);
 
 			sampleGradNode.x() = sampleGradNode.x() == -0.0 ? 0.0 : sampleGradNode.x();
 			sampleGradNode.y() = sampleGradNode.y() == -0.0 ? 0.0 : sampleGradNode.y();
 			sampleGradNode.z() = sampleGradNode.z() == -0.0 ? 0.0 : sampleGradNode.z();
 
-			sampleGradFunc.x() = sampleGradFunc.x() == -0.0 ? 0.0 : sampleGradFunc.x();
-			sampleGradFunc.y() = sampleGradFunc.y() == -0.0 ? 0.0 : sampleGradFunc.y();
-			sampleGradFunc.z() = sampleGradFunc.z() == -0.0 ? 0.0 : sampleGradFunc.z();
-						
-			bool outside = sampleGradFunc.dot(sampleGradNode) >= 0.0;
-
+			//sampleGradFunc.x() = sampleGradFunc.x() == -0.0 ? 0.0 : sampleGradFunc.x();
+			//sampleGradFunc.y() = sampleGradFunc.y() == -0.0 ? 0.0 : sampleGradFunc.y();
+			//sampleGradFunc.z() = sampleGradFunc.z() == -0.0 ? 0.0 : sampleGradFunc.z();
+				
+			//Eigen::Vector3d mg(-sampleN);	
+			//bool outside = (func->normalsPointOutside() ? sampleN : mg).dot(sampleGradNode) >= 0.0;
+			
 			numConsideredSamples += (1.0 * sampleFactor);
 					
-			if (std::abs(sampleDistNode /*- func->pointWeights()[i]*/) <= smallestDelta && outside == func->normalsPointOutside())//&& sampleGradNode.dot(sampleN) > 0.0)
+			if (std::abs(sampleDistNode) <= smallestDelta && sampleN.dot(sampleGradNode) >= 0.0/* == func->normalsPointOutside()*/)//&& sampleGradNode.dot(sampleN) > 0.0)
 			{
 				numCorrectSamples += (1.0 * sampleFactor);
 			}
 			else
 			{
 				//std::cout << func->name() << ": " << i << " "  << "(" << sampleP.x() << "," << sampleP.y() << "," 
-				//	<< sampleP.z() << ")" << " SampleDist: " << sampleDistNode << " FuncDist: " << func->pointWeights()[i] << " FG: " 
-				//	<< sampleGradFunc << " GN: " << sampleGradNode << " Outside: " << outside << " F Outside: " << func->normalsPointOutside() << " " << sampleGradFunc.dot(sampleGradNode) << std::endl;
+				//	<< sampleP.z() << ")" << " SampleDist: " << sampleDistNode << " PG: " 
+				//	<< sampleN << " FG: " << sampleGradFunc << " NG: " << sampleGradNode << " F Outside: " << func->normalsPointOutside() << " " << sampleGradNode.dot(sampleN) << std::endl;
 
 				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
 

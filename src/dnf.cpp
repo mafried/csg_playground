@@ -183,7 +183,9 @@ std::vector<std::tuple<lmu::Clause, size_t>> getValidClauses(const std::vector<s
 	for (size_t i = 0; i < clauseQualityPairs.size(); ++i)
 	{
 		if (std::get<1>(clauseQualityPairs[i]) >= distThreshold && std::get<2>(clauseQualityPairs[i]) >= angleThreshold)
+		{			
 			validClauses.push_back(std::make_tuple(std::get<0>(clauseQualityPairs[i]), i));
+		}
 	}
 
 	return validClauses; 
@@ -218,9 +220,11 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 
 	int numConsideredFunctions = 0;
 
+	std::cout << "Functions:" << functions.size() << std::endl;
+
 	//Point position violation check.
 	for (int i = 0; i < functions.size(); ++i)
-	{	
+	{		
 		int outsideSamples = 0;
 		int insideSamples = 0;
 		int numCorrectSamples = 0;

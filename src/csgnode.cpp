@@ -1679,25 +1679,6 @@ pc.row(i) = selectedPoints[i];
 
 void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
 {
-	auto outlierTestValues = computeOutlierTestValues(functions, h);
-
-	size_t nPoints = 0;
-	for (auto& f : functions)
-	{
-		nPoints += f->pointsCRef().rows();
-	}
-	PointCloud mergedPC(nPoints, 6);
-	int i = 0;
-	for (auto& f : functions)
-	{
-		for (int j = 0; j < f->pointsCRef().rows(); ++j)
-		{
-			mergedPC.row(i++) = f->pointsCRef().row(j);
-		}
-	}
-	auto curvatures = estimateCurvature(mergedPC, 1.0);	
-	int curveIdx = 0;
-
 	//Check and set orientation.
 	for (auto& f : functions)
 	{						
@@ -1717,39 +1698,48 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 	//Project points.
 	for (auto& f : functions)
 	{
-		for (int i = 0; i < f->pointsCRef().rows(); ++i)
+		auto points = f->points();
+
+		for (int i = 0; i < points.rows(); ++i)
 		{
-			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
+			Eigen::Vector3d p = points.row(i).leftCols(3);
+			Eigen::Vector3d n = points.row(i).rightCols(3);
 			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
 			Eigen::Vector3d g = dg.bottomRows(3).normalized();
 			double d = dg(0);
 
 			p = p - (g*d);						
+			
 			g = f->signedDistanceAndGradient(p, h).bottomRows(3).normalized();
 
-			f->points().row(i) << p.transpose(), (f->normalsPointOutside() ? g : -1.0 * g).transpose();
+			points.row(i) << p.transpose(), g.transpose();
+
+			Eigen::Vector3d mg(-g);			
+			points.row(i) << p.transpose(), (f->normalsPointOutside() ? g : mg).transpose();
 		}
+
+		f->points() = points;
 		std::cout << "projected. " << std::endl;
 	}
 
 	for (auto& f : functions)
 	{
-		auto outlierTestValue = outlierTestValues[f];
 		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
 		std::vector<double> selectedPointWeights;
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		std::vector<double> pointDistances;
+		//std::vector<double> pointDistances;
 		auto geo = geometry(f);
-		double median = std::get<1>(outlierTestValue);
-		double maxDelta = std::get<0>(outlierTestValue);
+
+		//double median = std::get<1>(outlierTestValue);
+		//double maxDelta = std::get<0>(outlierTestValue);
+		//auto outlierTestValue = outlierTestValues[f];
 
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
-			Eigen::Vector3d g = dg.bottomRows(3);
-			double d = dg(0);
+			//Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
+			Eigen::Vector3d g = f->pointsCRef().row(i).rightCols(3); //dg.bottomRows(3);
+			double d = f->signedDistance(p);//dg(0);
 
 			if (std::abs(d) > 0.000001)
 			{
@@ -1764,7 +1754,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 
 				if (std::abs(d) >= std::abs(functions[j]->signedDistance(p)))
 				{
-					std::cout << "HERE-------------------" << std::endl;
+					//std::cout << "HERE-------------------" << std::endl;
 					co = true;					
 					break;
 				}
@@ -1804,7 +1794,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			Eigen::Matrix<double, 1, 6> pg;
 			pg << p.transpose(), g.transpose();
 			points.push_back(pg);
-			pointDistances.push_back((f->normalsPointOutside() ? 1.0 : -1.0)*d);
+			//pointDistances.push_back((f->normalsPointOutside() ? 1.0 : -1.0)*d);
 		}
 
 		/*std::cout << "pc ready. pts: " << points.size() << std::endl;
@@ -1821,7 +1811,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		continue;*/
 	
 		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
-		std::vector<double> perFuncDistances;
+		//std::vector<double> perFuncDistances;
 
 		for (int i = 0; i < functions.size(); ++i)
 		{
@@ -1866,17 +1856,17 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 
 			size_t idxMedDistance = std::get<1>(cds.at(cds.size() / 2));
 
-			perFuncDistances.push_back(pointDistances[idxMaxDistance]);
-			perFuncDistances.push_back(pointDistances[idxMinDistance]);
-			perFuncDistances.push_back(pointDistances[idxMedDistance]);
+			//perFuncDistances.push_back(pointDistances[idxMaxDistance]);
+			//perFuncDistances.push_back(pointDistances[idxMinDistance]);
+			//perFuncDistances.push_back(pointDistances[idxMedDistance]);
 			
 			perFuncPoints.push_back(points[idxMaxDistance]);
 			perFuncPoints.push_back(points[idxMinDistance]);		
 			perFuncPoints.push_back(points[idxMedDistance]);
 
-			std::cout << "(" << points[idxMaxDistance].x() << "," << points[idxMaxDistance].y() << "," << points[idxMaxDistance].z() << ")" << " D max: " << f->signedDistance(points[idxMaxDistance].leftCols(3).transpose()) << " " << pointDistances[idxMaxDistance] << std::endl;
-			std::cout << "(" << points[idxMinDistance].x() << "," << points[idxMinDistance].y() << "," << points[idxMinDistance].z() << ")" << " D min: " << f->signedDistance(points[idxMinDistance].leftCols(3).transpose()) << " " << pointDistances[idxMinDistance] << std::endl;
-			std::cout << "(" << points[idxMedDistance].x() << "," << points[idxMedDistance].y() << "," << points[idxMedDistance].z() << ")" << " D med: " << f->signedDistance(points[idxMedDistance].leftCols(3).transpose()) << " " << pointDistances[idxMedDistance] << std::endl;
+			//std::cout << "(" << points[idxMaxDistance].x() << "," << points[idxMaxDistance].y() << "," << points[idxMaxDistance].z() << ")" << " D max: " << f->signedDistance(points[idxMaxDistance].leftCols(3).transpose()) << " " << pointDistances[idxMaxDistance] << std::endl;
+			//std::cout << "(" << points[idxMinDistance].x() << "," << points[idxMinDistance].y() << "," << points[idxMinDistance].z() << ")" << " D min: " << f->signedDistance(points[idxMinDistance].leftCols(3).transpose()) << " " << pointDistances[idxMinDistance] << std::endl;
+			//std::cout << "(" << points[idxMedDistance].x() << "," << points[idxMedDistance].y() << "," << points[idxMedDistance].z() << ")" << " D med: " << f->signedDistance(points[idxMedDistance].leftCols(3).transpose()) << " " << pointDistances[idxMedDistance] << std::endl;
 
 		}
 	
@@ -1901,16 +1891,16 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		pc.resize(perFuncPoints.size(), 6);
 		for (int i = 0; i < perFuncPoints.size(); ++i)
 		{
-			pc.row(i) = perFuncPoints[i];
+			pc.row(i) << perFuncPoints[i];
 
-			lmu::Curvature c = lmu::curvature(perFuncPoints[i].leftCols(3), geo, h * 10.0);
-			double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
-			std::cout << f->name() << " dev: " << deviationFromFlatness << std::endl;
+			//lmu::Curvature c = lmu::curvature(perFuncPoints[i].leftCols(3), geo, h * 10.0);
+			//double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+			//std::cout << f->name() << " dev: " << deviationFromFlatness << std::endl;
 
 		}
 
 		f->points() = pc;
-		f->pointWeights() = perFuncDistances;
+		//f->pointWeights() = perFuncDistances;
 	}
 
 	std::cout << "DONE" << std::endl;
