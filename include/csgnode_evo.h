@@ -257,7 +257,7 @@ namespace lmu
 
 	using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank, CSGNodeTournamentSelector, GeometryStopCriterion, CSGNodePopMan>;
 
-	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::ParameterSet& p, const lmu::Graph& connectionGraph = Graph());
+	CSGNode createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const lmu::ParameterSet& p, const lmu::Graph& connectionGraph = Graph(), int partitionId = 0);
 
 	using GeometryCliqueWithCSGNode = std::tuple<Clique, CSGNode>;
 

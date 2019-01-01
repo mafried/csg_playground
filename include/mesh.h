@@ -64,6 +64,50 @@ namespace lmu
 
 	std::string iFTypeToString(ImplicitFunctionType type);
 
+	struct AABB
+	{
+		AABB()
+		{
+		}
+
+		AABB(const Eigen::Vector3d& center, const Eigen::Vector3d& size) : 
+			c(center), s(size)
+		{
+		}
+
+		bool overlapsWith(const AABB& b)
+		{
+			Eigen::Vector3d amin = c - s; 
+			Eigen::Vector3d amax = c + s;
+
+			Eigen::Vector3d bmin = b.c - b.s;
+			Eigen::Vector3d bmax = b.c + b.s;
+			
+			return ((amin.x() <= bmax.x() && amax.x() >= bmin.x()) || (amin.x() >= bmin.x() && amax.x() <= bmax.x()) || (bmin.x() >= amin.x() && bmax.x() <= amax.x())) &&
+				   ((amin.y() <= bmax.y() && amax.y() >= bmin.y()) || (amin.y() >= bmin.y() && amax.y() <= bmax.y()) || (bmin.y() >= amin.x() && bmax.y() <= amax.y())) &&
+				   ((amin.z() <= bmax.z() && amax.z() >= bmin.z()) || (amin.z() >= bmin.z() && amax.z() <= bmax.z()) || (bmin.z() >= amin.z() && bmax.z() <= amax.z()));
+		}
+
+		AABB intersection(const AABB& b)
+		{
+			Eigen::Vector3d min1 = c - s;
+			Eigen::Vector3d min2 = b.c - b.s;
+			Eigen::Vector3d max1 = c + s;
+			Eigen::Vector3d max2 = b.c + b.s;
+
+			Eigen::Vector3d min(std::max(min1.x(), min2.x()), std::max(min1.y(), min2.y()), std::max(min1.z(), min2.z()));
+			Eigen::Vector3d max(std::min(max1.x(), max2.x()), std::min(max1.y(), max2.y()), std::min(max1.z(), max2.z()));
+
+			Eigen::Vector3d sinter = 0.5 * (max - min);
+			Eigen::Vector3d cinter = min + sinter; 
+
+			return AABB(cinter, sinter);
+		}
+
+		Eigen::Vector3d c; 
+		Eigen::Vector3d s;
+	};
+
 	struct ImplicitFunction 
 	{
 		ImplicitFunction(const Eigen::Affine3d& transform, const Mesh& mesh, const std::string& name) :
@@ -117,7 +161,7 @@ namespace lmu
 			return _points;
 		}
 
-		const PointCloud& pointsCRef()
+		const PointCloud& pointsCRef() const
 		{
 			return _points;
 		}
@@ -199,6 +243,11 @@ namespace lmu
 		  return _pointWeights;
 	  }
 
+	  AABB aabb() const
+	  {
+		  return _aabb;
+	  }
+
 	protected: 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
 		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) = 0;
@@ -206,6 +255,7 @@ namespace lmu
 		Eigen::Affine3d _transform;
 		Eigen::Affine3d _invTrans;
 
+		AABB _aabb;
 		Eigen::Vector3d _pos;
 		Mesh _mesh;
 		PointCloud _points;
@@ -224,6 +274,7 @@ namespace lmu
 			_radius(radius),
 			_displacement(displacement)
 		{
+			_aabb = AABB(_pos, Eigen::Vector3d(radius, radius, radius));
 		}
 	
 		virtual ImplicitFunctionType type() const override
@@ -280,6 +331,13 @@ namespace lmu
 			_height(height)
 		{
 			_invTrans = transform.inverse();
+
+			Eigen::Vector3d min(-radius, -height / 2.0, -radius);
+			Eigen::Vector3d max(radius, height / 2.0, radius);
+
+			min = _transform * min;
+			max = _transform * max;
+			_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 		}
 
 		virtual ImplicitFunctionType type() const override
@@ -343,6 +401,12 @@ namespace lmu
 			_size(size),
 			_displacement(displacement)
 		{
+			Eigen::Vector3d min = -size * 0.5;
+			Eigen::Vector3d max = size * 0.5;
+
+			min = _transform * min;
+			max = _transform * max;
+			_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 		}
 
 		virtual ImplicitFunctionType type() const override

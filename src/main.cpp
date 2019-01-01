@@ -605,7 +605,7 @@ std::cout << "Points: " << pointCloud.rows() << std::endl;
 
 //auto funcs = allDistinctFunctions(node);
 auto dims = lmu::computeDimensions(funcs);
-auto graph = lmu::createConnectionGraph(funcs, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
+auto graph = lmu::createConnectionGraph(funcs);// /*, std::get<0>(dims), std::get<1>(dims)*/, connectionGraphSamplingStepSize);
 
 writeConnectionGraph("cg.dot", graph);
 
@@ -691,14 +691,37 @@ for (const auto& func : funcs)
 		c = Eigen::Matrix<double, 1, 3>(0, 1, 1);
 		break;
 	}
+	
+	//viewer.data().add_points(func->points().leftCols(3), c);//;func->pointsCRef().rightCols(3));
 
-	if (func->name() == "cylinder_30")// && std::abs(func->points().row(10).x() - 0.243841) < 0.0001)
-	{
-		std::cout << "##################--#################" << std::endl;
-		viewer.data().add_points(func->points().row(4).leftCols(3), c);//;func->pointsCRef().rightCols(3));
-	}
+	auto aabb = func->aabb();
 
-	viewer.data().add_points(func->points().leftCols(3), c);//;func->pointsCRef().rightCols(3));
+	std::cout << aabb.c << " " << aabb.s << std::endl;
+	std::cout << "-----------------" << std::endl;
+
+	Eigen::Matrix<double, 8, 3> m;
+		
+	Eigen::Vector3d p1(aabb.c.x() - aabb.s.x(), aabb.c.y() - aabb.s.y(), aabb.c.z() - aabb.s.z());
+	Eigen::Vector3d p2(aabb.c.x() + aabb.s.x(), aabb.c.y() - aabb.s.y(), aabb.c.z() - aabb.s.z());
+	Eigen::Vector3d p3(aabb.c.x() - aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() - aabb.s.z());
+	Eigen::Vector3d p4(aabb.c.x() + aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() - aabb.s.z());
+	
+	Eigen::Vector3d p5(aabb.c.x() - aabb.s.x(), aabb.c.y() - aabb.s.y(), aabb.c.z() + aabb.s.z());
+	Eigen::Vector3d p6(aabb.c.x() + aabb.s.x(), aabb.c.y() - aabb.s.y(), aabb.c.z() + aabb.s.z());
+	Eigen::Vector3d p7(aabb.c.x() - aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() + aabb.s.z());
+	Eigen::Vector3d p8(aabb.c.x() + aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() + aabb.s.z());
+
+
+	viewer.data().add_points(p1.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p2.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p3.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p4.transpose(), c);//;func->pointsCRef().rightCols(3));
+
+	viewer.data().add_points(p5.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p6.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p7.transpose(), c);//;func->pointsCRef().rightCols(3));
+	viewer.data().add_points(p8.transpose(), c);//;func->pointsCRef().rightCols(3));
+
 
 	/*if (func->name() == "cylinder_0")
 	{
@@ -754,7 +777,7 @@ viewer.data().add_points(mergedPC.leftCols(3), curvatures.leftCols(2));//;func->
 */
 	writeNode(node, "tree.dot");
 
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 	viewer.data().point_size = 5.0;

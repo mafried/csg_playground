@@ -215,6 +215,65 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 	return graph;
 }
 
+lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, double minCellSize)
+{
+	lmu::Graph g; 
+
+	for (const auto& f : impFuncs)
+	{
+		addVertex(g, f);
+	}
+
+	for (const auto& f1 : impFuncs)
+	{
+		for (const auto& f2 : impFuncs)
+		{
+			if (f1 == f2 || areConnected(g, f1, f2))
+				continue;
+
+			std::cout << "Testing " << f1->name() << " and " << f2->name() << std::endl;
+
+			if(f1->aabb().overlapsWith(f2->aabb()))
+			{
+				std::cout << "Potential overlap: " << f1->name() << " and " << f2->name() << std::endl;
+
+				auto inter = f1->aabb().intersection(f2->aabb());
+
+				int xSize = (int)std::ceil(inter.s.x() * 2.0 / minCellSize);
+				int ySize = (int)std::ceil(inter.s.y() * 2.0 / minCellSize);
+				int zSize = (int)std::ceil(inter.s.z() * 2.0 / minCellSize);
+
+				bool collision = false;
+				for (int x = 0; x < xSize; ++x)
+				{
+					for (int y = 0; y < ySize; ++y)
+					{
+						for (int z = 0; z < zSize; ++z)
+						{
+							Eigen::Vector3d p;
+							p.x() = inter.c.x() - inter.s.x() + (double)x * minCellSize;
+							p.y() = inter.c.y() - inter.s.y() + (double)y * minCellSize;
+							p.z() = inter.c.z() - inter.s.z() + (double)z * minCellSize;
+
+							if (f1->signedDistance(p) < 0.0 && f2->signedDistance(p) < 0.0)
+							{
+								collision = true;
+								goto SAMPLING_DONE;
+							}
+						}
+					}
+				}
+
+				SAMPLING_DONE:
+				if(collision)
+					addEdge(g, g.vertexLookup[f1], g.vertexLookup[f2]);
+			}
+		}
+	}
+
+	return g;
+}
+
 lmu::Graph lmu::createRandomConnectionGraph(int numVertices, double edgePropability)
 {
 	Graph graph;

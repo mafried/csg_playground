@@ -780,7 +780,7 @@ long long binom(int n, int k)
 	return ans;
 }
 
-lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const ParameterSet& p, const lmu::Graph& connectionGraph)
+lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<ImplicitFunction>>& shapes, const ParameterSet& p, const lmu::Graph& connectionGraph, int partitionId)
 {
 	bool inParallel = p.getBool("GA", "InParallel", false);
 	bool useCaching = p.getBool("GA", "UseCaching", false);
@@ -867,14 +867,14 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 		auto res = task.get();
 
-		res.statistics.save(statsFile, &res.population[0].creature);
+		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
 		return ps->getBest(); //res.population[0].creature;
 	}
 	else
 	{
 		auto res = ga.run(params, s, c, r, gsc, popMan);
 
-		res.statistics.save(statsFile, &res.population[0].creature);
+		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
 		return ps->getBest(); //res.population[0].creature;
 	}	
 }
@@ -941,7 +941,16 @@ lmu::computeGAWithPartitions
 	lmu::CSGNode res = lmu::op<Union>();
 
 	bool inParallel = params.getBool("GA", "PerPartitionInParallel", false);
-
+	
+	std::ofstream f("partitions.dat");
+	f << "Partitions: " << partitions.size() << std::endl;
+	for (int i = 0; i < partitions.size(); ++i)
+	{
+		f << "Partition " << i << std::endl;
+		for (const auto& s : lmu::getImplicitFunctions(partitions[i]))
+			f << "    " << s->name() << std::endl;
+	}
+	
 	TimeTicker t;
 
 	std::mutex m; 
@@ -956,6 +965,8 @@ lmu::computeGAWithPartitions
 		{
 			std::vector<std::shared_ptr<ImplicitFunction>> shapes = lmu::getImplicitFunctions(partitions[i]);
 
+			writeConnectionGraph(std::to_string(i) + "_cg.dot", partitions[i]);
+
 			lmu::CSGNode partRes(nullptr);
 			if (shapes.size() == 1)
 			{
@@ -967,7 +978,7 @@ lmu::computeGAWithPartitions
 			}
 			else
 			{
-				partRes = lmu::createCSGNodeWithGA(shapes, params, partitions[i]);
+				partRes = lmu::createCSGNodeWithGA(shapes, params, partitions[i], i);
 			}
 
 			if (partitions.size() == 1)
@@ -1014,8 +1025,9 @@ lmu::computeGAWithPartitions
 
 	convertToTreeWithMaxNChilds(res, 2);
 
-	std::cout << "GA Duration: " << t.tick() << std::endl;
-	 
+	f << "Duration: " << t.tick() << std::endl;
+	f.close();
+
 	return res;
 }
 

@@ -101,6 +101,9 @@ namespace lmu
 
 	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, const Eigen::Vector3d& min, const Eigen::Vector3d& max, double minCellSize);
 	
+	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, double minCellSize);
+
+
 	lmu::Graph createRandomConnectionGraph(int numVertices, double edgePropability);
 
 	void writeConnectionGraph(const std::string& file, const lmu::Graph& graph);

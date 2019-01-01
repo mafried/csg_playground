@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
   std::cout << "Compute Connection Graph" << std::endl;
   
   auto dims = lmu::computeDimensions(shapes);
-  auto graph = lmu::createConnectionGraph(shapes, std::get<0>(dims), std::get<1>(dims), connectionGraphSamplingStepSize);
+  auto graph = lmu::createConnectionGraph(shapes);// , /*std::get<0>(dims), std::get<1>(dims),*/ connectionGraphSamplingStepSize);
 	
   for (const auto& f1 : shapes)
   {
