@@ -183,7 +183,7 @@ double lmu::computeNormalizedGeometryScore(const CSGNode& node, const std::vecto
 			{
 				//std::cout << func->name() << ": " << i << " "  << "(" << sampleP.x() << "," << sampleP.y() << "," 
 				//	<< sampleP.z() << ")" << " SampleDist: " << sampleDistNode << " PG: " 
-				//	<< sampleN << " FG: " << sampleGradFunc << " NG: " << sampleGradNode << " F Outside: " << func->normalsPointOutside() << " " << sampleGradNode.dot(sampleN) << std::endl;
+				//	<< sampleN << " NG: " << sampleGradNode << " F Outside: " << func->normalsPointOutside() << " " << sampleGradNode.dot(sampleN) << std::endl;
 
 				//std::cout << func->name() << ": " << sampleDistNode << "###" << func->pointWeights()[i] << "###" << (sampleDistNode - func->pointWeights()[i]) <<"||" << (sampleGradNode.dot(sampleN) > 0.0) << std::endl;
 

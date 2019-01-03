@@ -595,13 +595,10 @@ CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, 
 double connectionGraphSamplingStepSize = 1.0;
 double gradientStepSize = 0.001;
 
-auto pointCloud = lmu::computePointCloud(node, samplingParams);
-auto funcs = lmu::allDistinctFunctions(node);
+//auto pointCloud = lmu::computePointCloud(node, samplingParams);
+//auto funcs = lmu::allDistinctFunctions(node);
 //auto pointCloud = lmu::readPointCloudXYZ("C:/Projekte/csg_playground_build/Release/model.xyz" , 1.0);
-//auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
-
-
-std::cout << "Points: " << pointCloud.rows() << std::endl;
+auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
 
 //auto funcs = allDistinctFunctions(node);
 auto dims = lmu::computeDimensions(funcs);
@@ -696,8 +693,8 @@ for (const auto& func : funcs)
 
 	auto aabb = func->aabb();
 
-	std::cout << aabb.c << " " << aabb.s << std::endl;
-	std::cout << "-----------------" << std::endl;
+	//std::cout << aabb.c << " " << aabb.s << std::endl;
+	//std::cout << "-----------------" << std::endl;
 
 	Eigen::Matrix<double, 8, 3> m;
 		
@@ -711,8 +708,8 @@ for (const auto& func : funcs)
 	Eigen::Vector3d p7(aabb.c.x() - aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() + aabb.s.z());
 	Eigen::Vector3d p8(aabb.c.x() + aabb.s.x(), aabb.c.y() + aabb.s.y(), aabb.c.z() + aabb.s.z());
 
-
-	viewer.data().add_points(p1.transpose(), c);//;func->pointsCRef().rightCols(3));
+	
+	/*viewer.data().add_points(p1.transpose(), c);//;func->pointsCRef().rightCols(3));
 	viewer.data().add_points(p2.transpose(), c);//;func->pointsCRef().rightCols(3));
 	viewer.data().add_points(p3.transpose(), c);//;func->pointsCRef().rightCols(3));
 	viewer.data().add_points(p4.transpose(), c);//;func->pointsCRef().rightCols(3));
@@ -721,19 +718,19 @@ for (const auto& func : funcs)
 	viewer.data().add_points(p6.transpose(), c);//;func->pointsCRef().rightCols(3));
 	viewer.data().add_points(p7.transpose(), c);//;func->pointsCRef().rightCols(3));
 	viewer.data().add_points(p8.transpose(), c);//;func->pointsCRef().rightCols(3));
+	*/
 
-
-	/*if (func->name() == "cylinder_0")
+	if (func->name() == "cube_4")
 	{
-		auto p = func->pointsCRef().row(1).leftCols(3);
+		auto p = func->pointsCRef().row(7).leftCols(3);
 
 		viewer.data().add_points(p, c);//;func->pointsCRef().rightCols(3));
 
-		lmu::Curvature c = lmu::curvature(p.transpose(), node, 0.0001);
+		lmu::Curvature c = lmu::curvature(p.transpose(), node, 0.01);
 		double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
 
 		std::cout << "DEV: " << deviationFromFlatness << std::endl;
-	}*/
+	}
 
 	i++;
 }
@@ -777,7 +774,7 @@ viewer.data().add_points(mergedPC.leftCols(3), curvatures.leftCols(2));//;func->
 */
 	writeNode(node, "tree.dot");
 
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 	viewer.data().point_size = 5.0;

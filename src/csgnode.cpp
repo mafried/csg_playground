@@ -16,6 +16,8 @@
 #include <boost/functional/hash.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/math/special_functions/erf.hpp>
+
 
 #include <igl/copyleft/marching_cubes.h>
 
@@ -1677,8 +1679,35 @@ pc.row(i) = selectedPoints[i];
 	}
 }
 
+
+inline double median(std::vector<double> v)
+{
+	std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+	return v[v.size() / 2];
+}
+
+std::tuple<double, double> scaled3MADAndMedian(const lmu::ImplicitFunctionPtr& f)
+{
+	std::vector<double> values(f->pointsCRef().rows());
+
+	for (int j = 0; j < f->pointsCRef().rows(); ++j)
+	{
+		Eigen::Vector3d p = f->pointsCRef().row(j).leftCols(3);		
+		values[j] = std::abs(f->signedDistance(p));
+	}
+
+	double med = median(values);
+	std::transform(values.begin(), values.end(), values.begin(), [med](double v) -> double { return std::abs(v - med); });
+
+	const double c = -1.0 / (std::sqrt(2.0)*boost::math::erfc_inv(3.0 / 2.0));
+
+	return std::make_tuple(c * median(values) * 3.0, med);
+}
+
 void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
 {
+	auto outlierTestValues = computeOutlierTestValues(functions, h);
+
 	//Check and set orientation.
 	for (auto& f : functions)
 	{						
@@ -1699,6 +1728,7 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 	for (auto& f : functions)
 	{
 		auto points = f->points();
+		auto distOutlierTest = scaled3MADAndMedian(f);
 
 		for (int i = 0; i < points.rows(); ++i)
 		{
@@ -1708,11 +1738,13 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			Eigen::Vector3d g = dg.bottomRows(3).normalized();
 			double d = dg(0);
 
-			p = p - (g*d);						
+			if (std::abs(std::abs(d) - std::get<1>(distOutlierTest)) < std::get<0>(distOutlierTest))
+			{
+				p = p - (g*d);
+				g = f->signedDistanceAndGradient(p, h).bottomRows(3).normalized();
+			}
 			
-			g = f->signedDistanceAndGradient(p, h).bottomRows(3).normalized();
-
-			points.row(i) << p.transpose(), g.transpose();
+			//points.row(i) << p.transpose(), g.transpose();
 
 			Eigen::Vector3d mg(-g);			
 			points.row(i) << p.transpose(), (f->normalsPointOutside() ? g : mg).transpose();
@@ -1727,19 +1759,12 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
 		std::vector<double> selectedPointWeights;
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		//std::vector<double> pointDistances;
-		auto geo = geometry(f);
-
-		//double median = std::get<1>(outlierTestValue);
-		//double maxDelta = std::get<0>(outlierTestValue);
-		//auto outlierTestValue = outlierTestValues[f];
-
+		
 		for (int i = 0; i < f->pointsCRef().rows(); ++i)
 		{
 			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			//Eigen::Vector4d dg = f->signedDistanceAndGradient(p, h);
-			Eigen::Vector3d g = f->pointsCRef().row(i).rightCols(3); //dg.bottomRows(3);
-			double d = f->signedDistance(p);//dg(0);
+			Eigen::Vector3d g = f->pointsCRef().row(i).rightCols(3); 
+			double d = f->signedDistance(p);
 
 			if (std::abs(d) > 0.000001)
 			{
@@ -1789,7 +1814,17 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 				}
 			}
 			if (nc) continue;
-			
+
+			/*auto outlierTestValue = outlierTestValues[f];
+			lmu::Curvature c = lmu::curvature(p.transpose(), geometry(f), 0.1);
+			double deviationFromFlatness = std::sqrt(c.k1 * c.k1 + c.k2 * c.k2);
+			double median = std::get<1>(outlierTestValue);
+			double maxDelta = std::get<0>(outlierTestValue);
+			if (std::abs(deviationFromFlatness - median) > maxDelta)
+			{
+				//std::cout << p << std::endl;
+				continue;
+			}*/
 
 			Eigen::Matrix<double, 1, 6> pg;
 			pg << p.transpose(), g.transpose();

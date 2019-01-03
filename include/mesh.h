@@ -75,16 +75,23 @@ namespace lmu
 		{
 		}
 
-		bool overlapsWith(const AABB& b)
+		bool overlapsWith(const AABB& b, double e = 0.0)
 		{
-			Eigen::Vector3d amin = c - s; 
-			Eigen::Vector3d amax = c + s;
+			Eigen::Vector3d ev(e, e, e);
 
-			Eigen::Vector3d bmin = b.c - b.s;
-			Eigen::Vector3d bmax = b.c + b.s;
-			
+			Eigen::Vector3d amin = c - s.cwiseAbs() - ev; 
+			Eigen::Vector3d amax = c + s.cwiseAbs() + ev;
+
+			Eigen::Vector3d bmin = b.c - b.s.cwiseAbs() - ev;
+			Eigen::Vector3d bmax = b.c + b.s.cwiseAbs() + ev;
+
+			//std::cout << amin.z() << " " << amax.z() << " " << bmin.z() << " " << bmax.z() << " s: " << b.s.z() << std::endl;
+			//std::cout << ((amin.x() <= bmax.x() && amax.x() >= bmin.x()) || (amin.x() >= bmin.x() && amax.x() <= bmax.x()) || (bmin.x() >= amin.x() && bmax.x() <= amax.x())) << std::endl;
+			//std::cout << ((amin.y() <= bmax.y() && amax.y() >= bmin.y()) || (amin.y() >= bmin.y() && amax.y() <= bmax.y()) || (bmin.y() >= amin.y() && bmax.y() <= amax.y())) << std::endl;
+			//std::cout << ((amin.z() <= bmax.z() && amax.z() >= bmin.z()) || (amin.z() >= bmin.z() && amax.z() <= bmax.z()) || (bmin.z() >= amin.z() && bmax.z() <= amax.z())) << std::endl;
+
 			return ((amin.x() <= bmax.x() && amax.x() >= bmin.x()) || (amin.x() >= bmin.x() && amax.x() <= bmax.x()) || (bmin.x() >= amin.x() && bmax.x() <= amax.x())) &&
-				   ((amin.y() <= bmax.y() && amax.y() >= bmin.y()) || (amin.y() >= bmin.y() && amax.y() <= bmax.y()) || (bmin.y() >= amin.x() && bmax.y() <= amax.y())) &&
+				   ((amin.y() <= bmax.y() && amax.y() >= bmin.y()) || (amin.y() >= bmin.y() && amax.y() <= bmax.y()) || (bmin.y() >= amin.y() && bmax.y() <= amax.y())) &&
 				   ((amin.z() <= bmax.z() && amax.z() >= bmin.z()) || (amin.z() >= bmin.z() && amax.z() <= bmax.z()) || (bmin.z() >= amin.z() && bmax.z() <= amax.z()));
 		}
 

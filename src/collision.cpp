@@ -43,7 +43,7 @@ bool lmu::collidesAABB(const lmu::ImplicitFunction& f1, const lmu::ImplicitFunct
 
 bool lmu::collides(const lmu::ImplicitFunction & f1, const lmu::ImplicitFunction & f2)
 {
-	if (!f1.aabb().overlapsWith(f2.aabb())) return false;
+	if (!f1.aabb().overlapsWith(f2.aabb(), 0.001)) return false;
 		
 	if (f1.type() == ImplicitFunctionType::Sphere && f2.type() == ImplicitFunctionType::Sphere)
 		return collides(static_cast<const lmu::IFSphere&>(f1), static_cast<const lmu::IFSphere&>(f2));

@@ -187,6 +187,8 @@ int main(int argc, char *argv[])
       partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, p);
     } else if (partitionType == "ap") {
       partitions = lmu::getUnionPartitionsByArticulationPoints(graph);
+	} else if (partitionType == "clique") {
+		partitions = lmu::getCliquePartitions(graph);
     } else {
       std::cerr << "Invalid partition type" << std::endl;
       usage(argv[0]);

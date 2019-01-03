@@ -366,7 +366,51 @@ struct CliqueCollector
 	std::vector<lmu::Clique>& cliques;
 };
 
-std::vector<lmu::Clique> lmu::getCliques(const lmu::Graph & graph)
+struct CliqueCollector2
+{
+	CliqueCollector2(std::vector<lmu::Graph>& cliques) :
+		cliques(cliques)
+	{
+	}
+
+	template <typename Clique, typename Graph>
+	void clique(const Clique& c, const Graph& g)
+	{
+		lmu::Graph graph;
+		// Iterate over the clique and print each vertex within it.
+		typename Clique::const_iterator i, end = c.end();
+		for (i = c.begin(); i != end; ++i)
+		{
+			addVertex(graph, g[*i]); 
+		}
+
+		boost::graph_traits<lmu::GraphStructure>::vertex_iterator vi1, vi1_end;
+				
+		for (boost::tie(vi1, vi1_end) = boost::vertices(graph.structure); vi1 != vi1_end; ++vi1)
+		{
+			//const auto& v1 = graph.structure[*vi1];
+
+			boost::graph_traits<lmu::GraphStructure>::vertex_iterator vi2, vi2_end;
+
+			for (boost::tie(vi2, vi2_end) = boost::vertices(graph.structure); vi2 != vi2_end; ++vi2)
+			{
+				//const auto& v2 = graph.structure[*vi2];
+
+				if (*vi1 == *vi2)
+					break;
+			
+				addEdge(graph, *vi1, *vi2);
+			}
+		}
+
+		cliques.push_back(graph);
+		std::cout << "CLIQUE! " << cliques.size() << std::endl;
+	}
+
+	std::vector<lmu::Graph>& cliques;
+};
+
+std::vector<lmu::Clique> lmu::getCliques(const lmu::Graph& graph)
 {
 	std::vector<lmu::Clique> cliques;
 	CliqueCollector cc(cliques);
@@ -377,7 +421,18 @@ std::vector<lmu::Clique> lmu::getCliques(const lmu::Graph & graph)
 	return cliques;
 }
 
-std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::getImplicitFunctions(const lmu::Graph & graph)
+std::vector<lmu::Graph> lmu::getCliquePartitions(const lmu::Graph& graph)
+{
+	std::vector<lmu::Graph> cliques;
+	CliqueCollector2 cc(cliques);
+
+	// Use the Bron-Kerbosch algorithm to find all cliques.
+	boost::bron_kerbosch_all_cliques(graph.structure, cc);
+
+	return cliques;
+}
+
+std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::getImplicitFunctions(const lmu::Graph& graph)
 {
 	std::vector<std::shared_ptr<lmu::ImplicitFunction>> res;
 	res.reserve(graph.vertexLookup.size());

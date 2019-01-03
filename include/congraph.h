@@ -109,6 +109,7 @@ namespace lmu
 	void writeConnectionGraph(const std::string& file, const lmu::Graph& graph);
 
 	std::vector<lmu::Clique> getCliques(const lmu::Graph& graph);	
+	std::vector<lmu::Graph> getCliquePartitions(const lmu::Graph & graph);
 
 	std::vector<std::shared_ptr<lmu::ImplicitFunction>> getImplicitFunctions(const lmu::Graph& graph);
 
