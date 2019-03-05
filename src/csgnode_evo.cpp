@@ -546,7 +546,8 @@ lmu::CSGNodeOptimization lmu::optimizationTypeFromString(std::string type)
 	return CSGNodeOptimization::TRAVERSE;
 }
 
-lmu::CSGNodePopMan::CSGNodePopMan(double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph) :
+lmu::CSGNodePopMan::CSGNodePopMan(bool sizeOptimization, double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph) :
+	_sizeOptimization(sizeOptimization),
 	_optimizationProb(optimizationProb),
 	_preOptimizationProb(preOptimizationProb),
 	_maxFunctions(maxFunctions),
@@ -633,6 +634,20 @@ void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNo
 	double maxSize = 0.0;
 	double maxGeom = 0.0;
 	double maxDepth = 0.0;
+
+	if (_sizeOptimization)
+	{
+		for (int i = 0; i < population.size(); ++i)
+		{
+			if (population[i].rank.geo == 1.0)
+			{
+				int numOpts = optimizeCSGNodeStructure(population[i].creature);
+				
+				//if (numOpts > 0)
+					std::cout << "=========================> Optimized: " << numOpts << std::endl;
+			}
+		}
+	}
 		
 	for (int i = 0; i < population.size(); ++i)
 	{
@@ -663,7 +678,7 @@ void lmu::CSGNodePopMan::manipulateAfterRanking(std::vector<RankedCreature<CSGNo
 
 	for (int i = 0; i < population.size(); ++i)
 	{
-		std::cout << "To Go: " << (double)_ranker.getNumSamplePoints() * (1.0 - population[i].rank.geo) << std::endl;
+		//std::cout << "To Go: " << (double)_ranker.getNumSamplePoints() * (1.0 - population[i].rank.geo) << std::endl;
 
 		population[i].rank.size = sizeScores[i];
 		population[i].rank.depth = depthScores[i];
@@ -678,6 +693,9 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
+
+	//static std::unordered_map<size_t, CSGNode> cache;
+
 		
 //#ifndef _OPENMP 
 //		throw std::runtime_error("Ranking should run in parallel but OpenMP is not available.");
@@ -685,9 +703,20 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 //#pragma omp parallel for
 	for (int i = 0; i < population.size(); ++i)
 	{
-		if (db(_rndEngine, parmb_t{_preOptimizationProb }))
+		auto& node = population[i].creature;
+
+		//Check if node is already in the cache.
+		/*size_t hash = node.hash(0);
+		auto cachedNode = cache.find(hash);
+		if (cachedNode != cache.end())
 		{
-			auto& node = population[i].creature;
+			std::cout << "CACHED" << std::endl;
+			node = cachedNode->second;
+			continue;
+		}*/
+
+		if (db(_rndEngine, parmb_t{_preOptimizationProb }))
+		{			
 			int numOptimizations = optimizeCSGNodeStructure(node);
 			if (!node.isValid())
 			{
@@ -697,22 +726,22 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 		
 		if (db(_rndEngine, parmb_t{ _optimizationProb }))
 		{
-					
+
 			auto& node = population[i].creature;
 
 			switch (_type)
 			{
 			case CSGNodeOptimization::TRAVERSE:
-								
+
 				lmu::visit(node, [this](CSGNode& n)
 				{
 					auto& childs = n.childsRef();
 					if (childs.size() == 2 && childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 					{
-						std::vector<ImplicitFunctionPtr> funcs = getSuitableFunctions({ childs[0].function(), childs[1].function() });
+						std::vector<ImplicitFunctionPtr> suitableFuncs = getSuitableFunctions({ childs[0].function(), childs[1].function() });
 						//std::cout << "traverse "<< funcs.size() << std::endl;
 
-						n = getOptimizedTree(funcs);
+						n = getOptimizedTree(suitableFuncs);
 					}
 				});
 
@@ -739,6 +768,9 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 				break;
 			}
 		}
+
+		//Write node in cache.
+		//cache.insert(std::make_pair(hash, node));		
 	}
 }
 
@@ -813,6 +845,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	int nodeSelectionTries = p.getInt("Optimization", "NodeSelectionTries", 10); 
 	int maxFunctions = p.getInt("Optimization", "MaxFunctions", 4);
 	double optimizationProb = p.getDouble("Optimization", "OptimizationProb", 0.0);
+	double sizeOptimization = p.getBool("Optimization", "SizeOptimization", false);
 	double preOptimizationProb = p.getDouble("Optimization", "PreOptimizationProb", 0.0);
 	CSGNodeOptimization optimizationType = optimizationTypeFromString(p.getStr("Optimization", "OptimizationType", "traverse"));
 	int randomIterations = p.getInt("Optimization", "RandomIterations", 1);
@@ -852,7 +885,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 	lmu::CSGNodeCreator c(shapes, createNewRandomProb, subtreeProb, simpleCrossoverProb, maxTreeDepth, initializeWithUnionOfAllFunctions, r, connectionGraph);
 
-	lmu::CSGNodePopMan popMan(optimizationProb, preOptimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
+	lmu::CSGNodePopMan popMan(sizeOptimization, optimizationProb, preOptimizationProb, maxFunctions, nodeSelectionTries, randomIterations, optimizationType, r, connectionGraph);
 
 	if (cancellable)
 	{
@@ -868,6 +901,9 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		auto res = task.get();
 
 		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
+
+		std::cout << "get best " << std::endl;
+
 		return ps->getBest(); //res.population[0].creature;
 	}
 	else
@@ -875,6 +911,8 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 		auto res = ga.run(params, s, c, r, gsc, popMan);
 
 		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
+
+		std::cout << "get best " << std::endl;
 		return ps->getBest(); //res.population[0].creature;
 	}	
 }
@@ -1023,7 +1061,9 @@ lmu::computeGAWithPartitions
 		}
 	}
 
-	convertToTreeWithMaxNChilds(res, 2);
+	std::cout << "Convert to 2-tree" << std::endl;
+
+	//convertToTreeWithMaxNChilds(res, 2);
 
 	f << "Duration: " << t.tick() << std::endl;
 	f.close();

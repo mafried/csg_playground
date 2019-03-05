@@ -139,18 +139,13 @@ int main(int argc, char *argv[])
   double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
   double distThreshold = params.getDouble("Sampling", "DistanceThreshold", 0.9);
   double angleThreshold = params.getDouble("Sampling", "AngleThreshold", 0.9);
-  
+  bool usePointSelection = params.getBool("Sampling", "UsePointSelection", true);
   SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
-
   
-  //lmu::arrangeGradients(shapes, graph, gradientStepSize);
-
-  //lmu::reducePoints(shapes, graph, gradientStepSize);
-  //lmu::reducePointsBasedOnVariance(shapes, graph, gradientStepSize);
-
-  lmu::filterPoints(shapes, graph, gradientStepSize);
-  //lmu::movePointsToSurface(shapes, true, 0.0001);
-
+  if (usePointSelection)
+  {
+	  lmu::filterPoints(shapes, graph, gradientStepSize);
+  }
 
   std::string partitionType = argv[4];
   std::string recoveryType = argv[5];
@@ -214,7 +209,7 @@ int main(int argc, char *argv[])
   std::string outBasename = argv[6];
   lmu::writeNode(res, outBasename + "_tree.dot");
 
-  auto mesh = lmu::computeMesh(res, Eigen::Vector3i(100, 100, 100));
+  auto mesh = lmu::computeMesh(res, Eigen::Vector3i(200, 200, 200));
 
   igl::writeOBJ(outBasename + "_mesh.obj", mesh.vertices, mesh.indices);
 

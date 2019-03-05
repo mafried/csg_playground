@@ -176,7 +176,7 @@ namespace lmu
 
 	struct CSGNodePopMan
 	{	
-		CSGNodePopMan(double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
+		CSGNodePopMan(bool sizeOptimization, double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
 		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
@@ -195,6 +195,8 @@ namespace lmu
 		CSGNodeOptimization _type;
 		int _randomIterations;
 		mutable std::unordered_map<size_t, CSGNode> _nodeLookup;
+
+		bool _sizeOptimization;
 
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;

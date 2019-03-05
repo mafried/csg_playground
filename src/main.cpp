@@ -580,7 +580,7 @@ geo<IFCylinder>((Eigen::Affine3d)(Eigen::Translation3d(0.3, 0, -1)*rot90x), 0.4,
 	
 try
 {
-	node = fromJSONFile("C:/Projekte/csg_playground_build/Release/tree.json");
+	node = fromJSONFile("C:/Projekte/csg_playground_build/Debug/test096.json");
 }
 catch (const std::exception& ex)
 {
@@ -598,7 +598,13 @@ double gradientStepSize = 0.001;
 //auto pointCloud = lmu::computePointCloud(node, samplingParams);
 //auto funcs = lmu::allDistinctFunctions(node);
 //auto pointCloud = lmu::readPointCloudXYZ("C:/Projekte/csg_playground_build/Release/model.xyz" , 1.0);
-auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Release/model.prim");
+auto funcs = lmu::fromFilePRIM("C:/Projekte/csg_playground_build/Debug/model_test096.prim");
+auto pointClouds = lmu::readPointCloudXYZPerFunc("C:/Projekte/csg_playground_build/Debug/model_test096.xyz", 1.0);
+
+for (const auto& f : funcs)
+{
+	f->setPoints(pointClouds[f->name()]);
+}
 
 //auto funcs = allDistinctFunctions(node);
 auto dims = lmu::computeDimensions(funcs);
@@ -606,10 +612,35 @@ auto graph = lmu::createConnectionGraph(funcs);// /*, std::get<0>(dims), std::ge
 
 writeConnectionGraph("cg.dot", graph);
 
+auto pruneList = createPruneList(graph, createNeighborMap(graph));
+for (auto p : pruneList)
+{
+	std::cout << "TO BE PRUNED: " << graph.structure[p.first]->name() << std::endl;
+}
+auto prunedGraph = pruneGraph(graph, pruneList);
+
+SampleParams sp{ 0.001, 0.9, 0.9 };
+
+std::cout << "POINTS: " << std::endl;
+for (const auto& f : funcs)
+{
+	std::cout << f->pointsCRef().rows() << std::endl;
+}
+
+auto partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, sp);
+for (const auto& c : partitions)
+{
+	std::cout << "Component ";
+	for (const auto& f : getImplicitFunctions(c))
+	{
+		std::cout << f->name() << " ";
+	}
+	std::cout << std::endl;
+}
+
 //double res = lmu::ransacWithSim(pointCloud, samplingParams, node);
 //std::cout << "used points: " << res << "%" << std::endl;
 
-auto pointClouds = lmu::readPointCloudXYZPerFunc("C:/Projekte/csg_playground_build/Release/model.xyz", 1.0);
 std::vector<ImplicitFunctionPtr> filteredFuncs;
 
 for (auto& f : funcs)
@@ -625,7 +656,7 @@ for (auto& f : funcs)
 		filteredFuncs.push_back(f);
 	}
 }
-funcs = filteredFuncs;
+//funcs = filteredFuncs;
 
 for (const auto& f1 : funcs)
 {
@@ -642,12 +673,24 @@ for (const auto& f1 : funcs)
 	std::cout << std::endl;
 }
 
-//for (const auto& func : funcs)
-//{
-//	viewer.data().add_points(func->pointsCRef().leftCols(3), Eigen::Matrix<double, 1, 3>(0, 0, 0));//;func->pointsCRef().rightCols(3));	
-//}
+std::cout << "FUNCS: " << funcs.size() << std::endl;
+size_t n = 0;
+for (const auto& f : funcs)
+{
+	n += f->pointsCRef().rows(); 
+}
+std::cout << "POINTS BEFORE: " << n << std::endl;
 
 lmu::filterPoints(funcs, graph, gradientStepSize);
+
+n = 0;
+for (const auto& f : funcs)
+{
+	n += f->pointsCRef().rows();
+}
+std::cout << "POINTS AFTER: " << n << std::endl;
+
+
 double score = lmu::computeNormalizedGeometryScore(node, funcs, gradientStepSize);
 std::cout << "SCORE: " << score << std::endl;
 

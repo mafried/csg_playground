@@ -628,7 +628,7 @@ namespace lmu
 	CSGNode* findSmallestSubgraphWithImplicitFunctions(CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs);
 
 	void reducePointsBasedOnVariance(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
-	void filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
+	void filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h, bool useSelection = true);
 
 }
 

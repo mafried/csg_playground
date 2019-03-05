@@ -97,6 +97,7 @@ std::tuple<double,double> scaled3MADAndMedian(const lmu::ImplicitFunctionPtr& fu
 	}
 
 	double med = median(values);
+	
 	std::transform(values.begin(), values.end(), values.begin(), [med](double v) -> double { return std::abs(v - med); });
 
 	const double c = -1.0 / (std::sqrt(2.0)*boost::math::erfc_inv(3.0 / 2.0));
@@ -113,6 +114,7 @@ std::unordered_map<lmu::ImplicitFunctionPtr, std::tuple<double, double>> lmu::co
 	for (const auto& func : functions)
 	{
 		map[func] = scaled3MADAndMedian(func, h);
+		
 		std::cout << func->name() << ": " << std::get<0>(map[func]) << " Mean: " << std::get<1>(map[func]) << std::endl;
 	}
 	std::cout << "----------------------------" << std::endl;
@@ -701,7 +703,7 @@ std::vector<lmu::Graph> lmu::getUnionPartitionsByPrimeImplicantsWithPruning(cons
 	for (const auto& c : components)
 	{
 		std::cout << "Component: " << numVertices(c) << std::endl;
-
+		
 		//Only search for bridges if component has more than 2 vertices.
 		if (numVertices(c) > 2)
 		{

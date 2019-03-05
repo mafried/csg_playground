@@ -1295,12 +1295,12 @@ int lmu::optimizeCSGNodeStructure(CSGNode& node)
 	}	
 
 	
-	if (containsNullFunc(node, nullFunc))
-	{
-		std::cout << "WARNING: tree still contains a null function" << std::endl;
-		writeNode(node, "debug.dot");
-		std::terminate();
-	}
+	//if (containsNullFunc(node, nullFunc))
+	//{
+	//	std::cout << "WARNING: tree still contains a null function" << std::endl;
+	//	writeNode(node, "debug.dot");
+	//	std::terminate();
+	//}
 
 	return i;
 }
@@ -1704,7 +1704,7 @@ std::tuple<double, double> scaled3MADAndMedian(const lmu::ImplicitFunctionPtr& f
 	return std::make_tuple(c * median(values) * 3.0, med);
 }
 
-void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
+void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h, bool useSelection)
 {
 	auto outlierTestValues = computeOutlierTestValues(functions, h);
 
@@ -1832,22 +1832,20 @@ void lmu::filterPoints(const std::vector<std::shared_ptr<ImplicitFunction>>& fun
 			//pointDistances.push_back((f->normalsPointOutside() ? 1.0 : -1.0)*d);
 		}
 
-		/*std::cout << "pc ready. pts: " << points.size() << std::endl;
-
-		PointCloud pc1(points.empty() ? 1 : points.size(), 6);
-		for (int i = 0; i < points.size(); ++i)
+		if (!useSelection)
 		{
-			pc1.row(i) = points[i];
+			PointCloud pc1(points.empty() ? 1 : points.size(), 6);
+			for (int i = 0; i < points.size(); ++i)
+			{
+				pc1.row(i) = points[i];
+			}
+			f->points() = pc1;
+
+			continue;
 		}
-		f->points() = pc1;
-		
-		std::cout << "pc set. " << std::endl;
 
-		continue;*/
-	
-		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;
-		//std::vector<double> perFuncDistances;
-
+		//Selection
+		std::vector<Eigen::Matrix<double, 1, 6>> perFuncPoints;		
 		for (int i = 0; i < functions.size(); ++i)
 		{
 			if (!lmu::areConnected(graph, functions[i], f) || points.empty())

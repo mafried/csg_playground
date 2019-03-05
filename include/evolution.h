@@ -387,6 +387,8 @@ namespace lmu
 				}
 
 				fs.close();
+
+				std::cout << "Done saving file " << std::endl;
 			}
 		};
 
@@ -468,7 +470,7 @@ namespace lmu
 				std::cout << "Rank population." << std::endl;
 				rankPopulation(population, ranker, params.rankingInParallel, params.useCaching, stats);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
-
+				
 				std::cout << "After Rank manipulation." << std::endl;
 				popMan.manipulateAfterRanking(population);
 
@@ -479,6 +481,10 @@ namespace lmu
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
 				auto newPopulation = getNBestParents(population, params.numBestParents);
+
+				//std::cout << "Optimize population." << std::endl;
+				//popMan.manipulateBeforeRanking(newPopulation);
+				//stats.optDurations.push_back(stats.iterationDuration.tick());
 
 				while (newPopulation.size() < params.populationSize)
 				{
