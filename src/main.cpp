@@ -50,17 +50,14 @@ int main(int argc, char *argv[])
 
 	// Initialize
 	update(viewer);
-	
-	
+		
 	try
 	{
-		//Create ransac results based on csg tree.
-		
+		//EITHER: Create RANSAC results based on csg tree.		
 		double samplingStepSize = 0.2;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
 		double noiseSigma = 0.03;
-
 		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
 		auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
 		auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);		
@@ -69,51 +66,16 @@ int main(int argc, char *argv[])
 		auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, lmu::RansacParams());
 		lmu::writeToFile("ransac_res.txt", ransacRes);
 		
-		//Read ransac results from file.
+		//OR: Read RANSAC results from file.
 		//auto ransacRes = lmu::readFromFile("ransac_res.txt");
-
-		//for (const auto& m : manifolds)	
-		//	std::cout << "Manifold: " << (int)m->type << std::endl;
-
-		//result.manifolds = manifolds;
-		//return result;
-
-
+		
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);
 		auto primitives = res.primitives;
 		auto manifolds = res.manifolds;
-
-		//auto primitives = lmu::PrimitiveSet();
-		//auto manifolds = ransacRes.manifolds;
-		
+	
 		for (const auto& p : primitives)
 			std::cout << p << std::endl;
-
-		//auto manifolds = lmu::extractManifoldsWithCGALRansac(pointCloud, lmu::RansacParams());
-
-		//lmu::PrimitiveSet primitives; 
-		//auto spheres = lmu::extractPrimitivesFromBorderlessManifolds(manifolds);
-		//auto cylinders = lmu::extractCylindersFromCurvedManifolds(manifolds, true);
-		//primitives.reserve(spheres.size() + cylinders.size()); 
-		//primitives.insert(primitives.end(), spheres.begin(), spheres.end());
-		//primitives.insert(primitives.end(), cylinders.begin(), cylinders.end());
-
-		/*lmu::ManifoldSet planes; 
-		lmu::ManifoldPtr cm;
-		for (const auto m : manifolds)
-		{
-			if (m->type == lmu::ManifoldType::Cylinder)
-			{
-				cm = m;
-			}
-			else if (m->type == lmu::ManifoldType::Plane)
-			{
-				planes.push_back(m);
-			}
-		}
-		auto cyl = lmu::createCylinderPrimitive(cm, planes);
-		primitives.push_back(cyl);*/
-
+		
 		//Display result primitives.
 				
 		std::vector<lmu::CSGNode> childs;

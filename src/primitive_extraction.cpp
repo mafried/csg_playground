@@ -301,7 +301,7 @@ lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m)
 	t.translate(m->p);
 
 	auto sphereIF = std::make_shared<IFSphere>(t, m->r.x(), ""); //TODO: Add name.
-	//sphereIF->setPoints(m->pc);
+	sphereIF->meshRef() = Mesh();
 	
 
 	return Primitive(sphereIF, { m }, PrimitiveType::Sphere);
@@ -341,8 +341,8 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 
 		// Create primitive. 
 		auto cylinderIF = std::make_shared<IFCylinder>(t, m->r.x(), height, "");
-		//cylinderIF->setPoints(m->pc);
-			
+		cylinderIF->meshRef() = Mesh();
+
 		return Primitive (cylinderIF, { m, planes[0], planes[1] }, PrimitiveType::Cylinder);
 	}	
 	case 0:	//Estimate cylinder height and center position using the point cloud only since no planes exist.
@@ -355,7 +355,7 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 		Eigen::Affine3d t = (Eigen::Affine3d)(Eigen::Translation3d(pos) * rot);
 
 		auto cylinderIF = std::make_shared<IFCylinder>(t, m->r.x(), height, "");
-		//cylinderIF->setPoints(m->pc);
+		cylinderIF->meshRef() = Mesh();
 
 		return Primitive(cylinderIF, { m}, PrimitiveType::Cylinder);
 	}
@@ -376,7 +376,7 @@ lmu::PrimitiveSet lmu::extractPrimitivesFromBorderlessManifolds(const ManifoldSe
 			t.translate(m->p);
 
 			auto sphereIF = std::make_shared<IFSphere>(t,m->r.x(), "");
-			//sphereIF->setPoints(m->pc);
+			sphereIF->meshRef() = Mesh();
 
 			std::cout << "SPHERE: " << sphereIF->transform().matrix() << std::endl;
 
@@ -420,7 +420,7 @@ lmu::PrimitiveSet lmu::extractCylindersFromCurvedManifolds(const ManifoldSet& ma
 			Eigen::Affine3d t = (Eigen::Affine3d)(Eigen::Translation3d(/*m->p*/estimatedPos) * rot);
 						
 			auto cylinderIF = std::make_shared<IFCylinder>(t, m->r.x(), height, "");
-			//cylinderIF->setPoints(m->pc);
+			cylinderIF->meshRef() = Mesh();
 
 			std::cout << "Cylinder: " << std::endl;
 			std::cout << "Estimated Height: " << height << std::endl;

@@ -277,7 +277,7 @@ namespace lmu
 	struct IFSphere : public ImplicitFunction 
 	{
 		IFSphere(const Eigen::Affine3d& transform, double radius, const std::string& name, double displacement = 0.0) : 
-			ImplicitFunction(transform, Mesh() /*createSphere(transform, radius, 50, 50)*/, name),
+			ImplicitFunction(transform, createSphere(transform, radius, 50, 50), name),
 			_radius(radius),
 			_displacement(displacement)
 		{
@@ -333,7 +333,7 @@ namespace lmu
 	struct IFCylinder : ImplicitFunction
 	{
 		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name) :
-			ImplicitFunction(transform, Mesh()/* createCylinder(transform, radius, radius, height, 200, 200)*/, name),
+			ImplicitFunction(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
 			_radius(radius),
 			_height(height)
 		{
