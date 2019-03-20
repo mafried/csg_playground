@@ -1,6 +1,8 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <numeric>
+#include <algorithm>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -11,7 +13,8 @@
 #include "..\include\mesh.h"
 #include "..\include\csgnode.h"
 
-
+#include <pcl/point_cloud.h>
+#include <pcl/octree/octree_search.h>
 
 void lmu::writePointCloud(const std::string& file, PointCloud& points)
 {
@@ -283,14 +286,70 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, const lmu::CSGNod
 	return res;
 }
 
+lmu::PointCloudCharacteristics lmu::getPointCloudCharacteristics(const PointCloud & pc, int k, double octreeResolution)
+{
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-double computeAABBLength(Eigen::MatrixXd& points) {
+	cloud->width = pc.rows();
+	cloud->height = 1;
+	cloud->is_dense = false;
+	cloud->points.resize(pc.rows());
+		
+	double nodeSize = octreeResolution * computeAABBLength(pc);
+
+	std::cout << "Octree Node Size: " << nodeSize << std::endl;
+
+	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(nodeSize);
+	octree.setInputCloud(cloud);
+	octree.addPointsFromInputCloud();
+
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		cloud->points[i].x = pc.row(i).x();
+		cloud->points[i].y = pc.row(i).y();
+		cloud->points[i].z = pc.row(i).z();
+	}
+	
+	std::vector<double> distances(pc.rows());
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d searchP = pc.row(i).leftCols(3);
+
+		std::vector<int> indices(k);
+		std::vector<float> kdistances(k);
+				
+		octree.nearestKSearch(i, k, indices, kdistances);
+		std::cout << i << " of " << pc.rows() <<  std::endl;
+
+		distances[i] = std::accumulate(kdistances.begin(), kdistances.end(), 0.0) / (double)kdistances.size();
+	}
+
+	std::sort(distances.begin(), distances.end());
+
+	PointCloudCharacteristics pcc;
+	pcc.maxDistance = distances.back();
+	pcc.minDistance = distances.front(); 
+	pcc.medianDistance = distances[distances.size() / 2];
+	pcc.meanDistance = std::accumulate(distances.begin(), distances.end(), 0.0) / (double)distances.size();
+
+	return pcc;
+}
+
+double lmu::computeAABBLength(const lmu::PointCloud& points)
+{
   Eigen::VectorXd min = points.colwise().minCoeff();
   Eigen::VectorXd max = points.colwise().maxCoeff();
   Eigen::VectorXd diag = max - min;
   return diag.norm();
 }
 
+Eigen::Vector3d lmu::computeAABBDims(const PointCloud& pc)
+{
+	Eigen::Vector3d min = pc.leftCols(3).colwise().minCoeff();
+	Eigen::Vector3d max = pc.leftCols(3).colwise().maxCoeff();
+	
+	return (max - min).cwiseAbs();
+}
 
 /*
   Eigen::MatrixXd lmu::getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable)

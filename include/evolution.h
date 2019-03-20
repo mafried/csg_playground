@@ -444,10 +444,12 @@ namespace lmu
 		}
 
 		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
-			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan) const
+			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan = PopulationManipulator()) const
 		{
 			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion, popMan));
 	
+			std::cout << "Create random population..." << std::endl;
+
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
 			std::cout << "Random population with " << population.size() << " creatures was created." << std::endl;

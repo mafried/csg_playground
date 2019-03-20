@@ -16,7 +16,6 @@ namespace lmu
 {
 	class ICSGNode;
 	using CSGNodePtr = std::shared_ptr<ICSGNode>;
-	using ImplicitFunctionPtr = std::shared_ptr<ImplicitFunction>;
 
 	enum class CSGNodeType
 	{

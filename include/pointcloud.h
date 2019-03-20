@@ -25,7 +25,19 @@ namespace lmu
   
   Eigen::MatrixXd getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable);
 
-    double computeAABBLength(Eigen::MatrixXd& points);
+  double computeAABBLength(const PointCloud& pc);
+  Eigen::Vector3d computeAABBDims(const PointCloud& pc);
+
+  struct PointCloudCharacteristics
+  {
+	  double meanDistance;
+	  double maxDistance; 
+	  double minDistance;
+	  double medianDistance;
+  };
+
+  PointCloudCharacteristics getPointCloudCharacteristics(const PointCloud& pc, int k, double octreeResolution);
+
 }
 
 #endif
