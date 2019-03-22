@@ -54,24 +54,34 @@ int main(int argc, char *argv[])
 	try
 	{
 		//EITHER: Create RANSAC results based on csg tree.		
-		double samplingStepSize = 0.2;
+		/*double samplingStepSize = 0.2;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
 		double noiseSigma = 0.03;
+		
 		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
 		auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
 		auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);		
 		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
-		//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));				
-		auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, lmu::RansacParams());
+		//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+
+		auto params = lmu::RansacParams();
+		params.probability = 0.1;
+		params.min_points = 2000;
+		params.normal_threshold = 0.9; 
+		params.cluster_epsilon = 0.2;
+		params.epsilon = 0.2;
+
+		auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, params);
 		lmu::writeToFile("ransac_res.txt", ransacRes);
-		
+		*/
+
 		//OR: Read RANSAC results from file.
-		//auto ransacRes = lmu::readFromFile("ransac_res.txt");
+		auto ransacRes = lmu::readFromFile("ransac_res.txt");
 		
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);
-		auto primitives = res.primitives;
-		auto manifolds = res.manifolds;
+		lmu::PrimitiveSet primitives = res.primitives;
+		lmu::ManifoldSet manifolds = res.manifolds;
 	
 		for (const auto& p : primitives)
 			std::cout << p << std::endl;

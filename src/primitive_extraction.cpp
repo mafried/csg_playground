@@ -9,7 +9,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 		
 	PrimitiveSetTournamentSelector selector(2);
 
-	PrimitiveSetIterationStopCriterion criterion(1);
+	PrimitiveSetIterationStopCriterion criterion(10);
 	
 	PrimitiveSetCreator creator(ransacRes.manifolds, 0.0, 0.0, 10, 10, 10, M_PI / 18.0);
 
@@ -247,29 +247,53 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, double distanc
 
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
 {
-	CSGNode node = opUnion();
-	for (const auto& p : ps)	
-		node.addChild(geometry(p.imFunc));
+	//CSGNode node = opUnion();
+	//for (const auto& p : ps)	
+	//	node.addChild(geometry(p.imFunc));
 	
-	double geometryScore = 0.0; 
+	double meanGeometryScore = 0.0;
+	std::vector<int> totalValidPoints(pc.rows(), 0);
 
-	for (int i = 0; i < pc.rows(); ++i)
+	for (const auto prim : ps)
 	{
-		Eigen::Vector3d p = pc.block<1, 3>(i, 0);
-		Eigen::Vector3d n = pc.block<1, 3>(i, 3);
+		double geometryScore = 0.0;
+		double validPoints = 0.0;
+		double wrongPoints = 0.0;
 
-		//TODO: do something with the normal.
+		for (int i = 0; i < pc.rows(); ++i)
+		{
+			Eigen::Vector3d p = pc.block<1, 3>(i, 0);
+			Eigen::Vector3d n = pc.block<1, 3>(i, 3);
 
-		double d = node.signedDistance(p);
+			//TODO: do something with the normal.
 
-		if (std::abs(d) <= distanceEpsilon)
-			geometryScore += 1.0;
+			double d = prim.imFunc->signedDistance(p);
+
+			if (d <= distanceEpsilon)
+			{
+				validPoints += 1.0;
+
+				if (d < -distanceEpsilon)
+				{
+					wrongPoints += 1.0;
+				}
+				else
+				{
+					totalValidPoints[i] = 1;
+				}
+			}			
+		}
+
+		geometryScore = (validPoints - wrongPoints) / validPoints;
+		meanGeometryScore += geometryScore;
 	}
-	geometryScore /= (double)pc.rows(); 
+	meanGeometryScore /= (double)ps.size();
 
-	double s = 0.05;
+	double totalGeometryScore = (double)std::accumulate(totalValidPoints.begin(), totalValidPoints.end(), 0) / (double)pc.rows();
 
-	return geometryScore - s * ps.size(); 
+	double s = 0.1;
+
+	return totalGeometryScore + meanGeometryScore - s * ps.size();
 }
 
 std::string lmu::PrimitiveSetRanker::info() const
