@@ -12,11 +12,13 @@ namespace lmu
   class CSGNode;
   
   using PointCloud = Eigen::Matrix<double, Eigen::Dynamic, 6, Eigen::RowMajor>;
+  using PointCloudWithLabels = Eigen::Matrix<double, Eigen::Dynamic, 7, Eigen::RowMajor>;
 
   void writePointCloud(const std::string& file, PointCloud& points);
   void writePointCloudXYZ(const std::string& file, PointCloud& points);
   void writePointCloudXYZ(const std::string& file, const std::unordered_map<std::string, PointCloud>& points);
 
+  PointCloud readPointCloud(std::istream& s, double scaleFactor = 1.0);
   PointCloud readPointCloud(const std::string& file, double scaleFactor=1.0);
   PointCloud readPointCloudXYZ(const std::string& file, double scaleFactor=1.0);
   std::unordered_map<std::string, PointCloud> readPointCloudXYZPerFunc(const std::string& file, double scaleFactor = 1.0);

@@ -135,17 +135,15 @@ std::unordered_map<std::string, lmu::PointCloud> lmu::readPointCloudXYZPerFunc(c
 	return res;
 }
 
-lmu::PointCloud lmu::readPointCloud(const std::string& file, double scaleFactor)
+lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)
 {
-	std::ifstream s(file);
-	
-	size_t numRows; 
+	size_t numRows;
 	size_t numCols;
 
-	s >> numRows; 
-	s >> numCols; 
+	s >> numRows;
+	s >> numCols;
 
-	std::cout << numRows << " " << numCols << std::endl;
+	std::cout << "Read PointCloud: " << numRows << " " << numCols << std::endl;
 
 	Eigen::MatrixXd points(numRows, numCols);
 
@@ -154,17 +152,23 @@ lmu::PointCloud lmu::readPointCloud(const std::string& file, double scaleFactor)
 	{
 		for (int j = 0; j < points.cols(); j++)
 		{
-			double v; 
+			double v;
 			s >> v;
 
 			if (j < 3)
 				v = v * scaleFactor;
 
-			points(i,j) = v;
+			points(i, j) = v;
 		}
 	}
 
 	return points;
+}
+
+lmu::PointCloud lmu::readPointCloud(const std::string& file, double scaleFactor)
+{
+	std::ifstream s(file);
+	return readPointCloud(s, scaleFactor);
 }
 
 

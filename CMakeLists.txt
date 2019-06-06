@@ -30,6 +30,10 @@ option(LIBIGL_WITH_OPENGL_GLFW      "Use GLFW"           OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
 
+#CDD Lib
+add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/cddlib)
+include_directories(${PROJECT_SOURCE_DIR}/third_party/cddlib/lib-src) 
+
 #JSON
 include_directories(${PROJECT_SOURCE_DIR}/third_party/json/src) 
 include_directories(${PROJECT_SOURCE_DIR}/include/) 
@@ -38,7 +42,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include/)
 include_directories(${PROJECT_SOURCE_DIR}/third_party/inih) 
 
 #PCL
-find_package(PCL 1.8 REQUIRED COMPONENTS common io features search kdtree keypoints)
+find_package(PCL 1.8 REQUIRED)# COMPONENTS common io features search kdtree keypoints surface)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
@@ -57,7 +61,7 @@ endif()
 FILE(GLOB_RECURSE CSG_LIB_HEADERS "include/*.h")
 message("Lib Headers: " ${CSG_LIB_HEADERS})
 
-FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp")
+FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp" "src/cluster.cpp")
 message("Lib Sources: " ${CSG_LIB_SOURCES})
 
 if(MSVC)
@@ -73,8 +77,10 @@ endif()
 
 # Compile the lib
 add_library(csg_playground_lib STATIC ${CSG_LIB_HEADERS} ${CSG_LIB_SOURCES})
-target_link_libraries(csg_playground_lib igl::core igl::cgal ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES})
+target_link_libraries(csg_playground_lib igl::core igl::cgal ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES}  ${PCL_SURFACE_LIBRARIES} cddlib)
 
+add_library(csg_c SHARED "include/c.h" "src/c.cpp")
+target_link_libraries(csg_c csg_playground_lib igl::core igl::cgal)
 
 # Program for sampling models
 add_executable(main_sampling "src/main_sampling.cpp")
@@ -88,5 +94,5 @@ target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
 # Program for csg reconstruction with gui
 if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
 	add_executable(main "src/main.cpp")
-	target_link_libraries(main csg_playground_lib igl::core igl::cgal igl::core igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES})
+	target_link_libraries(main csg_playground_lib igl::core igl::cgal igl::core igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES} ${PCL_SURFACE_LIBRARIES})
 endif()

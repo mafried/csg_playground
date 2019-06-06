@@ -1023,7 +1023,7 @@ lmu::computeDimensions(const std::vector<std::shared_ptr<ImplicitFunction>>& sha
 std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNode& node)
 {	
 	auto geos = allGeometryNodePtrs(node);
-
+	
 	double minS = std::numeric_limits<double>::max();
 	double maxS = -std::numeric_limits<double>::max();
 
@@ -1039,10 +1039,14 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 		//	v = geo->function()->transform() * v;
 		//	vertices.row(i) = v;
 		//}
+		
+		if (geo->function()->meshCRef().vertices.size() == 0)
+			continue;
 
 		Eigen::Vector3d minCandidate = geo->function()->meshCRef().vertices.colwise().minCoeff();
 		Eigen::Vector3d maxCandidate = geo->function()->meshCRef().vertices.colwise().maxCoeff();
 
+		
 		min(0) = min(0) < minCandidate(0) ? min(0) : minCandidate(0);
 		min(1) = min(1) < minCandidate(1) ? min(1) : minCandidate(1);
 		min(2) = min(2) < minCandidate(2) ? min(2) : minCandidate(2);
@@ -1085,6 +1089,8 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 
 	if (minDim == Eigen::Vector3d(0.0,0.0,0.0) && maxDim == Eigen::Vector3d(0.0, 0.0, 0.0))
 	{
+		std::cout << "Compute Dimensions" << std::endl;
+
 		auto dims = computeDimensions(node);
 		min = std::get<0>(dims);
 		max = std::get<1>(dims);
@@ -1120,7 +1126,6 @@ Mesh lmu::computeMesh(const CSGNode& node, const Eigen::Vector3i& numSamples, co
 				samplingPoints.row(idx) = samplingPoint;
 			
 				samplingValues(idx) = node.signedDistanceAndGradient(samplingPoint)(0);
-			
 				//if(samplingValues(idx)  < 0)
 				//	std::cout << samplingValues(idx) << std::endl;
 			}
@@ -1402,7 +1407,7 @@ lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplin
 		  << " " << numSamples(1) 
 		  << " " << numSamples(2) << std::endl;
 
-	std::vector<Eigen::Matrix<double,1,6>> samplingPoints;
+	std::vector<Eigen::Matrix<double,1,6>> validSamplingPoints;
 	
 	std::random_device rd{};
 	std::mt19937 gen{ rd() };
@@ -1426,15 +1431,15 @@ lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplin
 					Eigen::Matrix<double, 1, 6> sp; 
 					sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
 
-					samplingPoints.push_back(sp);
+					validSamplingPoints.push_back(sp);
 				}
 			}
 		}
 	}
 
-	PointCloud res(samplingPoints.size(), 6);
-	for (int i = 0; i < samplingPoints.size(); ++i)
-		res.row(i) = samplingPoints[i].row(0);
+	PointCloud res(validSamplingPoints.size(), 6);
+	for (int i = 0; i < validSamplingPoints.size(); ++i)
+		res.row(i) = validSamplingPoints[i].row(0);
 
 	return res;
 }

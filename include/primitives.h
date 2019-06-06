@@ -12,11 +12,11 @@ namespace lmu
 	//Manifolds without border
 	enum class ManifoldType
 	{
-		Plane, 
+		None = 0,		
 		Cylinder, 
 		Sphere, 
-		Cone,
-		None
+		Plane,
+		Cone
 	};
 	std::string manifoldTypeToString(ManifoldType type);
 	ManifoldType manifoldTypeFromString(std::string type);
@@ -150,6 +150,7 @@ namespace lmu
 		double epsilon;             // Maximum tolerance Euclidian distance from a point and a shape. %Default value: 1% of bounding box diagonal.
 		double normal_threshold;	// Maximum tolerance normal deviation from a point's normal to the normal on shape at projected point. %Default value: 0.9 (around 25 degrees).
 		double cluster_epsilon;	    // Maximum distance between points to be considered connected. %Default value: 1% of bounding box diagonal.
+		std::set<ManifoldType> types;
 	};
 
 	struct RansacResult
@@ -157,6 +158,8 @@ namespace lmu
 		ManifoldSet manifolds;
 		PointCloud pc;
 	};
+
+	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
 
 	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params);
 	void writeToFile(const std::string& file, const RansacResult& res);

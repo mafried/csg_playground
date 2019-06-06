@@ -12,8 +12,26 @@
 #include <igl/signed_distance.h>
 #include <igl/upsample.h>
 
+#include <pcl/point_types.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/surface/organized_fast_mesh.h>
+#include <pcl/surface/gp3.h>
+#include <pcl/kdtree/kdtree_flann.h>
+
+#include <CGAL/Simple_cartesian.h>
+#include <CGAL/Advancing_front_surface_reconstruction.h>
+#include <CGAL/tuple.h>
+
+#include <pcl/common/common.h>
+
 #include "../include/constants.h"
 
+#include <setoper.h>
+#include <cdd.h>
+
+typedef CGAL::Simple_cartesian<double> K;
+typedef K::Point_3  Point;
+typedef CGAL::cpp11::array<std::size_t, 3> Facet;
 
 using namespace lmu;
 
@@ -311,6 +329,64 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 	return meshFromGeometry(vertices, indices, transform);
 }
 
+Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n)
+{	
+	dd_PolyhedraPtr poly;
+	dd_MatrixPtr A, G;
+	dd_rowrange m;
+	dd_colrange d;
+	dd_ErrorType err;
+
+	dd_set_global_constants();  /* First, this must be called to use cddlib. */
+
+	m = p.size(); d = 4;
+	A = dd_CreateMatrix(m, d);
+	A->representation = dd_Inequality;
+
+	for (int i = 0; i < m; ++i)
+	{
+		double d = /*-*/n[i].dot(p[i]);
+		dd_set_si(A->matrix[i][0], d); dd_set_si(A->matrix[i][1], n[i].x());  dd_set_si(A->matrix[i][2], n[i].y());  dd_set_si(A->matrix[i][3], n[i].z());
+	}
+	
+	poly = dd_DDMatrix2Poly(A, &err);  /* compute the second (generator) representation */
+	if (err != dd_NoError) 
+		std::cout << "ERROR " << err << std::endl;
+		
+	G = dd_CopyGenerators(poly);
+	
+	//dd_WriteMatrix(stdout, G);
+	
+	std::vector<Point> points;
+	points.reserve(G->rowsize);
+	for (int i = 0; i < G->rowsize; i++)
+	{
+		points.push_back(Point(dd_get_d(G->matrix[i][1]), dd_get_d(G->matrix[i][2]), dd_get_d(G->matrix[i][3])));
+	}
+
+	dd_FreeMatrix(A);
+	dd_FreeMatrix(G);	
+	dd_free_global_constants();
+	
+	std::vector<Facet> facets;	
+
+	CGAL::advancing_front_surface_reconstruction(points.begin(),
+		points.end(),
+		std::back_inserter(facets));
+	
+	Eigen::MatrixXi indices(facets.size(), 3);
+	int index = 0;
+	for (const auto& f : facets)
+		indices.row(index++) << f[0], f[1], f[2];
+		
+    Eigen::MatrixXd vertices(points.size(), 3);
+	index = 0;
+	for (const auto& p : points)
+		vertices.row(index++) << p[0], p[1], p[2];
+
+	return Mesh(vertices, indices);
+}
+
 Mesh lmu::fromOBJFile(const std::string & file)
 {
 	Eigen::MatrixXd vertices;
@@ -333,6 +409,8 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 		return "Cylinder";
 	case ImplicitFunctionType::Box:
 		return "Box";
+	case ImplicitFunctionType::Polytope:
+		return "Polytope";
 	case ImplicitFunctionType::Null:
 		return "Null";
 	default:
@@ -673,4 +751,63 @@ void lmu::writePrimitives(const std::string& filename,
     of << " " + shape->serializeParameters();
     of << std::endl;
   }
+}
+
+lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string & name) :
+	ImplicitFunction(transform, createPolytope(transform, p, n), name)
+	//_p(p),
+	//_n(n)
+{
+	// Make sure normal vectors are normalized.
+	for (auto& nv : _n)
+		nv.normalize();
+
+	// Create AABB tree for fast signed distance calculations. 
+	_tree.init(_mesh.vertices, _mesh.indices);
+	_hier.set_mesh(_mesh.vertices, _mesh.indices);
+	_hier.grow();
+
+}
+
+ImplicitFunctionType lmu::IFPolytope::type() const
+{
+	return ImplicitFunctionType::Polytope;
+}
+
+std::shared_ptr<ImplicitFunction> lmu::IFPolytope::clone() const
+{
+	return std::make_shared<IFPolytope>(*this);
+}
+
+std::string lmu::IFPolytope::serializeParameters() const
+{
+	return "";
+}
+
+Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, double h)
+{
+	auto worldP = _transform * localP;
+
+	int i;
+	Eigen::RowVector3d c;
+	_tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
+
+	//std::cout << "G: " << i << std::endl;
+	std::cout << _mesh.normals.rows() << std::endl;
+	
+	return _mesh.normals.row(i);
+}
+
+double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
+{
+	auto worldP = _transform * localP;
+
+	double s;
+	int i;
+	Eigen::RowVector3d c;
+	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
+	
+	s = 1. - 2.*_hier.winding_number(worldP);
+
+	return std::sqrt(sqrd) * s;
 }

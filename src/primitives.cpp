@@ -80,6 +80,32 @@ lmu::PrimitiveType lmu::primitiveTypeFromString(std::string type)
 		return PrimitiveType::None;
 }
 
+lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& results)
+{
+	RansacResult res;
+
+	if (results.empty())
+		return res;
+	
+	size_t pointCloudRows = 0;
+	size_t pointCloudCols = 0;
+	for (const auto& r : results)
+	{
+		pointCloudCols = r.pc.cols();
+		pointCloudRows += r.pc.rows();
+	}
+
+	PointCloud newPointCloud(pointCloudRows, pointCloudCols);
+	for (const auto& r : results)
+	{
+		res.manifolds.insert(res.manifolds.end(), r.manifolds.begin(), r.manifolds.end());
+		newPointCloud << r.pc;
+	}
+	res.pc = newPointCloud;
+
+	return res;
+}
+
 lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params)
 {
 	//auto pcChars = getPointCloudCharacteristics(pc, 1, 0.5);
@@ -109,9 +135,21 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 	ransac.set_input(pointsWithNormals);
 
 	// Register shapes for detection
-	ransac.add_shape_factory<Plane>();
-	ransac.add_shape_factory<Sphere>();
-	ransac.add_shape_factory<Cylinder>();
+	if (params.types.empty())
+	{
+		ransac.add_shape_factory<Plane>();
+		ransac.add_shape_factory<Sphere>();
+		ransac.add_shape_factory<Cylinder>();
+	}
+	else
+	{
+		if (params.types.count(ManifoldType::Cylinder))
+			ransac.add_shape_factory<Cylinder>();
+		if (params.types.count(ManifoldType::Plane))
+			ransac.add_shape_factory<Plane>();
+		if (params.types.count(ManifoldType::Sphere))
+			ransac.add_shape_factory<Sphere>();
+	}
 	
 	//ransac.add_shape_factory<Cone>();
 	//ransac.add_shape_factory<Torus>();

@@ -1,22 +1,25 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-#include <igl/per_vertex_normals.h>
-#include <igl/per_edge_normals.h>
+//#include <igl/per_vertex_normals.h>
+//#include <igl/per_edge_normals.h>
 #include <igl/per_face_normals.h>
-#include <igl/AABB.h>
+//#include <igl/AABB.h>
 
+#include <igl/signed_distance.h>
+#include <igl/aabb.h>
 
 #include <iostream>
 #include <memory>
 
-#include <string>
-#include <vector>
-
 #include "pointcloud.h"
 #include "congraph.h"
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include <string>
+#include <vector>
 
 namespace lmu
 {
@@ -24,14 +27,12 @@ namespace lmu
 	{
 		Mesh(const Eigen::MatrixXd& vertices, const Eigen::MatrixXi& indices, const Eigen::MatrixXd& normals = Eigen::MatrixXd()) :
 			indices(indices),
-			vertices(vertices),		
+			vertices(vertices),
 			normals(normals),
 			transform(Eigen::Affine3d::Identity())
 		{
 			if(normals.rows() == 0)
-				igl::per_vertex_normals(this->vertices, this->indices, this->normals);				
-
-			//std::cout << normals << std::endl;
+				igl::per_face_normals(this->vertices, this->indices, this->normals);				
 		}
 
 		Mesh() :			
@@ -50,6 +51,7 @@ namespace lmu
 	Mesh createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions);
 	Mesh createSphere(const Eigen::Affine3d& transform, double radius, int stacks, int slices);
 	Mesh createCylinder(const Eigen::Affine3d& transform, float bottomRadius, float topRadius, float height, int stacks, int slices);
+	Mesh createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n);
 
 	Mesh fromOBJFile(const std::string& file);
 
@@ -59,6 +61,7 @@ namespace lmu
 		Cylinder,
 		Cone,
 		Box,
+		Polytope,
 		Null
 	};
 
@@ -143,6 +146,24 @@ namespace lmu
 
 			Eigen::Vector4d res;
 			res << (d), gWorld;
+
+			return res;
+		}
+
+		Eigen::MatrixX4d signedDistanceAndGradientVec(const Eigen::MatrixX3d& worldP, double h = 0.001) 
+		{
+			Eigen::MatrixX4d res(worldP.rows(),4);
+			for (int i = 0; i < worldP.rows(); ++i)			
+				res.row(i) << signedDistanceAndGradient((Eigen::Vector3d)worldP.row(i), h);
+			
+			return res;
+		}
+
+		Eigen::VectorXd signedDistanceVec(const Eigen::MatrixX3d& worldP, double h = 0.001) 
+		{
+			Eigen::VectorXd res(worldP.rows());
+			for (int i = 0; i < worldP.rows(); ++i)
+				res.row(i) << signedDistance((Eigen::Vector3d)worldP.row(i));
 
 			return res;
 		}
@@ -470,6 +491,30 @@ namespace lmu
 
 		Eigen::Vector3d _size;
 		double _displacement;
+	};
+
+	struct IFPolytope : public ImplicitFunction
+	{
+		IFPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string& name);
+
+		virtual ImplicitFunctionType type() const override;
+
+		std::shared_ptr<ImplicitFunction> clone() const override;
+
+		virtual std::string serializeParameters() const;
+
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override;
+
+	private: 
+
+		igl::WindingNumberAABB<Eigen::Vector3d,Eigen::MatrixXd, Eigen::MatrixXi> _hier;
+		igl::AABB<Eigen::MatrixXd, 3> _tree;
+
+		std::vector<Eigen::Vector3d> _p;
+		std::vector<Eigen::Vector3d> _n;
 	};
 
 	struct IFNull : public ImplicitFunction

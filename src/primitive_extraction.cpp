@@ -186,9 +186,20 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	switch (primitiveType)
 	{
 	case PrimitiveType::Box:
+		
+		/*auto startingPlane = getManifold(ManifoldType::Plane, Eigen::Vector3d(0, 0, 0), {}, 0.0, true);
+		ManifoldSet planes;
+		planes.push_back(startingPlane);
+		for (int i = 0; i < 5; ++i)
+		{
+			auto p = getManifold(ManifoldType::Plane, cyl->n, planes, angleEpsilon);
+			if (p)
+				planes.push_back(p);
+		}
+		return createBoxPrimitive()
 		//TODO: use getManifold() to implement a method that fills a 6 plane manifold set (primManifoldSet) for the box.
-		//TODO
-		//break; 
+		//TODO*/
+		break; 
 	case PrimitiveType::Cone: 	
 		//TODO
 		//break;
