@@ -16,7 +16,7 @@ typedef CGAL::Second_of_pair_property_map<Point_with_normal> Normal_map;
 
 // In Efficient_RANSAC_traits the basic types, i.e., Point and Vector types
 // as well as iterator type and property maps, are defined.
-typedef CGAL::Shape_detection_3::Efficient_RANSAC_traits<Kernel,
+typedef CGAL::Shape_detection_3::Shape_detection_traits<Kernel,
 	Pwn_vector, Point_map, Normal_map>            Traits;
 typedef CGAL::Shape_detection_3::Efficient_RANSAC<Traits> Efficient_ransac;
 typedef CGAL::Shape_detection_3::Cone<Traits>             Cone;
@@ -96,22 +96,28 @@ lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& resul
 	}
 
 	PointCloud newPointCloud(pointCloudRows, pointCloudCols);
+	int rowIdx = 0;
 	for (const auto& r : results)
 	{
 		res.manifolds.insert(res.manifolds.end(), r.manifolds.begin(), r.manifolds.end());
-		newPointCloud << r.pc;
+
+		std::cout << "Size: " << r.pc.rows() << std::endl;
+
+		newPointCloud.block(rowIdx,0, r.pc.rows(), r.pc.cols()) << r.pc;
+
+		rowIdx += r.pc.rows();
 	}
 	res.pc = newPointCloud;
 
 	return res;
 }
 
-lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params)
+lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, bool projectPointsOnSurface)
 {
 	//auto pcChars = getPointCloudCharacteristics(pc, 1, 0.5);
 	//std::cout << pcChars.maxDistance << " " << pcChars.minDistance << " " << pcChars.meanDistance << std::endl;
 	double diagLength = computeAABBLength(pc);
-	std::cout << "PC DIAG LENGTH: " << diagLength << std::endl;
+	//std::cout << "PC DIAG LENGTH: " << diagLength << std::endl;
 
 	// Add points and normals to the correct structure.
 	Pwn_vector pointsWithNormals;
@@ -231,11 +237,14 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 
 			manifolds.push_back(m);
 		}
-
-
-
 	}
 
+	if (projectPointsOnSurface) {
+		for (auto& m : manifolds) {
+			m->projectPointsOnSurface();
+		}
+	}
+	
 	RansacResult res;
 	res.manifolds = manifolds;
 	res.pc = pc;
@@ -341,6 +350,7 @@ std::string lmu::manifoldTypeToString(ManifoldType type)
 		return "Sphere";
 	case ManifoldType::Cone:
 		return "Cone";
+	default:
 	case ManifoldType::None:
 		return "None";
 	}	

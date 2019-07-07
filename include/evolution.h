@@ -56,6 +56,7 @@ namespace lmu
 				return logSchedule(iteration);
 			case ScheduleType::EXP:
 				return expSchedule(iteration);
+			default:
 			case ScheduleType::IDENTITY:
 				return identitySchedule(iteration);
 			}

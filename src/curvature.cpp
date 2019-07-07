@@ -4,10 +4,10 @@
 #include "curvature.h"
 #include "csgnode_helper.h"
 
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/features/principal_curvatures.h>
+//#include <pcl/io/pcd_io.h>
+//#include <pcl/point_types.h>
+//#include <pcl/features/normal_3d.h>
+//#include <pcl/features/principal_curvatures.h>
 
 //from http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.413.3008&rep=rep1&type=pdf
 lmu::Curvature lmu::curvature(const Eigen::Vector3d & ps, const CSGNode & node, double h)
@@ -140,18 +140,18 @@ Eigen::VectorXd lmu::computeCurvature(const Eigen::MatrixXd& samplePoints, const
 
 Eigen::Matrix<double, -1, 5> lmu::estimateCurvature(const PointCloud & pc, double searchRadius)
 {
-	pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> pcEstimator;
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	//pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> pcEstimator;
+	//pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr points(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr points(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 
 	for (int i = 0; i < pc.rows(); i++)
 	{
 		auto row = pc.row(i);
 
-		points->push_back(pcl::PointXYZ(row.col(0).value(), row.col(1).value(), row.col(2).value()));
-		normals->push_back(pcl::Normal(row.col(3).value(), row.col(4).value(), row.col(5).value()));
+		//points->push_back(pcl::PointXYZ(row.col(0).value(), row.col(1).value(), row.col(2).value()));
+		//normals->push_back(pcl::Normal(row.col(3).value(), row.col(4).value(), row.col(5).value()));
 	}
 
 	/*pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimation;
@@ -161,22 +161,22 @@ Eigen::Matrix<double, -1, 5> lmu::estimateCurvature(const PointCloud & pc, doubl
 	normal_estimation.setRadiusSearch(0.03);
 	normal_estimation.compute(*cloud_with_normals);*/
 
-	pcEstimator.setInputCloud(points);
-	pcEstimator.setInputNormals(normals);
-	pcEstimator.setSearchMethod(tree);
-	pcEstimator.setRadiusSearch(searchRadius);
+	//pcEstimator.setInputCloud(points);
+	//pcEstimator.setInputNormals(normals);
+	//pcEstimator.setSearchMethod(tree);
+	//pcEstimator.setRadiusSearch(searchRadius);
 
-	pcl::PointCloud<pcl::PrincipalCurvatures>::Ptr principalCurvatures(new pcl::PointCloud<pcl::PrincipalCurvatures>());
-	pcEstimator.compute(*principalCurvatures);
+	//pcl::PointCloud<pcl::PrincipalCurvatures>::Ptr principalCurvatures(new pcl::PointCloud<pcl::PrincipalCurvatures>());
+	//pcEstimator.compute(*principalCurvatures);
 
-	Eigen::Matrix<double, -1, 5> res(principalCurvatures->size(), 5);
+	Eigen::Matrix<double, -1, 5> res(1,5);// principalCurvatures->size(), 5);
 
-	for (int i = 0; i < res.rows(); i++)
-	{
-		auto prcu = principalCurvatures->points[i];
-		res.row(i) << prcu.pc1, prcu.pc2, prcu.principal_curvature_x, prcu.principal_curvature_y, prcu.principal_curvature_z;
+	//for (int i = 0; i < res.rows(); i++)
+	//{
+	//	auto prcu = principalCurvatures->points[i];
+	//	res.row(i) << prcu.pc1, prcu.pc2, prcu.principal_curvature_x, prcu.principal_curvature_y, prcu.principal_curvature_z;
 		//std::cout << prcu.pc1 << " " << prcu.pc2 << std::endl;
-	}
+	//}
 
 	return res;
 }

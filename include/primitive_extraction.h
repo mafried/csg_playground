@@ -12,7 +12,7 @@ namespace lmu
 
 	struct PrimitiveSetCreator
 	{
-		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
+		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, double createNewMutationProb, int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
 
 		PrimitiveSet mutate(const PrimitiveSet& ps) const;
 		std::vector<PrimitiveSet> crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const;
@@ -22,13 +22,18 @@ namespace lmu
 	private:
 
 		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection = false) const;
+		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
+		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
+
 
 		Primitive createPrimitive() const;
 		Primitive mutatePrimitive(const Primitive& p, double angleEpsilon) const;
 
 		ManifoldSet ms;
 		double intraCrossProb;
+
 		double intraMutationProb;
+		double createNewMutationProb;
 
 		int maxMutationIterations;
 		int maxCrossoverIterations;
@@ -41,13 +46,19 @@ namespace lmu
 
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, double distanceEpsilon);
+		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 		std::string info() const;
 
+		PrimitiveSet bestPrimitiveSet() const;
+
 	private: 
+		mutable PrimitiveSetRank bestRank;
+		mutable PrimitiveSet bestPrimitives;
+
 		PointCloud pc;
+		ManifoldSet ms;
 		double distanceEpsilon;
 	};
 

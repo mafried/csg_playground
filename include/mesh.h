@@ -40,6 +40,11 @@ namespace lmu
 		{
 		}
 
+		bool empty() const
+		{
+			return vertices.rows() == 0;
+		}
+
 		Eigen::MatrixXd vertices;
 		Eigen::MatrixXd normals;
 		Eigen::MatrixXi indices;
@@ -502,6 +507,8 @@ namespace lmu
 		std::shared_ptr<ImplicitFunction> clone() const override;
 
 		virtual std::string serializeParameters() const;
+
+		bool empty() const;
 
 	protected:
 

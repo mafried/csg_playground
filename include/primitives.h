@@ -62,7 +62,22 @@ namespace lmu
 			type(m.type),
 			pc(m.pc)
 		{
-			std::cout << "copy" << std::endl;
+			//std::cout << "copy" << std::endl;
+		}
+
+		void projectPointsOnSurface() {
+			switch (type)
+			{
+			case ManifoldType::Plane:
+				projectPointCloudOnPlane(pc, p, n);
+				break;
+			case ManifoldType::Cylinder:
+				break;
+			case ManifoldType::Sphere:
+				break;
+			case ManifoldType::Cone:
+				break;
+			}			
 		}
 
 		double signedDistance(const Eigen::Vector3d& p) const
@@ -112,10 +127,15 @@ namespace lmu
 			imFunc(imFunc), ms(ms), type(type)
 		{
 		}
-
-		Primitive() :
-			Primitive(nullptr, ManifoldSet(), PrimitiveType::None)
+				
+		bool isNone() const
 		{
+			return type == PrimitiveType::None;
+		}
+
+		static Primitive None()
+		{
+			return Primitive();
 		}
 
 		ImplicitFunctionPtr imFunc; 
@@ -123,6 +143,12 @@ namespace lmu
 		PrimitiveType type;
 
 		friend std::ostream& operator<<(std::ostream& os, const Primitive& p);
+
+	private:
+		Primitive() :
+			Primitive(nullptr, ManifoldSet(), PrimitiveType::None)
+		{
+		}
 	};
 	std::ostream& operator<<(std::ostream& os, const Primitive& np);
 
@@ -161,7 +187,7 @@ namespace lmu
 
 	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
 
-	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params);
+	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params, bool projectPointsOnSurface = false);
 	void writeToFile(const std::string& file, const RansacResult& res);
 	RansacResult readFromFile(const std::string& file);
 }

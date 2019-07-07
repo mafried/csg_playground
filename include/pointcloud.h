@@ -30,6 +30,8 @@ namespace lmu
   double computeAABBLength(const PointCloud& pc);
   Eigen::Vector3d computeAABBDims(const PointCloud& pc);
 
+  PointCloud farthestPointSampling(const PointCloud& p, int k)	;
+
   struct PointCloudCharacteristics
   {
 	  double meanDistance;
@@ -40,6 +42,7 @@ namespace lmu
 
   PointCloudCharacteristics getPointCloudCharacteristics(const PointCloud& pc, int k, double octreeResolution);
 
+  void projectPointCloudOnPlane(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& n);
 }
 
 #endif

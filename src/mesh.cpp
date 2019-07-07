@@ -18,9 +18,9 @@
 #include <pcl/surface/gp3.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
-#include <CGAL/Simple_cartesian.h>
-#include <CGAL/Advancing_front_surface_reconstruction.h>
-#include <CGAL/tuple.h>
+//#include <CGAL/Simple_cartesian.h>
+//#include <CGAL/Advancing_front_surface_reconstruction.h>
+//#include <CGAL/tuple.h>
 
 #include <pcl/common/common.h>
 
@@ -29,9 +29,9 @@
 #include <setoper.h>
 #include <cdd.h>
 
-typedef CGAL::Simple_cartesian<double> K;
-typedef K::Point_3  Point;
-typedef CGAL::cpp11::array<std::size_t, 3> Facet;
+//typedef CGAL::Simple_cartesian<double> K;
+//typedef K::Point_3  Point;
+//typedef CGAL::cpp11::array<std::size_t, 3> Facet;
 
 using namespace lmu;
 
@@ -329,62 +329,147 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 	return meshFromGeometry(vertices, indices, transform);
 }
 
+
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+
+
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/convex_hull_3.h>
+
+#include <CGAL/license/Polyhedron.h>
+#include <CGAL/boost/graph/named_function_params.h>
+#include <CGAL/boost/graph/named_params_helper.h>
+
+#include <CGAL/boost/graph/named_params_helper.h>
+#include <CGAL/boost/graph/named_function_params.h>
+
+
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/IO/print_OFF.h>
+#include <CGAL/IO/scan_OFF.h>
+#include <CGAL/boost/graph/named_params_helper.h>
+#include <CGAL/boost/graph/named_function_params.h>
+#include <boost/graph/graph_traits.hpp>
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel  K;
+typedef CGAL::Polyhedron_3<K>                     Polyhedron_3;
+typedef K::Point_3                                Point_3;
+typedef K::Segment_3                              Segment_3;
+typedef K::Triangle_3                             Triangle_3;
+
+
 Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n)
 {	
+
 	dd_PolyhedraPtr poly;
 	dd_MatrixPtr A, G;
-	dd_rowrange m;
-	dd_colrange d;
 	dd_ErrorType err;
 
 	dd_set_global_constants();  /* First, this must be called to use cddlib. */
 
-	m = p.size(); d = 4;
-	A = dd_CreateMatrix(m, d);
+	A = dd_CreateMatrix(p.size(), 4);
 	A->representation = dd_Inequality;
 
-	for (int i = 0; i < m; ++i)
+	for (int i = 0; i < p.size(); ++i)
 	{
-		double d = /*-*/n[i].dot(p[i]);
-		dd_set_si(A->matrix[i][0], d); dd_set_si(A->matrix[i][1], n[i].x());  dd_set_si(A->matrix[i][2], n[i].y());  dd_set_si(A->matrix[i][3], n[i].z());
+		double d = n[i].normalized().dot(p[i]);
+		dd_set_d(A->matrix[i][0], d); dd_set_d(A->matrix[i][1], -n[i].x());  dd_set_d(A->matrix[i][2], -n[i].y());  dd_set_d(A->matrix[i][3], -n[i].z());
 	}
-	
+
+   //dd_WriteMatrix(stdout, A);
+
 	poly = dd_DDMatrix2Poly(A, &err);  /* compute the second (generator) representation */
-	if (err != dd_NoError) 
-		std::cout << "ERROR " << err << std::endl;
+	if (err != dd_NoError)
+		return Mesh();
 		
 	G = dd_CopyGenerators(poly);
+	if (G->rowsize == 0)
+		return Mesh();
 	
+	//dd_WriteMatrix(stdout, A);
 	//dd_WriteMatrix(stdout, G);
 	
-	std::vector<Point> points;
+	std::vector<Point_3> points;
 	points.reserve(G->rowsize);
 	for (int i = 0; i < G->rowsize; i++)
 	{
-		points.push_back(Point(dd_get_d(G->matrix[i][1]), dd_get_d(G->matrix[i][2]), dd_get_d(G->matrix[i][3])));
+		points.push_back(Point_3(dd_get_d(G->matrix[i][1]), dd_get_d(G->matrix[i][2]), dd_get_d(G->matrix[i][3])));
+		//std::cout << "Poly point: " << points.back().x() << " " << points.back().y() << " " << points.back().z() << std::endl;
 	}
 
 	dd_FreeMatrix(A);
 	dd_FreeMatrix(G);	
 	dd_free_global_constants();
-	
-	std::vector<Facet> facets;	
-
-	CGAL::advancing_front_surface_reconstruction(points.begin(),
-		points.end(),
-		std::back_inserter(facets));
-	
-	Eigen::MatrixXi indices(facets.size(), 3);
-	int index = 0;
-	for (const auto& f : facets)
-		indices.row(index++) << f[0], f[1], f[2];
 		
-    Eigen::MatrixXd vertices(points.size(), 3);
-	index = 0;
-	for (const auto& p : points)
-		vertices.row(index++) << p[0], p[1], p[2];
+	//CGAL::advancing_front_surface_reconstruction(points.begin(),
+	//	points.end(),
+	//	std::back_inserter(facets));
 
-	return Mesh(vertices, indices);
+	CGAL::Object obj;
+	CGAL::convex_hull_3(points.begin(), points.end(), obj);	
+	const Polyhedron_3* ph = CGAL::object_cast<Polyhedron_3>(&obj);
+	if (!ph) {
+		return Mesh();
+	}
+	
+	Eigen::MatrixXd verts(ph->size_of_vertices(), 3);
+	auto np = CGAL::parameters::all_default();
+	auto vpm = choose_param(get_param(np, CGAL::internal_np::vertex_point),
+		CGAL::get_const_property_map(CGAL::vertex_point, *ph));
+	size_t vertexIdx = 0;
+	for (auto vi : vertices(*ph)) {
+		double x = CGAL::to_double(get(vpm, vi).x());
+		double y = CGAL::to_double(get(vpm, vi).y());
+		double z = CGAL::to_double(get(vpm, vi).z());
+		verts.row(vertexIdx++) << x, y, z;
+	}
+
+	Eigen::MatrixXi indices(ph->size_of_facets(), 3);
+	CGAL::Inverse_index<Polyhedron_3::Vertex_const_iterator>  index(ph->vertices_begin(), ph->vertices_end());
+	size_t faceIdx = 0;
+	for (auto fi = ph->facets_begin(); fi != ph->facets_end(); ++fi) {
+		auto hc = fi->facet_begin();
+		auto hc_end = hc;
+		std::size_t n = circulator_size(hc);
+		size_t indexIdx = 0;
+		do {
+			indices.block<1,1>(faceIdx, indexIdx) << index[hc->vertex()];
+			indexIdx++;
+			++hc;
+		} while (hc != hc_end);
+		faceIdx++;
+	}
+
+	/*Eigen::MatrixXi indices(sm.number_of_faces(), 3);
+	int row = 0;
+	for (Surface_mesh::Face_index fi : sm.faces()) 
+	{
+		Surface_mesh::Halfedge_index hf = sm.halfedge(fi);
+		unsigned int indicesRow[3];
+		int i = 0;
+		for (Surface_mesh::Vertex_index vi : vertices_around_face(hf, sm))
+		{
+			if (i > 2) break;
+			indicesRow[i++] = (unsigned int)vi;
+		}
+		if (i < 3) break;
+		indices.row(row++) << indicesRow[0], indicesRow[1], indicesRow[2];
+	}
+
+	Eigen::MatrixXd vertices(sm.number_of_vertices(), 3);
+	row = 0;
+	for (auto vd : sm.vertices())
+	{
+		auto p = sm.point(vd);
+		vertices.row(row++) << p.x(), p.y(), p.z();
+	}
+
+	std::cout << "mesh ready" << std::endl;
+
+	return Mesh(vertices, indices);*/
+
+	return Mesh(verts, indices);
 }
 
 Mesh lmu::fromOBJFile(const std::string & file)
@@ -755,18 +840,18 @@ void lmu::writePrimitives(const std::string& filename,
 
 lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string & name) :
 	ImplicitFunction(transform, createPolytope(transform, p, n), name)
-	//_p(p),
-	//_n(n)
 {
 	// Make sure normal vectors are normalized.
 	for (auto& nv : _n)
 		nv.normalize();
 
 	// Create AABB tree for fast signed distance calculations. 
-	_tree.init(_mesh.vertices, _mesh.indices);
-	_hier.set_mesh(_mesh.vertices, _mesh.indices);
-	_hier.grow();
-
+	if (!_mesh.empty())
+	{
+		_tree.init(_mesh.vertices, _mesh.indices);
+		_hier.set_mesh(_mesh.vertices, _mesh.indices);
+		_hier.grow();
+	}
 }
 
 ImplicitFunctionType lmu::IFPolytope::type() const
@@ -784,6 +869,11 @@ std::string lmu::IFPolytope::serializeParameters() const
 	return "";
 }
 
+bool lmu::IFPolytope::empty() const
+{
+	return _mesh.empty();
+}
+
 Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, double h)
 {
 	auto worldP = _transform * localP;
@@ -791,9 +881,6 @@ Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, d
 	int i;
 	Eigen::RowVector3d c;
 	_tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
-
-	//std::cout << "G: " << i << std::endl;
-	std::cout << _mesh.normals.rows() << std::endl;
 	
 	return _mesh.normals.row(i);
 }
@@ -805,9 +892,11 @@ double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 	double s;
 	int i;
 	Eigen::RowVector3d c;
+	
 	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
 	
 	s = 1. - 2.*_hier.winding_number(worldP);
-
+	//s = 1;
+	
 	return std::sqrt(sqrd) * s;
 }

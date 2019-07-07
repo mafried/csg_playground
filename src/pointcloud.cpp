@@ -339,6 +339,20 @@ lmu::PointCloudCharacteristics lmu::getPointCloudCharacteristics(const PointClou
 	return pcc;
 }
 
+void lmu::projectPointCloudOnPlane(PointCloud & pc, const Eigen::Vector3d & p, const Eigen::Vector3d & n)
+{
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d pt = pc.block<1, 3>(i, 0).transpose();
+
+		Eigen::Vector3d projPt = p + pt - (pt.dot(n)) * n;
+
+		pc.block<1, 3>(i, 0) << projPt.transpose();
+	}
+
+	std::cout << "DONE" << std::endl;
+}
+
 double lmu::computeAABBLength(const lmu::PointCloud& points)
 {
   Eigen::VectorXd min = points.colwise().minCoeff();
@@ -353,6 +367,43 @@ Eigen::Vector3d lmu::computeAABBDims(const PointCloud& pc)
 	Eigen::Vector3d max = pc.leftCols(3).colwise().maxCoeff();
 	
 	return (max - min).cwiseAbs();
+}
+
+
+
+Eigen::VectorXd getDistances(const Eigen::Vector3d &p, const lmu::PointCloud& pc) {
+	auto v = Eigen::VectorXd(pc.rows()); 
+
+	for (int i = 0; i < pc.rows(); ++i)
+		v.row(i) << (p - pc.row(i).leftCols(3).transpose()).squaredNorm();
+
+	return v;
+}
+
+lmu::PointCloud lmu::farthestPointSampling(const PointCloud & pc, int k)
+{
+	std::random_device r;
+	std::default_random_engine e1(r());
+	std::uniform_int_distribution<int> uniformDist(0, pc.rows()-1);
+
+	auto spc = lmu::PointCloud(k, 6);
+	spc.setZero();
+
+	spc.row(0) << pc.row(uniformDist(e1));
+	auto distances = getDistances(spc.row(0).leftCols(3).transpose(), pc);
+
+	for (int i = 1; i < k; ++i)
+	{
+		// Take point with largest distance to point cloud and add it to the new pc.
+		Eigen::VectorXd::Index maxDRowIdx;
+		distances.maxCoeff(&maxDRowIdx);
+		spc.row(i) << pc.row(maxDRowIdx);
+
+		// Recompute distances as the column-wise minimum of old distance vector and distance vector based on current point.
+		distances = distances.cwiseMin(getDistances(spc.row(i).leftCols(3).transpose(), pc));
+	}
+
+	return spc;
 }
 
 /*

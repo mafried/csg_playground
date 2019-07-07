@@ -54,58 +54,69 @@ int main(int argc, char *argv[])
 		
 	try
 	{
-
-		double samplingStepSize = 0.1;
+		
+		/*double samplingStepSize = 0.1;
 		double maxDistance = 0.1;
 		double maxAngleDistance = 0.1;
 		double noiseSigma = 0.001;
-
-		//	IFPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string& name) :
-	
-		auto _p = { Eigen::Vector3d(1,0,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1),
-			Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
-
-		auto _n = { Eigen::Vector3d(1,0,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1), 
-			       Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
 				
+		auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.0700974, -0.0241359, 0.682183),Eigen::Vector3d(-0.00842728, -0.0110942, -0.281548), Eigen::Vector3d(0.00995219, -0.47185, -0.00839383),
+		Eigen::Vector3d(0.00245973, 0.287677, 0.00328013),Eigen::Vector3d(0.151568, -0.0039502, -0.00301725), Eigen::Vector3d(-0.457327, 0.00124607, 0.065478) });
+
+		//auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0, 0, 0.682183),Eigen::Vector3d(0,0,-0.281548), Eigen::Vector3d(0, -0.47185, 0),
+		//	Eigen::Vector3d(0, 0.287677, 0),Eigen::Vector3d(0.151568, 0, 0), Eigen::Vector3d(-0.457327, 0, 0) });
+
+		auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0, 1).normalized(),Eigen::Vector3d(0, 0, -1).normalized(), Eigen::Vector3d(0, -1, 0).normalized(),
+		Eigen::Vector3d(0, 1,0).normalized(),Eigen::Vector3d(1,0,0).normalized(), Eigen::Vector3d(-1, 0, 0).normalized() });
+
+		//_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
+		//	Eigen::Vector3d(-0.00854944, 0.999898, -0.01140),Eigen::Vector3d(0.999463, 0.0260481, 0.0198961), Eigen::Vector3d(-0.989902, -0.00269717, -0.14173) });
+
+		_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
+			Eigen::Vector3d(0.00854944, 0.999898, 0.01140),Eigen::Vector3d(0.999463, -0.0260481, -0.0198961), Eigen::Vector3d(-0.989902, 0.00269717, 0.14173) });
+
+		//_n = std::vector<Eigen::Vector3d>(
+		//{
+		//	Eigen::Vector3d(0, -0.61803398874989485, -1),
+		//	Eigen::Vector3d(-1., 0, -0.61803398874989485),
+		//	Eigen::Vector3d(-0.61803398874989485, -1., 0),
+		//	Eigen::Vector3d(0, 0.61803398874989485, 1.),
+		//	Eigen::Vector3d(1., 0, 0.61803398874989485),
+		//	Eigen::Vector3d(0.61803398874989485, 1., 0),
+		//	Eigen::Vector3d(0, 0.61803398874989485, -1.),
+		//	Eigen::Vector3d(-1., 0, 0.61803398874989485),
+		//	Eigen::Vector3d(0.61803398874989485, -1., 0),
+		//	Eigen::Vector3d(0, -0.61803398874989485, 1.),
+		//	Eigen::Vector3d(1., 0, -0.61803398874989485),
+		//	Eigen::Vector3d(-0.61803398874989485, 1., 0)
+		//});
+		//_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
+		//	Eigen::Vector3d(0,1,0),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
+
+		//_p = { Eigen::Vector3d(1,0,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1),
+		//	Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
+
+		//_n = { Eigen::Vector3d(1,1,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1), 
+		//	       Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
+			
 		lmu::CSGNode node = lmu::geo<lmu::IFPolytope>(Eigen::Affine3d::Identity(), _p, _n, "P1");
+		
+		viewer.data().set_mesh(node.function()->meshCRef().vertices, node.function()->meshCRef().indices);
+		viewer.data().set_points(node.function()->meshCRef().vertices, node.function()->meshCRef().vertices);
 
-		//lmu::createPolytope(Eigen::Affine3d::Identity(), _p, _n);
-			
-		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50), Eigen::Vector3d(-2,-2,-2), Eigen::Vector3d(2,2,2));
-
-		lmu::CSGNodeSamplingParams params(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(2, 2, 2));
-		auto pointCloud = lmu::computePointCloud(node, params);
-		std::cout << pointCloud.size();
-		viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
-		//auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);
-			
 		std::cout << "HERE" << std::endl;
 
-		//auto mesh = lmu::createPolytope(Eigen::Affine3d::Identity(), _p, _n);
-
-		std::cout << "Finished" << std::endl;
-
-		//std::cout << mesh.vertices << std::endl;
-		std::cout << "Finished" << std::endl;
-
-		//std::cout << mesh.indices << std::endl;
-		std::cout << "Finished" << std::endl;
-
-		//std::cout << mesh.vertices << std::endl;
-
-		//std::cout << "Faces:" << std::endl;
-
-		//std::cout << mesh.indices;
-
-		//viewer.data().set_points(mesh.vertices, Eigen::MatrixXd());
-
-		viewer.data().set_mesh(node.function()->meshRef().vertices, node.function()->meshRef().indices);
-
-
+		//lmu::CSGNodeSamplingParams params(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(2, 2, 2));
+		//auto pointCloud = lmu::computePointCloud(node, params);
+		//std::cout << pointCloud.size();
+		//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+		
+	    //viewer.data().set_mesh(node.function()->meshRef().vertices, node.function()->meshRef().indices);
+		
 		goto _LAUNCH;
-
+		*/
+		
+		// Extraction using RANSAC
 		/*double samplingStepSize = 0.2;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
@@ -127,14 +138,13 @@ int main(int argc, char *argv[])
 		auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, params);
 			lmu::writeToFile("ransac_res.txt", ransacRes);
 
-		return 0;
-		*/
-
+		return 0;*/
+		
 
 		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/PycharmProjects/open3d_test/test.txt", 1.0);
 		lmu::TimeTicker t;
 		std::vector<lmu::RansacResult> ransacResults; 		
-		for (const auto& cluster : clusters)
+		for (auto& cluster : clusters)
 		{		
 			//std::cout << "cluster" << std::endl;
 			
@@ -145,34 +155,125 @@ int main(int argc, char *argv[])
 			params.cluster_epsilon = 0.2;
 			params.epsilon = 0.2;
 			params.types = { cluster.manifoldType };
-						
-			ransacResults.push_back(lmu::extractManifoldsWithCGALRansac(cluster.pc, params));
-			//viewer.data().add_points(ransacRes.pc.leftCols(3), ransacRes.pc.rightCols(3));
+					
+			std::cout << "CLUSTER PC: " << cluster.pc.rows() << std::endl;
+			if (cluster.pc.rows() < 10)
+				continue;
+
+			ransacResults.push_back(lmu::extractManifoldsWithCGALRansac(cluster.pc, params, true));
+			
+			//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
 		}
+
+
+		std::cout << "Merge RANSAC Results" << std::endl;
 		auto ransacRes = lmu::mergeRansacResults(ransacResults);
+	
+		std::cout << "Manifolds: " << ransacRes.manifolds.size() << std::endl;
+		for (const auto& m : ransacRes.manifolds)
+		{
+			std::cout << manifoldTypeToString(m->type) << std::endl;
+
+			m->pc = lmu::farthestPointSampling(m->pc, 50);
+			viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
+		}
 
 		t.tick();
 		std::cout << "RANSAC Time: " << t.current << std::endl;
-
 
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);
 		lmu::PrimitiveSet primitives = res.primitives;
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
 
 		for (const auto& p : primitives)
+		{
 			std::cout << p << std::endl;
-		
-		//Display result primitives.
-				
-		std::vector<lmu::CSGNode> childs;
-		//for (const auto& p : primitives)
-		//	childs.push_back(lmu::geometry(p.imFunc));		
-		lmu::CSGNode n = lmu::opUnion(childs);
-		Eigen::Vector3d min = ransacRes.pc.leftCols(3).colwise().minCoeff();
-		Eigen::Vector3d max = ransacRes.pc.leftCols(3).colwise().maxCoeff();
-		auto m = lmu::computeMesh(n, Eigen::Vector3i(20, 20, 20), min, max);
+			//viewer.data().add_points(p.imFunc->meshCRef().vertices, p.imFunc->meshCRef().vertices);
+			//viewer.data().set_mesh(p.imFunc->meshCRef().vertices, p.imFunc->meshCRef().indices);
 
-		viewer.data().set_mesh(m.vertices, m.indices);
+		}
+
+		//Display result primitives.
+			
+		int vRows = 0; 
+		int iRows = 0; 
+		std::vector<lmu::CSGNode> childs;
+		for (const auto& p : primitives)
+		{
+			childs.push_back(lmu::geometry(p.imFunc));
+
+			vRows += p.imFunc->meshCRef().vertices.rows();
+			iRows += p.imFunc->meshCRef().indices.rows();			
+		}
+
+		Eigen::MatrixXi indices(iRows, 3);
+		Eigen::MatrixXd vertices(vRows, 3);
+		int vOffset = 0; 
+		int iOffset = 0;
+		for (const auto& p : primitives)
+		{
+			Eigen::MatrixXi newIndices(p.imFunc->meshCRef().indices.rows(), 3);
+			newIndices << p.imFunc->meshCRef().indices;
+
+			newIndices.array() += vOffset;
+
+			indices.block(iOffset,0, p.imFunc->meshCRef().indices.rows(),3) << newIndices;
+			vertices.block(vOffset, 0, p.imFunc->meshCRef().vertices.rows(), 3) << p.imFunc->meshCRef().vertices;
+		
+			vOffset += p.imFunc->meshCRef().vertices.rows();
+			iOffset += p.imFunc->meshCRef().indices.rows();
+		}
+
+		std::cout << "V: " << vertices << std::endl;
+		std::cout << " I: " << indices << std::endl;
+ 
+		//lmu::CSGNode n = lmu::opUnion(childs);
+		//Eigen::Vector3d min = ransacRes.pc.leftCols(3).colwise().minCoeff();
+		//Eigen::Vector3d max = ransacRes.pc.leftCols(3).colwise().maxCoeff();
+
+		//std::cout << "MIN: " << min << std::endl << " MAX: " << max << std::endl;
+		//auto m = lmu::computeMesh(n, Eigen::Vector3i(50, 50, 50), min, max);
+		//viewer.data().set_mesh(m.vertices, m.indices);
+
+
+
+		viewer.data().set_mesh(vertices,indices);
+		
+
+		/*auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.0700974, -0.0241359, 0.682183),Eigen::Vector3d(-0.00842728, -0.0110942, -0.281548), Eigen::Vector3d(0.00995219, -0.47185, -0.00839383),
+			Eigen::Vector3d(0.00245973, 0.287677, 0.00328013),Eigen::Vector3d(0.151568, -0.0039502, -0.00301725), Eigen::Vector3d(-0.457327, 0.00124607, 0.065478) });
+
+		//auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0, 0, 0.682183),Eigen::Vector3d(0,0,-0.281548), Eigen::Vector3d(0, -0.47185, 0),
+		//	Eigen::Vector3d(0, 0.287677, 0),Eigen::Vector3d(0.151568, 0, 0), Eigen::Vector3d(-0.457327, 0, 0) });
+
+		auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
+			Eigen::Vector3d(-0.00854944, -0.999898, -0.01140),Eigen::Vector3d(-0.999463, 0.0260481, 0.0198961), Eigen::Vector3d(0.989902, -0.00269717, -0.14173) });
+
+		//auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
+		//	Eigen::Vector3d(0,1,0),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
+
+		//_p = _n; 
+
+		auto poly = std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), _p, _n, "P1");
+		//	Plane n : -0.102153 - 0.0351733 0.994147 p : -0.0700974 - 0.0241359 0.682183
+		//	Plane n : -0.0298953 - 0.0393559 - 0.998778 p : -0.00842728 - 0.0110942 - 0.281548
+		//	Plane n : 0.0210838 - 0.99962 - 0.0177824 p : 0.00995219 - 0.47185 - 0.00839383
+		//	Plane n : -0.00854944 - 0.999898 - 0.011401 p : 0.00245973 0.287677 0.00328013
+		//	Plane n : -0.999463 0.0260481 0.0198961 p : 0.151568 - 0.0039502 - 0.00301725
+		//	Plane n : 0.989902 - 0.00269717 - 0.14173 p : -0.457327 0.00124607 0.065478
+
+		viewer.data().set_mesh(poly->meshCRef().vertices, poly->meshCRef().indices);
+		
+		//viewer.data().set_points(ransacRes.pc.leftCols(3), ransacRes.pc.rightCols(3));
+		std::cout << "P: " << _p.size() << std::endl;
+		
+		for (int i = 0; i < _p.size(); ++i)
+			viewer.data().add_points(_p[i].transpose(), _n[i].transpose());
+
+		viewer.data().add_points(poly->meshCRef().vertices, poly->meshCRef().vertices);
+		*/
+
+
 
 		////EITHER: Create RANSAC results based on csg tree.		
 		//double samplingStepSize = 0.2;
