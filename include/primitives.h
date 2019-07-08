@@ -123,8 +123,8 @@ namespace lmu
 	
 	struct Primitive
 	{
-		Primitive(const ImplicitFunctionPtr& imFunc, const ManifoldSet& ms, PrimitiveType type) :
-			imFunc(imFunc), ms(ms), type(type)
+		Primitive(const ImplicitFunctionPtr& imFunc, const ManifoldSet& ms, PrimitiveType type, bool cutout = false) :
+			imFunc(imFunc), ms(ms), type(type), cutout(cutout)
 		{
 		}
 				
@@ -141,6 +141,7 @@ namespace lmu
 		ImplicitFunctionPtr imFunc; 
 		ManifoldSet ms;
 		PrimitiveType type;
+		bool cutout;
 
 		friend std::ostream& operator<<(std::ostream& os, const Primitive& p);
 

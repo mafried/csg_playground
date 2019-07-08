@@ -15,7 +15,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, 0.2);
 
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -52,8 +52,7 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	bool createNew = db(rndEngine, parmb_t{ createNewMutationProb });
-	if (createNew)
+	if (db(rndEngine, parmb_t{ createNewMutationProb }))
 	{
 		std::cout << "Mutation Create New" << std::endl;
 		return create();
@@ -244,23 +243,19 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
 	ManifoldSet primManifoldSet;
 	auto primitiveType = PrimitiveType::Box;  // (PrimitiveType)du(rndEngine, parmu_t{ 1, numPrimitiveTypes - 1 }); TODO
 
-	//std::cout << "Primitive Type: " << primitiveTypeToString(primitiveType) << std::endl;
-
-	//for (const auto& m : ms)
-	//{
-	//	std::cout << "M: " <<  m->n.x() << " " << m->n.y() << " " << m->n.z() << std::endl;
-	//}
+	auto primitive = Primitive::None();
 
 	switch (primitiveType)
 	{
 	case PrimitiveType::Box:
 	{
 		ManifoldSet planes;
-
-		//std::cout << std::endl;
 
 		auto plane = getManifold(ManifoldType::Plane, anyDirection, {}, 0.0, true);
 		if (!plane)
@@ -271,32 +266,28 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		if (!plane)
 			break;
 		planes.push_back(plane);
-
-
+		
 		plane = getPerpendicularPlane(planes, planes, angleEpsilon);
 		if (!plane)
 			break;
 		planes.push_back(plane);
-
-
+		
+		plane = getParallelPlane(plane, planes, angleEpsilon);
+		if (!plane)
+			break;
+		planes.push_back(plane);
+		
+		plane = getPerpendicularPlane(planes, planes, angleEpsilon);
+		if (!plane)
+			break;
+		planes.push_back(plane);
+		
 		plane = getParallelPlane(plane, planes, angleEpsilon);
 		if (!plane)
 			break;
 		planes.push_back(plane);
 
-
-		plane = getPerpendicularPlane(planes, planes, angleEpsilon);
-		if (!plane)
-			break;
-		planes.push_back(plane);
-
-
-		plane = getParallelPlane(plane, planes, angleEpsilon);
-		if (!plane)
-			break;
-		planes.push_back(plane);
-
-		return createBoxPrimitive(planes);
+		primitive = createBoxPrimitive(planes);
 	}
 	break;
 
@@ -315,15 +306,21 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 				if (p)
 					planes.push_back(p);
 			}
-			return createCylinderPrimitive(cyl, planes);
+			primitive = createCylinderPrimitive(cyl, planes);
 		}
 	}
 	break;
 	case PrimitiveType::Sphere:
-		return createSpherePrimitive(getManifold(ManifoldType::Sphere, anyDirection, {}, 0.0, true));
+	{
+		primitive = createSpherePrimitive(getManifold(ManifoldType::Sphere, anyDirection, {}, 0.0, true));
+		break;
+	}
 	}
 
-	return lmu::Primitive::None();
+	// Primitive is cut out of the model or added.
+	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
+
+	return primitive;
 }
 
 lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, double angleEpsilon) const
@@ -331,7 +328,12 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	switch (p.type)
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
+	auto primitive = p;
+
+	switch (primitive.type)
 	{	
 		case PrimitiveType::Box:
 		{
@@ -343,14 +345,17 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 				auto newPlanes = ManifoldSet(p.ms);
 				newPlanes[planePairIdx+1] = newPlane;
 
-				return createBoxPrimitive(newPlanes);
+				primitive = createBoxPrimitive(newPlanes);
 			}
 
 			break;
 		}
 	}
 
-	return p;
+	// Primitive is cut out of the model or added.
+	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
+
+	return primitive;
 }
 
 // ==================== RANKER ====================
@@ -370,12 +375,15 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 	CSGNode node = opUnion();
 	for (const auto& p : ps)
-		node.addChild(geometry(p.imFunc));
+	{
+		node.addChild(p.cutout ? op<ComplementOperation>({ geometry(p.imFunc) }) : geometry(p.imFunc));
+	}
 
 	const double delta = 0.01;
 
 	int validPoints = 0; 
 	int checkedPoints = 0;
+
 	for (const auto& manifold : ms)
 	{
 		for (int i = 0; i < manifold->pc.rows(); ++i)
@@ -383,9 +391,13 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 			Eigen::Vector3d p = manifold->pc.block<1, 3>(i, 0);
 			Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
 
+			auto dg = node.signedDistanceAndGradient(p);
+			double d = dg[0];
+			Eigen::Vector3d g = dg.bottomRows(3);
+
 			//TODO: do something with the normal.
 
-			validPoints += std::abs(node.signedDistance(p)) < delta ? 1 : 0;
+			validPoints += std::abs(d) < delta && n.dot(g) >= 0.0 ? 1 : 0;
 			checkedPoints++;
 		}
 	}

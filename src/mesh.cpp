@@ -887,15 +887,18 @@ Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, d
 
 double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 {
-	auto worldP = _transform * localP;
+	//auto worldP = _transform * localP;
 
 	double s;
 	int i;
 	Eigen::RowVector3d c;
 	
-	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
+	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
 	
-	s = 1. - 2.*_hier.winding_number(worldP);
+	s = 1. - 2.*_hier.winding_number(localP);
+	//s = 2.0 * _hier.winding_number(worldP) - 1.0;
+
+	//std::cout << s << " ";
 	//s = 1;
 	
 	return std::sqrt(sqrd) * s;

@@ -54,69 +54,10 @@ int main(int argc, char *argv[])
 		
 	try
 	{
-		
-		/*double samplingStepSize = 0.1;
-		double maxDistance = 0.1;
-		double maxAngleDistance = 0.1;
-		double noiseSigma = 0.001;
-				
-		auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.0700974, -0.0241359, 0.682183),Eigen::Vector3d(-0.00842728, -0.0110942, -0.281548), Eigen::Vector3d(0.00995219, -0.47185, -0.00839383),
-		Eigen::Vector3d(0.00245973, 0.287677, 0.00328013),Eigen::Vector3d(0.151568, -0.0039502, -0.00301725), Eigen::Vector3d(-0.457327, 0.00124607, 0.065478) });
+		// =========================================================================================================
 
-		//auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0, 0, 0.682183),Eigen::Vector3d(0,0,-0.281548), Eigen::Vector3d(0, -0.47185, 0),
-		//	Eigen::Vector3d(0, 0.287677, 0),Eigen::Vector3d(0.151568, 0, 0), Eigen::Vector3d(-0.457327, 0, 0) });
-
-		auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0, 1).normalized(),Eigen::Vector3d(0, 0, -1).normalized(), Eigen::Vector3d(0, -1, 0).normalized(),
-		Eigen::Vector3d(0, 1,0).normalized(),Eigen::Vector3d(1,0,0).normalized(), Eigen::Vector3d(-1, 0, 0).normalized() });
-
-		//_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
-		//	Eigen::Vector3d(-0.00854944, 0.999898, -0.01140),Eigen::Vector3d(0.999463, 0.0260481, 0.0198961), Eigen::Vector3d(-0.989902, -0.00269717, -0.14173) });
-
-		_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
-			Eigen::Vector3d(0.00854944, 0.999898, 0.01140),Eigen::Vector3d(0.999463, -0.0260481, -0.0198961), Eigen::Vector3d(-0.989902, 0.00269717, 0.14173) });
-
-		//_n = std::vector<Eigen::Vector3d>(
-		//{
-		//	Eigen::Vector3d(0, -0.61803398874989485, -1),
-		//	Eigen::Vector3d(-1., 0, -0.61803398874989485),
-		//	Eigen::Vector3d(-0.61803398874989485, -1., 0),
-		//	Eigen::Vector3d(0, 0.61803398874989485, 1.),
-		//	Eigen::Vector3d(1., 0, 0.61803398874989485),
-		//	Eigen::Vector3d(0.61803398874989485, 1., 0),
-		//	Eigen::Vector3d(0, 0.61803398874989485, -1.),
-		//	Eigen::Vector3d(-1., 0, 0.61803398874989485),
-		//	Eigen::Vector3d(0.61803398874989485, -1., 0),
-		//	Eigen::Vector3d(0, -0.61803398874989485, 1.),
-		//	Eigen::Vector3d(1., 0, -0.61803398874989485),
-		//	Eigen::Vector3d(-0.61803398874989485, 1., 0)
-		//});
-		//_n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
-		//	Eigen::Vector3d(0,1,0),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
-
-		//_p = { Eigen::Vector3d(1,0,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1),
-		//	Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
-
-		//_n = { Eigen::Vector3d(1,1,0),Eigen::Vector3d(0,1,0), Eigen::Vector3d(0,0,1), 
-		//	       Eigen::Vector3d(-1,0,0),Eigen::Vector3d(0,-1,0), Eigen::Vector3d(0,0,-1) };
-			
-		lmu::CSGNode node = lmu::geo<lmu::IFPolytope>(Eigen::Affine3d::Identity(), _p, _n, "P1");
-		
-		viewer.data().set_mesh(node.function()->meshCRef().vertices, node.function()->meshCRef().indices);
-		viewer.data().set_points(node.function()->meshCRef().vertices, node.function()->meshCRef().vertices);
-
-		std::cout << "HERE" << std::endl;
-
-		//lmu::CSGNodeSamplingParams params(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(2, 2, 2));
-		//auto pointCloud = lmu::computePointCloud(node, params);
-		//std::cout << pointCloud.size();
-		//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-		
-	    //viewer.data().set_mesh(node.function()->meshRef().vertices, node.function()->meshRef().indices);
-		
-		goto _LAUNCH;
-		*/
-		
 		// Extraction using RANSAC
+
 		/*double samplingStepSize = 0.2;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
@@ -139,7 +80,10 @@ int main(int argc, char *argv[])
 			lmu::writeToFile("ransac_res.txt", ransacRes);
 
 		return 0;*/
+
+		// =========================================================================================================
 		
+		// Primitive estimation based on clusters.
 
 		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/PycharmProjects/open3d_test/test.txt", 1.0);
 		lmu::TimeTicker t;
@@ -164,7 +108,6 @@ int main(int argc, char *argv[])
 			
 			//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
 		}
-
 
 		std::cout << "Merge RANSAC Results" << std::endl;
 		auto ransacRes = lmu::mergeRansacResults(ransacResults);
@@ -223,21 +166,26 @@ int main(int argc, char *argv[])
 			vOffset += p.imFunc->meshCRef().vertices.rows();
 			iOffset += p.imFunc->meshCRef().indices.rows();
 		}
-
-		std::cout << "V: " << vertices << std::endl;
-		std::cout << " I: " << indices << std::endl;
+		//viewer.data().set_mesh(vertices, indices);
  
-		//lmu::CSGNode n = lmu::opUnion(childs);
-		//Eigen::Vector3d min = ransacRes.pc.leftCols(3).colwise().minCoeff();
-		//Eigen::Vector3d max = ransacRes.pc.leftCols(3).colwise().maxCoeff();
+		lmu::CSGNode n = lmu::opUnion(childs);
+		
+		auto node = lmu::opUnion();
+		for (const auto& p : primitives)
+		{
+			node.addChild(p.cutout ? lmu::op<lmu::ComplementOperation>({ geometry(p.imFunc) }) : geometry(p.imFunc));
+		}
+		
+		//Eigen::Vector3d min = Eigen::Vector3d(-2, -2, -2);
+		//Eigen::Vector3d max = Eigen::Vector3d(2, 2, 2);
 
-		//std::cout << "MIN: " << min << std::endl << " MAX: " << max << std::endl;
-		//auto m = lmu::computeMesh(n, Eigen::Vector3i(50, 50, 50), min, max);
-		//viewer.data().set_mesh(m.vertices, m.indices);
+		//lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02);
+		//auto m = lmu::computePointCloud(node, p);
+		//viewer.data().set_points(m.leftCols(3), m.rightCols(3));
 
+		auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
+		viewer.data().set_mesh(m.vertices, m.indices);
 
-
-		viewer.data().set_mesh(vertices,indices);
 		
 
 		/*auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.0700974, -0.0241359, 0.682183),Eigen::Vector3d(-0.00842728, -0.0110942, -0.281548), Eigen::Vector3d(0.00995219, -0.47185, -0.00839383),
