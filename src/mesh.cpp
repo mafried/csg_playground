@@ -876,11 +876,11 @@ bool lmu::IFPolytope::empty() const
 
 Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, double h)
 {
-	auto worldP = _transform * localP;
+	//auto worldP = _transform * localP;
 
 	int i;
 	Eigen::RowVector3d c;
-	_tree.squared_distance(_mesh.vertices, _mesh.indices, worldP.transpose(), i, c);
+	_tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
 	
 	return _mesh.normals.row(i);
 }

@@ -11,11 +11,13 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	PrimitiveSetIterationStopCriterion criterion(100);
 
-	PrimitiveSetCreator creator(ransacRes.manifolds, 0.0, 0.5, 0.3, 1, 1, 5, /*M_PI / 18.0*/ M_PI / 9.0);
+	int maxPrimitiveSetSize = 5;
 
-	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, 0.2);
+	PrimitiveSetCreator creator(ransacRes.manifolds, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, /*M_PI / 18.0*/ M_PI / 9.0);
 
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, false, Schedule(), Schedule(), false);
+	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, 0.2, maxPrimitiveSetSize);
+
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -360,11 +362,12 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 // ==================== RANKER ====================
 
-lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon) :
+lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon,int maxPrimitiveSetSize) :
 	pc(pc),
 	ms(ms),
 	distanceEpsilon(distanceEpsilon),
-	bestRank(-std::numeric_limits<double>::max())
+	bestRank(-std::numeric_limits<double>::max()),
+	maxPrimitiveSetSize(maxPrimitiveSetSize)
 {
 }
 
@@ -402,11 +405,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 		}
 	}
 
-	double s =0.1; // 0.01;
+	double s = 0.5;
 
 	//std::cout << "Rank Ready." << std::endl;
 
-	double r = (double)validPoints / (double)checkedPoints - s * ps.size();
+	double r = (double)validPoints / (double)checkedPoints - s * (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	if(bestRank < r) 
 	{

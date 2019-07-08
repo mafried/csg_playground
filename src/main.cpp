@@ -179,12 +179,12 @@ int main(int argc, char *argv[])
 		//Eigen::Vector3d min = Eigen::Vector3d(-2, -2, -2);
 		//Eigen::Vector3d max = Eigen::Vector3d(2, 2, 2);
 
-		//lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02);
-		//auto m = lmu::computePointCloud(node, p);
-		//viewer.data().set_points(m.leftCols(3), m.rightCols(3));
+		lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02);
+		auto m = lmu::computePointCloud(node, p);
+		viewer.data().set_points(m.leftCols(3), m.rightCols(3));
 
-		auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		viewer.data().set_mesh(m.vertices, m.indices);
+		//auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
+		//viewer.data().set_mesh(m.vertices, m.indices);
 
 		
 

@@ -46,7 +46,7 @@ namespace lmu
 
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon);
+		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon, int maxPrimitiveSetSize);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 		std::string info() const;
@@ -60,6 +60,7 @@ namespace lmu
 		PointCloud pc;
 		ManifoldSet ms;
 		double distanceEpsilon;
+		int maxPrimitiveSetSize;
 	};
 
 	struct GAResult
