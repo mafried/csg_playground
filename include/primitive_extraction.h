@@ -14,6 +14,10 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, double createNewMutationProb, int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
 
+		int getRandomPrimitiveIdxNoSphere(const PrimitiveSet & ps) const;
+
+		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
+
 		PrimitiveSet mutate(const PrimitiveSet& ps) const;
 		std::vector<PrimitiveSet> crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const;
 		PrimitiveSet create() const;

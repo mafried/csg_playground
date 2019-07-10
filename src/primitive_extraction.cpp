@@ -46,6 +46,33 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	rndEngine.seed(rndDevice());
 }
 
+int lmu::PrimitiveSetCreator::getRandomPrimitiveIdxNoSphere(const PrimitiveSet& ps) const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	int sphereCounter = 0;
+	for (const auto& p : ps)
+		sphereCounter += p.type == lmu::PrimitiveType::Sphere ? 1 : 0;
+
+	// All spheres!
+	if (sphereCounter == ps.size()) return -1;
+	
+	while (true)
+	{
+		int primitiveIdx = du(rndEngine, parmu_t{ 0, (int)ps.size() - 1 });
+		if (ps[primitiveIdx].type != PrimitiveType::Sphere) return primitiveIdx;
+	}
+}
+
+int lmu::PrimitiveSetCreator::getRandomPrimitiveIdx(const PrimitiveSet& ps) const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	return du(rndEngine, parmu_t{ 0, (int)ps.size() - 1 });
+}
+
 lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 {
 	static std::bernoulli_distribution db{};
@@ -54,41 +81,39 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	if (db(rndEngine, parmb_t{ createNewMutationProb }))
+	if (db(rndEngine, parmb_t{ createNewMutationProb }) || ps.empty())
 	{
 		std::cout << "Mutation Create New" << std::endl;
 		return create();
 	}
 
 	auto newPS = ps;
-	bool intra = db(rndEngine, parmb_t{ intraMutationProb });
-
-	for (int i = 0; i < du(rndEngine, parmu_t{ 0, (int)maxMutationIterations }); ++i)
+	
+	for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxMutationIterations }); ++i)
 	{
-		if (newPS.empty())
-			break;
+		bool intra = db(rndEngine, parmb_t{ intraMutationProb });
 
-		int primitiveIdx = du(rndEngine, parmu_t{ 0, (int)newPS.size() - 1 });
-
-		auto newP = Primitive::None();
 		if (intra)
 		{			
 			std::cout << "Mutation Intra" << std::endl;
 
-			newP = mutatePrimitive(newPS[primitiveIdx], angleEpsilon);
+			int idx = getRandomPrimitiveIdx(newPS);
+			auto newP = mutatePrimitive(newPS[idx], angleEpsilon);
+			newPS[idx] = newP.isNone() ? newPS[idx] : newP;
 		}
 		else
 		{
 			std::cout << "Mutation Extra" << std::endl;
 
-			newP = createPrimitive();			
+			int idx = getRandomPrimitiveIdxNoSphere(newPS); // Spheres are never replaced.
+			if (idx != -1)
+			{
+				auto newP = createPrimitive();
+				newPS[idx] = newP.isNone() ? newPS[idx] : newP;
+			}
 		}
 
-		if (!newP.isNone())
-		{
-			std::cout << "Mutation Success" << std::endl;
-			newPS[primitiveIdx] = newP;
-		}
+		//TODO: Add mutation operators that change the size of the primitive set.
 	}
 
 	return newPS;
@@ -107,23 +132,26 @@ std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const Primiti
 	PrimitiveSet newPS1 = ps1;
 	PrimitiveSet newPS2 = ps2;
 
-	bool intra = db(rndEngine, parmb_t{ intraMutationProb });
-
-	for (int i = 0; i < du(rndEngine, parmu_t{ 0, (int)maxCrossoverIterations }); ++i)
+	for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxCrossoverIterations }); ++i)
 	{
+		bool intra = db(rndEngine, parmb_t{ intraMutationProb });
+
 		if (intra)
 		{
-			//TODO
+			//TODO (if it makes sense).
 		}
 		else
 		{
 			if (!ps1.empty() && !ps2.empty())
 			{
-				int idx1 = du(rndEngine, parmu_t{ 0, (int)ps1.size() - 1 });
-				int idx2 = du(rndEngine, parmu_t{ 0, (int)ps2.size() - 1 });
+				int idx1 = getRandomPrimitiveIdxNoSphere(ps1); // Spheres are never replaced.
+				int idx2 = getRandomPrimitiveIdxNoSphere(ps2); // Spheres are never replaced.
 
-				newPS1[idx1] = ps2[idx2];
-				newPS2[idx2] = ps1[idx1];
+				if (idx1 != -1 && idx2 != -1)
+				{
+					newPS1[idx1] = ps2[idx2];
+					newPS2[idx2] = ps1[idx1];
+				}
 			}
 		}
 	}
@@ -135,14 +163,26 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::create() const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
+	
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
 
 	int setSize = du(rndEngine, parmu_t{ 1, (int)maxPrimitiveSetSize });
 
 	PrimitiveSet ps;
-	//ps.reserve(setSize);
+	
+	// Fill primitive set with all spheres. 
+	for (const auto& m : ms)
+	{
+		if (m->type == ManifoldType::Sphere)
+		{
+			auto sphere = createSpherePrimitive(m);
+			sphere.cutout = db(rndEngine, parmb_t{ 0.5 });
+			ps.push_back(sphere);
+		}
+	}
 
-	//std::cout << "Create initial population. Size: " << setSize << std::endl;
-
+	// Fill primitive set with randomly created primitives. 
 	while (ps.size() < setSize)
 	{
 		//std::cout << "try to create primitive" << std::endl;
@@ -293,7 +333,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	}
 	break;
 
-	case PrimitiveType::Cone:
+	//case PrimitiveType::Cone:
 		//TODO
 		//break;
 	case PrimitiveType::Cylinder:
@@ -312,11 +352,11 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		}
 	}
 	break;
-	case PrimitiveType::Sphere:
-	{
-		primitive = createSpherePrimitive(getManifold(ManifoldType::Sphere, anyDirection, {}, 0.0, true));
-		break;
-	}
+	//case PrimitiveType::Sphere:
+	//{
+	//	primitive = createSpherePrimitive(getManifold(ManifoldType::Sphere, anyDirection, {}, 0.0, true));
+	//	break;
+	//}
 	}
 
 	// Primitive is cut out of the model or added.
@@ -352,6 +392,10 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 			break;
 		}
+
+		case PrimitiveType::Sphere: 
+			//Do nothing. 
+			break;
 	}
 
 	// Primitive is cut out of the model or added.
@@ -405,7 +449,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 		}
 	}
 
-	double s = 0.5;
+	double s = 0.2;
 
 	//std::cout << "Rank Ready." << std::endl;
 
