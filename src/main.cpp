@@ -58,29 +58,34 @@ int main(int argc, char *argv[])
 
 		// Extraction using RANSAC
 
-		/*double samplingStepSize = 0.2;
+		double samplingStepSize = 0.3;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
 		double noiseSigma = 0.03;
 		
 		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
-		auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);		
+		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
+		auto pointCloud = lmu::readPointCloudXYZ("C:/Users/friedrich/Downloads/RANSAC_TEST/RANSAC_TEST/cms_seg-segmented.xyzn"); //lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma,samplingStepSize));
 		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
-		//viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+	 
+		std::cout << "Point cloud size: " << pointCloud.rows() << std::endl;
 
 		auto params = lmu::RansacParams();
-		params.probability = 0.1;
+		params.probability = 0.001;
 		params.min_points = 500;
 		params.normal_threshold = 0.9; 
-		params.cluster_epsilon = 0.2;
-		params.epsilon = 0.2;
+		params.cluster_epsilon = 0.02;
+		params.epsilon = 0.01;
 
-		auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, params);
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params);
 			lmu::writeToFile("ransac_res.txt", ransacRes);
 
-		return 0;*/
+		for(auto const& m : ransacRes.manifolds)
+			viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
 
+
+		goto _LAUNCH;
+		/*
 		// =========================================================================================================
 		
 		// Primitive estimation based on clusters.

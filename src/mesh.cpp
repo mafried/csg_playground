@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <igl/readOBJ.h>
+#include <igl/readOFF.h>
 #include <igl/signed_distance.h>
 #include <igl/upsample.h>
 
@@ -484,6 +485,29 @@ Mesh lmu::fromOBJFile(const std::string & file)
 	return Mesh(vertices, indices);
 }
 
+Mesh lmu::fromOFFFile(const std::string & file)
+{
+	Eigen::MatrixXd vertices;
+	Eigen::MatrixXi indices;
+
+	Mesh mesh;
+
+	if (!igl::readOFF(file, vertices, indices))
+	{
+		std::cout << "Could not read off file '" << file << "'." << std::endl;
+		return Mesh();
+	}
+	return Mesh(vertices, indices);
+}
+
+//Mesh must not have any transform other than identity.
+void lmu::scaleMesh(Mesh& mesh, double largestDim)
+{
+	double factor = (mesh.vertices.colwise().maxCoeff() - mesh.vertices.colwise().minCoeff()).cwiseAbs().maxCoeff();
+	
+	mesh.vertices = mesh.vertices / factor * largestDim;
+}
+
 std::string lmu::iFTypeToString(ImplicitFunctionType type)
 {
 	switch (type)
@@ -510,7 +534,7 @@ Eigen::Matrix3d rotationMatrixFrom(const Eigen::Vector3d& x, Eigen::Vector3d& y)
 	m.col(2) = x.cross(y).normalized();
 	m.col(1) = m.col(2).cross(x).normalized();
 
-	return m;
+	return m; 
 }
 
 std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string & file, double scaling)

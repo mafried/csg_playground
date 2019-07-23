@@ -59,6 +59,9 @@ namespace lmu
 	Mesh createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n);
 
 	Mesh fromOBJFile(const std::string& file);
+	Mesh fromOFFFile(const std::string& file);
+
+	void scaleMesh(Mesh& mesh, double largestDim);
 
 	enum class ImplicitFunctionType
 	{

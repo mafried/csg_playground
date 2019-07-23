@@ -19,11 +19,11 @@ typedef CGAL::Second_of_pair_property_map<Point_with_normal> Normal_map;
 typedef CGAL::Shape_detection_3::Shape_detection_traits<Kernel,
 	Pwn_vector, Point_map, Normal_map>            Traits;
 typedef CGAL::Shape_detection_3::Efficient_RANSAC<Traits> Efficient_ransac;
-typedef CGAL::Shape_detection_3::Cone<Traits>             Cone;
-typedef CGAL::Shape_detection_3::Cylinder<Traits>         Cylinder;
-typedef CGAL::Shape_detection_3::Plane<Traits>            Plane;
-typedef CGAL::Shape_detection_3::Sphere<Traits>           Sphere;
-typedef CGAL::Shape_detection_3::Torus<Traits>            Torus;
+typedef CGAL::Shape_detection_3::Cone<Traits>             CGALCone;
+typedef CGAL::Shape_detection_3::Cylinder<Traits>         CGALCylinder;
+typedef CGAL::Shape_detection_3::Plane<Traits>            CGALPlane;
+typedef CGAL::Shape_detection_3::Sphere<Traits>           CGALSphere;
+typedef CGAL::Shape_detection_3::Torus<Traits>            CGALTorus;
 
 lmu::PointCloud getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& shape, const Pwn_vector& pointsWithNormals)
 {
@@ -143,18 +143,18 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 	// Register shapes for detection
 	if (params.types.empty())
 	{
-		ransac.add_shape_factory<Plane>();
-		ransac.add_shape_factory<Sphere>();
-		ransac.add_shape_factory<Cylinder>();
+		ransac.add_shape_factory<CGALPlane>();
+		ransac.add_shape_factory<CGALSphere>();
+		ransac.add_shape_factory<CGALCylinder>();
 	}
 	else
 	{
 		if (params.types.count(ManifoldType::Cylinder))
-			ransac.add_shape_factory<Cylinder>();
+			ransac.add_shape_factory<CGALCylinder>();
 		if (params.types.count(ManifoldType::Plane))
-			ransac.add_shape_factory<Plane>();
+			ransac.add_shape_factory<CGALPlane>();
 		if (params.types.count(ManifoldType::Sphere))
-			ransac.add_shape_factory<Sphere>();
+			ransac.add_shape_factory<CGALSphere>();
 	}
 	
 	//ransac.add_shape_factory<Cone>();
@@ -169,16 +169,16 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 	parameters.min_points = params.min_points;//(double)pc.rows() * 0.01;
 
 	// Sets maximum Euclidean distance between a point and a shape.
-	parameters.epsilon = params.epsilon;//2.0 / diagLength; //0.02
+	parameters.epsilon = params.epsilon * diagLength;//2.0 / diagLength; //0.02
 
 	// Sets maximum Euclidean distance between points to be clustered.
-	parameters.cluster_epsilon = params.cluster_epsilon;//6.0 / diagLength; //0.1
+	parameters.cluster_epsilon = params.cluster_epsilon * diagLength;//6.0 / diagLength; //0.1
 
 	// Sets maximum normal deviation.
 	// 0.9 < dot(surface_normal, point_normal); 
 	parameters.normal_threshold = params.normal_threshold;//0.9;
 
-	ransac.preprocess();
+	//ransac.preprocess();
 	ransac.detect(parameters);
 
 	std::cout << ransac.shapes().end() - ransac.shapes().begin() << " detected shapes, "
@@ -190,7 +190,7 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 	for (const auto& shape : ransac.shapes())
 	{
 		// Get specific parameters depending on detected shape.
-		if (Sphere* sphere = dynamic_cast<Sphere*>(shape.get()))
+		if (CGALSphere* sphere = dynamic_cast<CGALSphere*>(shape.get()))
 		{
 			auto m = std::make_shared<lmu::Manifold>(
 				lmu::ManifoldType::Sphere,
@@ -205,7 +205,7 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 
 			manifolds.push_back(m);
 		}
-		else if (Cylinder* cylinder = dynamic_cast<Cylinder*>(shape.get()))
+		else if (CGALCylinder* cylinder = dynamic_cast<CGALCylinder*>(shape.get()))
 		{
 			auto m = std::make_shared<lmu::Manifold>(
 				lmu::ManifoldType::Cylinder,
@@ -220,7 +220,7 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 
 			manifolds.push_back(m);
 		}
-		else if (Plane* plane = dynamic_cast<Plane*>(shape.get()))
+		else if (CGALPlane* plane = dynamic_cast<CGALPlane*>(shape.get()))
 		{
 			Eigen::Vector3d n(plane->plane_normal().x(), plane->plane_normal().y(), plane->plane_normal().z());
 		
@@ -243,14 +243,185 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 		for (auto& m : manifolds) {
 			m->projectPointsOnSurface();
 		}
-	}
-	
+	}	
 	RansacResult res;
 	res.manifolds = manifolds;
 	res.pc = pc;
 
 	return res;
 }
+
+#include <RansacShapeDetector.h>
+#include <PlanePrimitiveShapeConstructor.h>
+#include <CylinderPrimitiveShapeConstructor.h>
+#include <SpherePrimitiveShapeConstructor.h>
+#include <PlanePrimitiveShape.h>
+#include <CylinderPrimitiveShape.h>
+#include <SpherePrimitiveShape.h>
+
+// #include <ConePrimitiveShapeConstructor.h>
+// #include <TorusPrimitiveShapeConstructor.h>
+
+void compute_bbox(const PointCloud& pc, Vec3f& min_pt, Vec3f& max_pt)
+{
+	float fmax = std::numeric_limits<float>::max();
+	min_pt[0] = fmax;
+	min_pt[1] = fmax;
+	min_pt[2] = fmax;
+
+	max_pt[0] = -fmax;
+	max_pt[1] = -fmax;
+	max_pt[2] = -fmax;
+
+	for (unsigned int i = 0; i < pc.size(); ++i) {
+		Point p = pc[i];
+		min_pt[0] = std::min(min_pt[0], p[0]);
+		min_pt[1] = std::min(min_pt[1], p[1]);
+		min_pt[2] = std::min(min_pt[2], p[2]);
+		max_pt[0] = std::max(max_pt[0], p[0]);
+		max_pt[1] = std::max(max_pt[1], p[1]);
+		max_pt[2] = std::max(max_pt[2], p[2]);
+	}
+}
+
+lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, bool projectPointsOnSurface)
+{
+	// Convert point cloud.
+	::PointCloud pcConv;
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		::Point point(
+			Vec3f(pc.coeff(i, 0), pc.coeff(i, 1), pc.coeff(i, 2)),
+			Vec3f(pc.coeff(i, 3), pc.coeff(i, 4), pc.coeff(i, 5))
+		);
+		
+		//std::cout << pc.row(i).x() << " " << pc.row(i).y() << " " << pc.row(i).z() << std::endl;
+		//std::cout << point[0] << " " << point[1] << " " << point[2] << std::endl;
+
+		pcConv.push_back(point);
+	}
+
+	// Compute bounding box.
+	Vec3f min_pt, max_pt;
+	compute_bbox(pcConv, min_pt, max_pt);
+	pcConv.setBBox(min_pt, max_pt);
+
+	//std::cout << "Scale: " << pcConv.getScale() << std::endl;
+
+	RansacShapeDetector::Options ransacOptions;
+	
+	ransacOptions.m_epsilon = params.epsilon * pcConv.getScale();
+	ransacOptions.m_bitmapEpsilon = params.cluster_epsilon * pcConv.getScale();
+	ransacOptions.m_normalThresh = params.normal_threshold;
+	ransacOptions.m_minSupport = params.min_points;
+	ransacOptions.m_probability = params.probability;
+
+	RansacShapeDetector detector(ransacOptions);
+
+	if (params.types.count(ManifoldType::Cylinder) || params.types.empty())
+		detector.Add(new CylinderPrimitiveShapeConstructor());	
+	if (params.types.count(ManifoldType::Plane) || params.types.empty())
+		detector.Add(new PlanePrimitiveShapeConstructor());
+	if (params.types.count(ManifoldType::Sphere) || params.types.empty())
+		detector.Add(new SpherePrimitiveShapeConstructor());
+
+	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapes;
+
+	//std::cout << "Orig Ransac" << std::endl;
+
+
+	size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &shapes);
+	std::cout << "detection finished " << remaining << std::endl;
+	std::cout << "number of shapes: " << shapes.size() << std::endl;
+
+	ManifoldSet manifolds;
+	for (auto& shape : shapes)
+	{
+		lmu::ManifoldPtr m = nullptr; 
+
+		switch (shape.first->Identifier())
+		{
+		case 0: // Plane
+		{
+			auto plane = dynamic_cast<PlanePrimitiveShape*>(shape.first.Ptr());
+			auto planeParams = plane->Internal();
+
+			m = std::make_shared<lmu::Manifold>(
+				lmu::ManifoldType::Plane,
+				Eigen::Vector3d(planeParams.getPosition()[0], planeParams.getPosition()[1], planeParams.getPosition()[2]),
+				Eigen::Vector3d(planeParams.getNormal()[0], planeParams.getNormal()[1], planeParams.getNormal()[2]).normalized(),
+				Eigen::Vector3d(0, 0, 0)
+				);			
+			break;
+		}
+		case 1: // Sphere
+		{
+			auto sphere = dynamic_cast<SpherePrimitiveShape*>(shape.first.Ptr());
+			auto sphereParams = sphere->Internal();
+
+			m = std::make_shared<lmu::Manifold>(
+				lmu::ManifoldType::Sphere,
+				Eigen::Vector3d(sphereParams.Center()[0], sphereParams.Center()[1], sphereParams.Center()[2]),
+				Eigen::Vector3d(0, 0, 0),
+				Eigen::Vector3d(sphereParams.Radius(), sphereParams.Radius(), sphereParams.Radius())
+				);			
+			break;
+		}
+		case 2: // Cylinder
+		{
+			auto cylinder = dynamic_cast<CylinderPrimitiveShape*>(shape.first.Ptr());
+			auto cylinderParams = cylinder->Internal();
+
+			auto m = std::make_shared<lmu::Manifold>(
+				lmu::ManifoldType::Cylinder,
+				Eigen::Vector3d(cylinderParams.AxisPosition()[0], cylinderParams.AxisPosition()[1], cylinderParams.AxisPosition()[2]),
+				Eigen::Vector3d(cylinderParams.AxisDirection()[0], cylinderParams.AxisDirection()[1], cylinderParams.AxisDirection()[2]).normalized(),
+				Eigen::Vector3d(cylinderParams.Radius(), cylinderParams.Radius(), cylinderParams.Radius())
+				);			
+			break;
+		}
+		}
+
+		if (m)
+		{
+			manifolds.push_back(m);
+			std::cout << *m << std::endl;
+		}
+	}
+
+	//Assign point clouds to manifolds.
+	size_t sum = 0;
+	for (unsigned int i = 0; i < shapes.size(); ++i) 
+	{
+		manifolds[i]->pc = lmu::PointCloud(shapes[i].second, 6);
+
+		size_t k = 0;
+		for (unsigned int j = pcConv.size() - (sum + shapes[i].second); j < pcConv.size() - sum; ++j) 
+		{
+			Point p = pcConv[j];
+			manifolds[i]->pc.row(k) << p.pos[0], p.pos[1], p.pos[2], p.normal[0], p.normal[1], p.normal[2];
+			
+			// Normalize normal.
+			manifolds[i]->pc.row(k).rightCols(3).normalize();
+			
+			
+			//std::cout << manifolds[i]->pc.row(k) << std::endl;
+			
+			k++;
+		}
+		sum += shapes[i].second;
+	}
+
+	RansacResult res;
+	res.manifolds = manifolds;
+	res.pc = pc;
+
+	std::cout << "number of manifolds: " << manifolds.size() << std::endl;
+
+
+	return res;
+}
+
 
 lmu::PointCloud readPointCloudFromStream(std::istream& str)
 {
@@ -289,6 +460,8 @@ void writePointCloudToStream(std::ostream& str, const lmu::PointCloud& pc)
 void lmu::writeToFile(const std::string& file, const RansacResult& res)
 {
 	std::ofstream s(file);
+
+	s.precision(16);
 
 	// Point cloud.
 	writePointCloudToStream(s, res.pc);

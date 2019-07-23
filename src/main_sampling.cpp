@@ -499,7 +499,7 @@ int main(int argc, char *argv[])
 
   auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
   
-  auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);
+  auto pointCloud = pointCloudFromMesh(mesh, maxDistance, samplingStepSize, noiseSigma);
   
   //lmu::computePointCloud(node, samplingParams);
   std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;

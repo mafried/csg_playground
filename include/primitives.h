@@ -189,6 +189,8 @@ namespace lmu
 	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
 
 	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params, bool projectPointsOnSurface = false);
+	RansacResult extractManifoldsWithOrigRansac(const PointCloud& pc, const RansacParams& params, bool projectPointsOnSurface = false);
+
 	void writeToFile(const std::string& file, const RansacResult& res);
 	RansacResult readFromFile(const std::string& file);
 }
