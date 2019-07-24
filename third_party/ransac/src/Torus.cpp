@@ -14,6 +14,21 @@
 #include <omp.h>
 #endif
 
+Torus::Torus()
+{
+	// TODO init normal, center and m/M radius to 0?
+}
+
+Torus::Torus(const Vec3f& normal, const Vec3f& center, float minor_radius, float major_radius) 
+{
+	m_normal = normal;
+	m_rminor = minor_radius;
+	m_rmajor = major_radius;
+	m_center = center;
+	m_appleShaped = m_rmajor < m_rminor;
+	ComputeAppleParams();
+}
+
 template< class InIteratorT, class OutIteratorT >
 static void SpinImage(const Vec3f &axisPos, const Vec3f &axisDir,
 	InIteratorT begin, InIteratorT end, OutIteratorT out)

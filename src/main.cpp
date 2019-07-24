@@ -65,7 +65,8 @@ int main(int argc, char *argv[])
 		
 		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
 		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		auto pointCloud = lmu::readPointCloudXYZ("C:/Users/friedrich/Downloads/RANSAC_TEST/RANSAC_TEST/cms_seg-segmented.xyzn"); //lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma,samplingStepSize));
+		//auto pointCloud = lmu::readPointCloudXYZ("C:/Users/friedrich/Downloads/RANSAC_TEST/RANSAC_TEST/cms_seg-segmented.xyzn"); 
+		auto pointCloud = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma,samplingStepSize));
 		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
 	 
 		std::cout << "Point cloud size: " << pointCloud.rows() << std::endl;
@@ -77,12 +78,13 @@ int main(int argc, char *argv[])
 		params.cluster_epsilon = 0.02;
 		params.epsilon = 0.01;
 
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params);
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params, false, 1, lmu::RansacMergeParams(0.01, 0.95, 0.62831));
 			lmu::writeToFile("ransac_res.txt", ransacRes);
 
 		for(auto const& m : ransacRes.manifolds)
-			viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
+			viewer.data().set_points(m->pc.leftCols(3), m->pc.rightCols(3));
 
+		//viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 		goto _LAUNCH;
 		/*

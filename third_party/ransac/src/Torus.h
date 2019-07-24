@@ -22,6 +22,8 @@ class DLL_LINKAGE Torus
 {
 public:
 	enum { RequiredSamples = 4 };
+	Torus();
+	Torus(const Vec3f& normal, const Vec3f& center, float minor_radius, float major_radius); 
 	bool Init(const std::vector< Vec3f > &samples);
 	bool InitAverage(const std::vector< Vec3f > &samples);
 	bool Init(bool binary, std::istream *i);

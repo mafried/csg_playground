@@ -258,6 +258,7 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 #include <PlanePrimitiveShape.h>
 #include <CylinderPrimitiveShape.h>
 #include <SpherePrimitiveShape.h>
+#include <Merge.h>
 
 // #include <ConePrimitiveShapeConstructor.h>
 // #include <TorusPrimitiveShapeConstructor.h>
@@ -284,7 +285,8 @@ void compute_bbox(const PointCloud& pc, Vec3f& min_pt, Vec3f& max_pt)
 	}
 }
 
-lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, bool projectPointsOnSurface)
+lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, 
+	bool projectPointsOnSurface, int ransacIterations, const lmu::RansacMergeParams& rmParams)
 {
 	// Convert point cloud.
 	::PointCloud pcConv;
@@ -325,25 +327,68 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 	if (params.types.count(ManifoldType::Sphere) || params.types.empty())
 		detector.Add(new SpherePrimitiveShapeConstructor());
 
-	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapes;
+	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapesAndPCSizes;
+	for (int i = 0; i < ransacIterations; ++i)
+	{
+		std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > perIterShapes;
 
-	//std::cout << "Orig Ransac" << std::endl;
+		size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &perIterShapes);
+		std::cout << "detection finished " << remaining << std::endl;
+		std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
 
+		shapesAndPCSizes.insert(shapesAndPCSizes.end(), perIterShapes.begin(), perIterShapes.end());
+	}
+	std::vector<::Primitive> shapes;
+	if (ransacIterations > 1)
+	{
+		shapes = MergeSimilarPrimitives(shapesAndPCSizes, rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold);
+	}
+	else
+	{
+		for (const auto& p : shapesAndPCSizes)
+			shapes.push_back(p.first);
+	}
 
-	size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &shapes);
-	std::cout << "detection finished " << remaining << std::endl;
-	std::cout << "number of shapes: " << shapes.size() << std::endl;
+	// Get per-shape point clouds.
+	/*std::unordered_map<PrimitiveShape*, std::vector<Eigen::Matrix<double, 1, 6>>> perShapePCs;
+	for (int i = 0; i < pcConv.size(); ++i)
+	{
+		double d = std::numeric_limits<double>::max();
+		int shapeIdx = 0;
+		int selectedShapeIdx = 0;
+		for (const auto& s : shapes)
+		{
+			double sd = std::abs(s->SignedDistance(pcConv[i].pos));
+			
+			//std::cout << nd << std::endl;
+			if (sd < d)
+			{
+				selectedShapeIdx = shapeIdx;
+				d = sd;
+			}
+			shapeIdx++;
+		}
 
+		if (d < ransacOptions.m_epsilon && std::abs(shapes[selectedShapeIdx]->NormalDeviation(pcConv[i].pos, pcConv[i].normal) - 1.0) < ransacOptions.m_normalThresh)
+		{
+			Eigen::Matrix<double, 1, 6> pt; 
+			pt << pcConv[i].pos[0], pcConv[i].pos[1], pcConv[i].pos[2],
+				pcConv[i].normal[0], pcConv[i].normal[1], pcConv[i].normal[2];
+			perShapePCs[shapes[selectedShapeIdx]].push_back(pt);
+		}
+	}*/
+
+	// Convert to manifolds.
 	ManifoldSet manifolds;
 	for (auto& shape : shapes)
 	{
 		lmu::ManifoldPtr m = nullptr; 
 
-		switch (shape.first->Identifier())
+		switch (shape->Identifier())
 		{
 		case 0: // Plane
 		{
-			auto plane = dynamic_cast<PlanePrimitiveShape*>(shape.first.Ptr());
+			auto plane = dynamic_cast<PlanePrimitiveShape*>(shape.Ptr());
 			auto planeParams = plane->Internal();
 
 			m = std::make_shared<lmu::Manifold>(
@@ -356,7 +401,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 		}
 		case 1: // Sphere
 		{
-			auto sphere = dynamic_cast<SpherePrimitiveShape*>(shape.first.Ptr());
+			auto sphere = dynamic_cast<SpherePrimitiveShape*>(shape.Ptr());
 			auto sphereParams = sphere->Internal();
 
 			m = std::make_shared<lmu::Manifold>(
@@ -369,7 +414,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 		}
 		case 2: // Cylinder
 		{
-			auto cylinder = dynamic_cast<CylinderPrimitiveShape*>(shape.first.Ptr());
+			auto cylinder = dynamic_cast<CylinderPrimitiveShape*>(shape.Ptr());
 			auto cylinderParams = cylinder->Internal();
 
 			auto m = std::make_shared<lmu::Manifold>(
@@ -384,19 +429,23 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 
 		if (m)
 		{
+			// Add point cloud
+			// if (perShapePCs.count(shape.Ptr()) > 0)
+			//	m->pc = lmu::pointCloudFromVector(perShapePCs[shape.Ptr()]);
+
 			manifolds.push_back(m);
 			std::cout << *m << std::endl;
-		}
+		}		
 	}
 
 	//Assign point clouds to manifolds.
 	size_t sum = 0;
-	for (unsigned int i = 0; i < shapes.size(); ++i) 
+	for (unsigned int i = 0; i < shapesAndPCSizes.size(); ++i)
 	{
-		manifolds[i]->pc = lmu::PointCloud(shapes[i].second, 6);
+		manifolds[i]->pc = lmu::PointCloud(shapesAndPCSizes[i].second, 6);
 
 		size_t k = 0;
-		for (unsigned int j = pcConv.size() - (sum + shapes[i].second); j < pcConv.size() - sum; ++j) 
+		for (unsigned int j = pcConv.size() - (sum + shapesAndPCSizes[i].second); j < pcConv.size() - sum; ++j)
 		{
 			Point p = pcConv[j];
 			manifolds[i]->pc.row(k) << p.pos[0], p.pos[1], p.pos[2], p.normal[0], p.normal[1], p.normal[2];
@@ -409,7 +458,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 			
 			k++;
 		}
-		sum += shapes[i].second;
+		sum += shapesAndPCSizes[i].second;
 	}
 
 	RansacResult res;

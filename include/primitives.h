@@ -188,8 +188,31 @@ namespace lmu
 
 	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
 
-	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params, bool projectPointsOnSurface = false);
-	RansacResult extractManifoldsWithOrigRansac(const PointCloud& pc, const RansacParams& params, bool projectPointsOnSurface = false);
+	struct RansacMergeParams
+	{
+		RansacMergeParams(double dist_threshold, double dot_threshold, double angle_threshold) :
+			dist_threshold(dist_threshold),
+			dot_threshold(dot_threshold),
+			angle_threshold(angle_threshold)
+		{
+		}
+
+		RansacMergeParams() :
+			dist_threshold(0.0),
+			dot_threshold(0.0),
+			angle_threshold(0.0)
+		{
+		}
+
+		double dist_threshold;
+		double dot_threshold;
+		double angle_threshold;
+	};
+
+	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params, 
+		bool projectPointsOnSurface = false);
+	RansacResult extractManifoldsWithOrigRansac(const PointCloud& pc, const RansacParams& params, 
+		bool projectPointsOnSurface = false, int ransacIterations = 1, const RansacMergeParams& rmParams = RansacMergeParams());
 
 	void writeToFile(const std::string& file, const RansacResult& res);
 	RansacResult readFromFile(const std::string& file);
