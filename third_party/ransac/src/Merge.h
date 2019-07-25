@@ -16,4 +16,12 @@ typedef MiscLib::RefCountPtr<PrimitiveShape> Primitive;
 std::vector<Primitive>
 MergeSimilarPrimitives(ShapeVector& primitives, float dist_thresh, float dot_thresh, float angle_thresh);
 
+void
+MergeSimilarPrimitives(std::vector<Primitive>& primitives, std::vector<PointCloud>& pointClouds,
+	float dist_thresh, float dot_thresh, float angle_thresh,
+	std::vector<Primitive>& mergedPrimitives, std::vector<PointCloud>& mergedPointClouds);
+
+void SplitPointsPrimitives(const ShapeVector& shapes, const PointCloud& pc,
+	std::vector<Primitive>& primitives, std::vector<PointCloud>& pointClouds);
+
 #endif

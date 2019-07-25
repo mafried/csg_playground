@@ -78,11 +78,11 @@ int main(int argc, char *argv[])
 		params.cluster_epsilon = 0.02;
 		params.epsilon = 0.01;
 
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params, false, 1, lmu::RansacMergeParams(0.01, 0.95, 0.62831));
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params, false, 2, lmu::RansacMergeParams(0.01, 0.95, 0.62831));
 			lmu::writeToFile("ransac_res.txt", ransacRes);
 
 		for(auto const& m : ransacRes.manifolds)
-			viewer.data().set_points(m->pc.leftCols(3), m->pc.rightCols(3));
+			viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
 
 		//viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 

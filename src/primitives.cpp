@@ -327,60 +327,37 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 	if (params.types.count(ManifoldType::Sphere) || params.types.empty())
 		detector.Add(new SpherePrimitiveShapeConstructor());
 
-	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapesAndPCSizes;
+	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapes;
+	std::vector<::Primitive> primitives;
+	std::vector<::PointCloud> pointClouds;
+
 	for (int i = 0; i < ransacIterations; ++i)
 	{
 		std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > perIterShapes;
+		std::vector<::Primitive> perIterPrimitives;
+		std::vector<::PointCloud> perIterPointClouds;
 
 		size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &perIterShapes);
 		std::cout << "detection finished " << remaining << std::endl;
 		std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
+				
+		std::cout << "Split" << std::endl;
+		SplitPointsPrimitives(perIterShapes, pcConv, perIterPrimitives, perIterPointClouds);
 
-		shapesAndPCSizes.insert(shapesAndPCSizes.end(), perIterShapes.begin(), perIterShapes.end());
+		shapes.insert(shapes.end(), perIterShapes.begin(), perIterShapes.end());
+		primitives.insert(primitives.end(), perIterPrimitives.begin(), perIterPrimitives.end());
+		pointClouds.insert(pointClouds.end(), perIterPointClouds.begin(), perIterPointClouds.end());
 	}
-	std::vector<::Primitive> shapes;
-	if (ransacIterations > 1)
-	{
-		shapes = MergeSimilarPrimitives(shapesAndPCSizes, rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold);
-	}
-	else
-	{
-		for (const auto& p : shapesAndPCSizes)
-			shapes.push_back(p.first);
-	}
+	std::vector<::Primitive> mergedShapes;
+	std::vector<::PointCloud> mergedPointclouds;
 
-	// Get per-shape point clouds.
-	/*std::unordered_map<PrimitiveShape*, std::vector<Eigen::Matrix<double, 1, 6>>> perShapePCs;
-	for (int i = 0; i < pcConv.size(); ++i)
-	{
-		double d = std::numeric_limits<double>::max();
-		int shapeIdx = 0;
-		int selectedShapeIdx = 0;
-		for (const auto& s : shapes)
-		{
-			double sd = std::abs(s->SignedDistance(pcConv[i].pos));
-			
-			//std::cout << nd << std::endl;
-			if (sd < d)
-			{
-				selectedShapeIdx = shapeIdx;
-				d = sd;
-			}
-			shapeIdx++;
-		}
-
-		if (d < ransacOptions.m_epsilon && std::abs(shapes[selectedShapeIdx]->NormalDeviation(pcConv[i].pos, pcConv[i].normal) - 1.0) < ransacOptions.m_normalThresh)
-		{
-			Eigen::Matrix<double, 1, 6> pt; 
-			pt << pcConv[i].pos[0], pcConv[i].pos[1], pcConv[i].pos[2],
-				pcConv[i].normal[0], pcConv[i].normal[1], pcConv[i].normal[2];
-			perShapePCs[shapes[selectedShapeIdx]].push_back(pt);
-		}
-	}*/
-
+	std::cout << "Merge" << std::endl;
+	MergeSimilarPrimitives(primitives, pointClouds, 
+		rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold, mergedShapes, mergedPointclouds);
+	
 	// Convert to manifolds.
 	ManifoldSet manifolds;
-	for (auto& shape : shapes)
+	for (auto& shape : mergedShapes)
 	{
 		lmu::ManifoldPtr m = nullptr; 
 
@@ -435,30 +412,24 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 
 			manifolds.push_back(m);
 			std::cout << *m << std::endl;
-		}		
+		}	
 	}
 
 	//Assign point clouds to manifolds.
-	size_t sum = 0;
-	for (unsigned int i = 0; i < shapesAndPCSizes.size(); ++i)
+	for (unsigned int i = 0; i < mergedPointclouds.size(); ++i)
 	{
-		manifolds[i]->pc = lmu::PointCloud(shapesAndPCSizes[i].second, 6);
+		std::cout << "I: " << i << std::endl;
 
-		size_t k = 0;
-		for (unsigned int j = pcConv.size() - (sum + shapesAndPCSizes[i].second); j < pcConv.size() - sum; ++j)
+		manifolds[i]->pc = lmu::PointCloud(mergedPointclouds[i].size(), 6);
+
+		for (unsigned int j = 0; j < mergedPointclouds[i].size(); ++j)
 		{
-			Point p = pcConv[j];
-			manifolds[i]->pc.row(k) << p.pos[0], p.pos[1], p.pos[2], p.normal[0], p.normal[1], p.normal[2];
+			Point p = mergedPointclouds[i][j];
+			manifolds[i]->pc.row(j) << p.pos[0], p.pos[1], p.pos[2], p.normal[0], p.normal[1], p.normal[2];
 			
 			// Normalize normal.
-			manifolds[i]->pc.row(k).rightCols(3).normalize();
-			
-			
-			//std::cout << manifolds[i]->pc.row(k) << std::endl;
-			
-			k++;
+			manifolds[i]->pc.row(j).rightCols(3).normalize();
 		}
-		sum += shapesAndPCSizes[i].second;
 	}
 
 	RansacResult res;

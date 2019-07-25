@@ -1,9 +1,8 @@
-#include <Merge.h>
-
 #include <vector>
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <cstdlib>
 
 #include <PointCloud.h>
 
@@ -29,7 +28,8 @@
 #include <basic.h> // for Vec3f
 
 
-
+typedef std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > ShapeVector;
+typedef MiscLib::RefCountPtr<PrimitiveShape> Primitive;
 
 
 std::vector<Primitive>
@@ -369,3 +369,74 @@ MergeSimilarPrimitives(ShapeVector& primitives, float dist_thresh, float dot_thr
 
 	return all_primitives;
 }
+
+
+void
+MergeSimilarPrimitives(std::vector<Primitive>& primitives, std::vector<PointCloud>& pointClouds,
+	float dist_thresh, float dot_thresh, float angle_thresh,
+	std::vector<Primitive>& mergedPrimitives, std::vector<PointCloud>& mergedPointClouds)
+{
+	std::vector<std::vector<Primitive>> all_candidates(0);
+	int prim_num = static_cast<int>(primitives.size());
+
+	for (int i = 0; i < prim_num; ++i) {
+		const Primitive& p = primitives[i];
+		PointCloud pc = pointClouds[i];
+		bool is_new = true;
+		int cand_num = static_cast<int>(all_candidates.size());
+		for (int j = 0; j < cand_num; ++j) {
+			if (p->Identifier() != all_candidates[j][0]->Identifier()) continue;
+			// See if p is close to all primitives in all_candidates[j].
+			bool all_close = true;
+			for (const auto& c : all_candidates[j]) {
+				if (!ArePrimitivesClose(p, c, dist_thresh, dot_thresh, angle_thresh)) {
+					all_close = false;
+					break;
+				}
+			}
+			if (all_close) {
+				// p belongs to this cluster.
+				is_new = false;
+				all_candidates[j].push_back(p);
+				mergedPointClouds[j] += pc;
+				break;
+			}
+		}
+		if (is_new) {
+			// Create a new cluster.
+			all_candidates.push_back({ p });
+			mergedPointClouds.push_back(pc);
+		}
+	}
+
+	mergedPrimitives = MergeCandidatePrimitives(all_candidates);
+}
+
+
+void SplitPointsPrimitives(const ShapeVector& shapes, const PointCloud& pc,
+	std::vector<Primitive>& primitives, std::vector<PointCloud>& pointClouds)
+{
+	std::size_t sum = 0;
+
+	for (std::size_t i = 0; i < shapes.size(); ++i) {
+		unsigned int numPts = shapes[i].second;
+		Point* pts = new Point[numPts];
+
+		std::size_t k = 0;
+
+		for (std::size_t j = pc.size() - (sum + shapes[i].second);
+			j < pc.size() - sum; ++j) {
+
+			pts[k++] = pc[j];
+		}
+
+		sum += shapes[i].second;
+
+		pointClouds.push_back(PointCloud(pts, numPts));
+
+		delete[] pts;
+
+		primitives.push_back(shapes[i].first);
+	}
+}
+
