@@ -14,8 +14,6 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, double createNewMutationProb, int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
 
-		int getRandomPrimitiveIdxNoSphere(const PrimitiveSet & ps) const;
-
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
 		PrimitiveSet mutate(const PrimitiveSet& ps) const;
@@ -81,12 +79,11 @@ namespace lmu
 
 	using PrimitiveSetTournamentSelector = TournamentSelector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>;
 
-	using PrimitiveSetIterationStopCriterion = IterationStopCriterion<RankedCreature<PrimitiveSet, PrimitiveSetRank>>;
+	using PrimitiveSetIterationStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<PrimitiveSet, PrimitiveSetRank>>;
+		//IterationStopCriterion<RankedCreature<PrimitiveSet, PrimitiveSetRank>>;
 	
 	using PrimitiveSetGA = GeneticAlgorithm<PrimitiveSet, PrimitiveSetCreator, PrimitiveSetRanker, PrimitiveSetRank, 
 		PrimitiveSetTournamentSelector, PrimitiveSetIterationStopCriterion>;
-
-	PrimitiveSet extractPrimitivesFromBorderlessManifolds(const ManifoldSet& manifolds);
 	
 	PrimitiveSet extractCylindersFromCurvedManifolds(const ManifoldSet& manifolds, bool estimateHeight);
 

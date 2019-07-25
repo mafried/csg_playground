@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
 		// Extraction using RANSAC
 
-		double samplingStepSize = 0.3;
+		/*double samplingStepSize = 0.3;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
 		double noiseSigma = 0.03;
@@ -86,8 +86,8 @@ int main(int argc, char *argv[])
 
 		//viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
-		goto _LAUNCH;
-		/*
+		goto _LAUNCH;*/
+		
 		// =========================================================================================================
 		
 		// Primitive estimation based on clusters.
@@ -111,7 +111,9 @@ int main(int argc, char *argv[])
 			if (cluster.pc.rows() < 10)
 				continue;
 
-			ransacResults.push_back(lmu::extractManifoldsWithCGALRansac(cluster.pc, params, true));
+			ransacResults.push_back(
+				lmu::extractManifoldsWithOrigRansac(
+					cluster.pc, params, true, 2, lmu::RansacMergeParams(0.01, 0.95, 0.62831)));
 			
 			//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
 		}
@@ -173,14 +175,14 @@ int main(int argc, char *argv[])
 			vOffset += p.imFunc->meshCRef().vertices.rows();
 			iOffset += p.imFunc->meshCRef().indices.rows();
 		}
-		//viewer.data().set_mesh(vertices, indices);
+		viewer.data().set_mesh(vertices, indices);
  
 		lmu::CSGNode n = lmu::opUnion(childs);
 		
 		auto node = lmu::opUnion();
 		for (const auto& p : primitives)
 		{
-			node.addChild(p.cutout ? lmu::op<lmu::ComplementOperation>({ geometry(p.imFunc) }) : geometry(p.imFunc));
+			node.addChild(geometry(p.imFunc));
 		}
 		
 		//Eigen::Vector3d min = Eigen::Vector3d(-2, -2, -2);

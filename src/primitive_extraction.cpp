@@ -3,19 +3,43 @@
 #include "csgnode.h"
 #include "csgnode_helper.h"
 
+lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
+
+
+std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractSpheres(const lmu::ManifoldSet& manifolds)
+{
+	lmu::PrimitiveSet spheres; 
+	lmu::ManifoldSet restManifolds; 
+
+	for (const auto& manifold : manifolds)
+	{
+		if (manifold->type == lmu::ManifoldType::Sphere)
+		{
+			spheres.push_back(lmu::createSpherePrimitive(manifold));
+		}
+		else
+		{
+			restManifolds.push_back(manifold);
+		}
+	}
+
+	return std::make_tuple(spheres, restManifolds);
+}
+
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
+	// Spheres are already primitives, so remove them from the set of manifolds to use for primitive generation.
+	auto spheresAndRestManifolds = extractSpheres(ransacRes.manifolds);
+	auto manifolds = std::get<1>(spheresAndRestManifolds);
+	auto spheres = std::get<0>(spheresAndRestManifolds);
+	
 	GAResult result;
-
 	PrimitiveSetTournamentSelector selector(2);
-
-	PrimitiveSetIterationStopCriterion criterion(100);
-
+	PrimitiveSetIterationStopCriterion criterion(100, 0.001, 10);
 	int maxPrimitiveSetSize = 5;
 
-	PrimitiveSetCreator creator(ransacRes.manifolds, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, /*M_PI / 18.0*/ M_PI / 9.0);
-
-	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, 0.2, maxPrimitiveSetSize);
+	PrimitiveSetCreator creator(manifolds, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, /*M_PI / 18.0*/ M_PI / 9.0);
+	PrimitiveSetRanker ranker(ransacRes.pc, manifolds, 0.2, maxPrimitiveSetSize);
 
 	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
@@ -23,6 +47,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	auto res = ga.run(params, selector, creator, ranker, criterion);
 
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
+	result.primitives.insert(result.primitives.begin(), spheres.begin(), spheres.end()); // Re-add spheres 
 	result.manifolds = ransacRes.manifolds;
 
 	//std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet());
@@ -44,25 +69,6 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	angleEpsilon(angleEpsilon)
 {
 	rndEngine.seed(rndDevice());
-}
-
-int lmu::PrimitiveSetCreator::getRandomPrimitiveIdxNoSphere(const PrimitiveSet& ps) const
-{
-	static std::uniform_int_distribution<> du{};
-	using parmu_t = decltype(du)::param_type;
-
-	int sphereCounter = 0;
-	for (const auto& p : ps)
-		sphereCounter += p.type == lmu::PrimitiveType::Sphere ? 1 : 0;
-
-	// All spheres!
-	if (sphereCounter == ps.size()) return -1;
-	
-	while (true)
-	{
-		int primitiveIdx = du(rndEngine, parmu_t{ 0, (int)ps.size() - 1 });
-		if (ps[primitiveIdx].type != PrimitiveType::Sphere) return primitiveIdx;
-	}
 }
 
 int lmu::PrimitiveSetCreator::getRandomPrimitiveIdx(const PrimitiveSet& ps) const
@@ -105,7 +111,7 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 		{
 			std::cout << "Mutation Extra" << std::endl;
 
-			int idx = getRandomPrimitiveIdxNoSphere(newPS); // Spheres are never replaced.
+			int idx = getRandomPrimitiveIdx(newPS);
 			if (idx != -1)
 			{
 				auto newP = createPrimitive();
@@ -144,8 +150,8 @@ std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const Primiti
 		{
 			if (!ps1.empty() && !ps2.empty())
 			{
-				int idx1 = getRandomPrimitiveIdxNoSphere(ps1); // Spheres are never replaced.
-				int idx2 = getRandomPrimitiveIdxNoSphere(ps2); // Spheres are never replaced.
+				int idx1 = getRandomPrimitiveIdx(ps1); 
+				int idx2 = getRandomPrimitiveIdx(ps2);
 
 				if (idx1 != -1 && idx2 != -1)
 				{
@@ -171,17 +177,6 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::create() const
 
 	PrimitiveSet ps;
 	
-	// Fill primitive set with all spheres. 
-	for (const auto& m : ms)
-	{
-		if (m->type == ManifoldType::Sphere)
-		{
-			auto sphere = createSpherePrimitive(m);
-			sphere.cutout = db(rndEngine, parmb_t{ 0.5 });
-			ps.push_back(sphere);
-		}
-	}
-
 	// Fill primitive set with randomly created primitives. 
 	while (ps.size() < setSize)
 	{
@@ -359,9 +354,6 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	//}
 	}
 
-	// Primitive is cut out of the model or added.
-	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
-
 	return primitive;
 }
 
@@ -398,9 +390,6 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 			break;
 	}
 
-	// Primitive is cut out of the model or added.
-	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
-
 	return primitive;
 }
 
@@ -423,7 +412,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 	CSGNode node = opUnion();
 	for (const auto& p : ps)
 	{
-		node.addChild(p.cutout ? op<ComplementOperation>({ geometry(p.imFunc) }) : geometry(p.imFunc));
+		node.addChild(geometry(p.imFunc));
 	}
 
 	const double delta = 0.01;
@@ -444,7 +433,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 			//TODO: do something with the normal.
 
-			validPoints += std::abs(d) < delta && n.dot(g) >= 0.0 ? 1 : 0;
+			validPoints += std::abs(d) < delta;
 			checkedPoints++;
 		}
 	}
@@ -576,14 +565,14 @@ lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 
 lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m)
 {
-	if (!m)
+	if (!m || m->type != ManifoldType::Sphere)
 		return Primitive::None();
 
 	Eigen::Affine3d t = Eigen::Affine3d::Identity();
 	t.translate(m->p);
 
 	auto sphereIF = std::make_shared<IFSphere>(t, m->r.x(), ""); //TODO: Add name.
-	sphereIF->meshRef() = Mesh();
+	//sphereIF->meshRef() = Mesh();
 
 
 	return Primitive(sphereIF, { m }, PrimitiveType::Sphere);
@@ -644,36 +633,6 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 	default:
 		return Primitive::None();
 	}
-}
-
-lmu::PrimitiveSet lmu::extractPrimitivesFromBorderlessManifolds(const ManifoldSet& manifolds)
-{
-	PrimitiveSet primitives;
-
-	for (const auto& m : manifolds)
-	{
-		if (m->type == ManifoldType::Sphere)
-		{
-			Eigen::Affine3d t = Eigen::Affine3d::Identity();
-			t.translate(m->p);
-
-			auto sphereIF = std::make_shared<IFSphere>(t, m->r.x(), "");
-			sphereIF->meshRef() = Mesh();
-
-			std::cout << "SPHERE: " << sphereIF->transform().matrix() << std::endl;
-
-			Primitive p(sphereIF, { m }, PrimitiveType::Sphere);
-
-			primitives.push_back(p);
-		}
-		//TODO
-		//else if (m->type == ManifoldType::Torus)
-		//{
-		//
-		//}
-	}
-
-	return primitives;
 }
 
 lmu::PrimitiveSet lmu::extractCylindersFromCurvedManifolds(const ManifoldSet& manifolds, bool estimateHeight)

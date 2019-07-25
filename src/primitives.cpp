@@ -432,13 +432,18 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 		}
 	}
 
+	if (projectPointsOnSurface) {
+		for (auto& m : manifolds) {
+			m->projectPointsOnSurface();
+		}
+	}
+
 	RansacResult res;
 	res.manifolds = manifolds;
 	res.pc = pc;
 
 	std::cout << "number of manifolds: " << manifolds.size() << std::endl;
-
-
+	
 	return res;
 }
 
