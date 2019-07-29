@@ -1039,12 +1039,14 @@ std::tuple<Eigen::Vector3d, Eigen::Vector3d> lmu::computeDimensions(const CSGNod
 		//	v = geo->function()->transform() * v;
 		//	vertices.row(i) = v;
 		//}
+
+		auto mesh = geo->function()->createMesh();
 		
-		if (geo->function()->meshCRef().vertices.size() == 0)
+		if (mesh.vertices.size() == 0)
 			continue;
 
-		Eigen::Vector3d minCandidate = geo->function()->meshCRef().vertices.colwise().minCoeff();
-		Eigen::Vector3d maxCandidate = geo->function()->meshCRef().vertices.colwise().maxCoeff();
+		Eigen::Vector3d minCandidate = mesh.vertices.colwise().minCoeff();
+		Eigen::Vector3d maxCandidate = mesh.vertices.colwise().maxCoeff();
 
 		
 		min(0) = min(0) < minCandidate(0) ? min(0) : minCandidate(0);

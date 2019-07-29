@@ -516,7 +516,7 @@ int main(int argc, char *argv[])
   double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize), node);
   std::cout << "Points in Primitive: " << pointsInPrimitiveRate << "%." << std::endl;
 
-  std::unordered_map<std::string, PointCloud> pcs; 
+  std::unordered_map<std::string, lmu::PointCloud> pcs; 
   for (const auto& s : shapes)
   {
 	  pcs[s->name()] = s->points();

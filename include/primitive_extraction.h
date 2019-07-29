@@ -27,11 +27,14 @@ namespace lmu
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
 		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
 
+		std::unordered_set<ManifoldType> getAvailableManifoldTypes(const ManifoldSet& ms) const;
+		PrimitiveType getRandomPrimitiveType() const;
 
 		Primitive createPrimitive() const;
 		Primitive mutatePrimitive(const Primitive& p, double angleEpsilon) const;
 
 		ManifoldSet ms;
+		std::unordered_set<ManifoldType> availableManifoldTypes;
 		double intraCrossProb;
 
 		double intraMutationProb;
@@ -70,6 +73,8 @@ namespace lmu
 		PrimitiveSet primitives; 
 		ManifoldSet manifolds; 
 	};
+
+	lmu::ManifoldSet generateGhostPlanes(const PointCloud& pc, const lmu::ManifoldSet& ms, double distanceThreshold, double angleThreshold);
 
 	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult);
 

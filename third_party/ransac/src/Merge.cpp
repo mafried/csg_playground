@@ -78,6 +78,7 @@ MergeCandidatePrimitives(const std::vector<std::vector<Primitive>>& all_candidat
 			all_primitives.push_back(new_prim);
 		}
 		else if (type == 2) {
+			// Cylinder
 			Vec3f center(0.f, 0.f, 0.f);
 			Vec3f dir(0.f, 0.f, 0.f);
 			float radius = 0.0;
@@ -201,36 +202,6 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 		return true;
 	}
 
-	if (p->Identifier() == 4) {
-		// Torus
-		TorusPrimitiveShape* pps = (TorusPrimitiveShape*)p->Clone();
-		const Torus& pt = pps->Internal();
-
-		TorusPrimitiveShape* cps = (TorusPrimitiveShape*)c->Clone();
-		const Torus& ct = cps->Internal();
-
-		const Vec3f centerp = pt.Center();
-		const Vec3f axisp = pt.AxisDirection();
-		float mradiusp = pt.MinorRadius();
-		float Mradiusp = pt.MajorRadius();
-
-		const Vec3f centerc = ct.Center();
-		const Vec3f axisc = ct.AxisDirection();
-		float mradiusc = ct.MinorRadius();
-		float Mradiusc = ct.MajorRadius();
-
-		if ((centerp - centerc).length() > DIST_THRESHOLD) return false;
-
-		float dot = axisp.dot(axisc);
-		float abs_dot = std::fabs(dot);
-		if (abs_dot < DOT_THRESHOLD) return false;
-
-		if (std::fabs(mradiusp - mradiusc) > DIST_THRESHOLD) return false;
-		if (std::fabs(Mradiusp - Mradiusc) > DIST_THRESHOLD) return false;
-
-		return true;
-	}
-
 	if (p->Identifier() == 2) {
 		// Cylinder
 		CylinderPrimitiveShape* pps = (CylinderPrimitiveShape*)p->Clone();
@@ -243,15 +214,21 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 		Vec3f axisp = pc.AxisDirection();
 		Vec3f axisPosp = pc.AxisPosition();
 
-		float radiusc = pc.Radius();
-		Vec3f axisc = pc.AxisDirection();
-		Vec3f axisPosc = pc.AxisPosition();
+		float radiusc = cc.Radius();
+		Vec3f axisc = cc.AxisDirection();
+		Vec3f axisPosc = cc.AxisPosition();
 
 		if (std::fabs(radiusp - radiusc) > DIST_THRESHOLD) return false;
 
-		float dotPos = (axisPosp - axisPosc).dot(axisp);
-		float abs_dotPos = std::fabs(dotPos);
-		if (abs_dotPos < DOT_THRESHOLD) return false;
+		if ((axisPosp - axisPosc).length() > DIST_THRESHOLD) {
+			Vec3f axisPosCP = axisPosp - axisPosc;
+			float axisPosCPlen = axisPosCP.length();
+			axisPosCP /= axisPosCPlen;
+			float dotPos = axisPosCP.dot(axisp);
+			float abs_dotPos = std::fabs(dotPos);
+			if (abs_dotPos < DOT_THRESHOLD) return false;
+		}
+		// otherwise axisPosp == axisPosc and we continue with the other tests
 
 		float dot = axisp.dot(axisc);
 		float abs_dot = std::fabs(dot);
@@ -285,6 +262,40 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 
 		return true;
 	}
+
+	if (p->Identifier() == 4) {
+		// Torus
+		TorusPrimitiveShape* pps = (TorusPrimitiveShape*)p->Clone();
+		const Torus& pt = pps->Internal();
+
+		TorusPrimitiveShape* cps = (TorusPrimitiveShape*)c->Clone();
+		const Torus& ct = cps->Internal();
+
+		const Vec3f centerp = pt.Center();
+		const Vec3f axisp = pt.AxisDirection();
+		float mradiusp = pt.MinorRadius();
+		float Mradiusp = pt.MajorRadius();
+
+		const Vec3f centerc = ct.Center();
+		const Vec3f axisc = ct.AxisDirection();
+		float mradiusc = ct.MinorRadius();
+		float Mradiusc = ct.MajorRadius();
+
+		if ((centerp - centerc).length() > DIST_THRESHOLD) return false;
+
+		float dot = axisp.dot(axisc);
+		float abs_dot = std::fabs(dot);
+		if (abs_dot < DOT_THRESHOLD) return false;
+
+		if (std::fabs(mradiusp - mradiusc) > DIST_THRESHOLD) return false;
+		if (std::fabs(Mradiusp - Mradiusc) > DIST_THRESHOLD) return false;
+
+		return true;
+	}
+
+	// unrecognized primitive type
+	std::cout << "ArePrimitivesClose: Unrecognized primitive type\n";
+	return false;
 }
 
 

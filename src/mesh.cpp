@@ -863,7 +863,9 @@ void lmu::writePrimitives(const std::string& filename,
 }
 
 lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string & name) :
-	ImplicitFunction(transform, createPolytope(transform, p, n), name)
+	ImplicitFunction(transform, createPolytope(transform, p, n), name),
+	_n(n),
+	_p(p)
 {
 	// Make sure normal vectors are normalized.
 	for (auto& nv : _n)
@@ -898,32 +900,50 @@ bool lmu::IFPolytope::empty() const
 	return _mesh.empty();
 }
 
+Mesh lmu::IFPolytope::createMesh() const
+{
+	return _mesh;//createPolytope(_transform, _p, _n);
+}
+
 Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, double h)
 {
-	//auto worldP = _transform * localP;
+	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+	double dy = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+	double dz = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
 
-	int i;
+	return Eigen::Vector3d(dx, dy, dz);
+	
+	/*int i;
 	Eigen::RowVector3d c;
 	_tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
 	
-	return _mesh.normals.row(i);
+	return _mesh.normals.row(i);*/
 }
 
 double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 {
-	//auto worldP = _transform * localP;
+	double d = std::numeric_limits<double>::max(); 
 
-	double s;
+	for (int i = 0; i < _p.size(); ++i)
+	{
+		double pn = -_n[i].dot(localP - _p[i]);
+		d = pn < d ? pn : d;
+	}
+	
+	
+	/*double s;
 	int i;
 	Eigen::RowVector3d c;
 	
 	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
 	
 	s = 1. - 2.*_hier.winding_number(localP);
-	//s = 2.0 * _hier.winding_number(worldP) - 1.0;
-
-	//std::cout << s << " ";
-	//s = 1;
 	
-	return std::sqrt(sqrd) * s;
+	double d2 = std::sqrt(sqrd) * s;
+	
+	std::cout << "D: " << d << " " << d2 << std::endl;
+	*/
+
+	return -d;
+
 }

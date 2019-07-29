@@ -321,12 +321,20 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 	RansacShapeDetector detector(ransacOptions);
 
 	if (params.types.count(ManifoldType::Cylinder) || params.types.empty())
-		detector.Add(new CylinderPrimitiveShapeConstructor());	
+	{
+		detector.Add(new CylinderPrimitiveShapeConstructor());
+		std::cout << "Added cylinder detector." << std::endl;
+	}
 	if (params.types.count(ManifoldType::Plane) || params.types.empty())
+	{
 		detector.Add(new PlanePrimitiveShapeConstructor());
+		std::cout << "Added plane detector." << std::endl;
+	}
 	if (params.types.count(ManifoldType::Sphere) || params.types.empty())
+	{
 		detector.Add(new SpherePrimitiveShapeConstructor());
-
+		std::cout << "Added sphere detector." << std::endl;
+	}
 	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapes;
 	std::vector<::Primitive> primitives;
 	std::vector<::PointCloud> pointClouds;
@@ -394,7 +402,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 			auto cylinder = dynamic_cast<CylinderPrimitiveShape*>(shape.Ptr());
 			auto cylinderParams = cylinder->Internal();
 
-			auto m = std::make_shared<lmu::Manifold>(
+			m = std::make_shared<lmu::Manifold>(
 				lmu::ManifoldType::Cylinder,
 				Eigen::Vector3d(cylinderParams.AxisPosition()[0], cylinderParams.AxisPosition()[1], cylinderParams.AxisPosition()[2]),
 				Eigen::Vector3d(cylinderParams.AxisDirection()[0], cylinderParams.AxisDirection()[1], cylinderParams.AxisDirection()[2]).normalized(),
@@ -406,10 +414,6 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 
 		if (m)
 		{
-			// Add point cloud
-			// if (perShapePCs.count(shape.Ptr()) > 0)
-			//	m->pc = lmu::pointCloudFromVector(perShapePCs[shape.Ptr()]);
-
 			manifolds.push_back(m);
 			std::cout << *m << std::endl;
 		}	

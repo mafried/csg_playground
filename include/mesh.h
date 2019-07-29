@@ -284,6 +284,8 @@ namespace lmu
 		  return _aabb;
 	  }
 
+	  virtual Mesh createMesh() const = 0;
+
 	protected: 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) = 0;
 		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) = 0;
@@ -306,7 +308,7 @@ namespace lmu
 	struct IFSphere : public ImplicitFunction 
 	{
 		IFSphere(const Eigen::Affine3d& transform, double radius, const std::string& name, double displacement = 0.0) : 
-			ImplicitFunction(transform, createSphere(transform, radius, 50, 50), name),
+			ImplicitFunction(transform, Mesh(), name),
 			_radius(radius),
 			_displacement(displacement)
 		{
@@ -337,6 +339,11 @@ namespace lmu
 		  return std::to_string(_radius) + " " + std::to_string(_displacement);
 		}
 
+		virtual Mesh createMesh() const override
+		{
+			return createSphere(_transform, _radius, 50, 50);
+		}
+
 	protected:
 
 		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
@@ -362,7 +369,7 @@ namespace lmu
 	struct IFCylinder : ImplicitFunction
 	{
 		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name) :
-			ImplicitFunction(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
+			ImplicitFunction(transform, Mesh(), name),
 			_radius(radius),
 			_height(height)
 		{
@@ -400,6 +407,11 @@ namespace lmu
 		  return std::to_string(_radius) + " " + std::to_string(_height);
 		}
 
+		virtual Mesh createMesh() const override
+		{
+			return createCylinder(_transform, _radius, _radius, _height, 200, 200);
+		}
+
 	protected:
 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
@@ -433,9 +445,10 @@ namespace lmu
 	struct IFBox : public ImplicitFunction
 	{
 		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name, double displacement = 0.0) :
-			ImplicitFunction(transform, createBox(transform, size, numSubdivisions), name),
+			ImplicitFunction(transform, Mesh(), name),
 			_size(size),
-			_displacement(displacement)
+			_displacement(displacement),
+			_numSubdivisions(numSubdivisions)
 		{
 			Eigen::Vector3d min = -size * 0.5;
 			Eigen::Vector3d max = size * 0.5;
@@ -469,6 +482,11 @@ namespace lmu
 		    + std::to_string(_size[2]) + " "
 		    + std::to_string(_displacement);
 		}
+
+		virtual Mesh createMesh() const override
+		{
+			return createBox(_transform, _size, _numSubdivisions);
+		}
 				
 	protected:
 
@@ -499,6 +517,7 @@ namespace lmu
 
 		Eigen::Vector3d _size;
 		double _displacement;
+		int _numSubdivisions;
 	};
 
 	struct IFPolytope : public ImplicitFunction
@@ -512,6 +531,8 @@ namespace lmu
 		virtual std::string serializeParameters() const;
 
 		bool empty() const;
+		
+		virtual Mesh createMesh() const override;
 
 	protected:
 
@@ -549,6 +570,11 @@ namespace lmu
 		  return "";
 		}
 
+		virtual Mesh createMesh() const override
+		{
+			return Mesh();
+		}
+
 	protected:
 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
@@ -565,7 +591,7 @@ namespace lmu
 	struct IFCone : public ImplicitFunction
 	{
 		IFCone(const Eigen::Affine3d& transform, const Eigen::Vector3d& c, const std::string& name) :
-			ImplicitFunction(transform, createCylinder(transform, c.x(), c.y(), c.z(), 200, 200), name),
+			ImplicitFunction(transform, Mesh(), name),
 			_c(c)
 		{
 		}
@@ -598,6 +624,11 @@ namespace lmu
 		  return std::to_string(_c[0]) + " " 
 		    + std::to_string(_c[1]) + " "
 		    + std::to_string(_c[2]);
+		}
+
+		virtual Mesh createMesh() const override
+		{
+			return createCylinder(_transform, _c.x(), _c.y(), _c.z(), 200, 200);
 		}
 
 	protected:
