@@ -361,8 +361,22 @@ void lmu::projectPointCloudOnPlane(PointCloud & pc, const Eigen::Vector3d & p, c
 
 		pc.block<1, 3>(i, 0) << projPt.transpose();
 	}
+}
 
-	std::cout << "DONE" << std::endl;
+void lmu::projectPointCloudOnSphere(PointCloud & pc, const Eigen::Vector3d & p, double r)
+{
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d pt = pc.block<1, 3>(i, 0).transpose() - p;
+		
+		pt = (r / pt.norm()) * pt;
+		pt += p;
+
+		pc.block<1, 3>(i, 0) << pt.transpose();
+
+		//double d = (pt-p).norm() - r;
+		//std::cout << "D: " << d;
+	}
 }
 
 double lmu::computeAABBLength(const lmu::PointCloud& points)
@@ -380,8 +394,6 @@ Eigen::Vector3d lmu::computeAABBDims(const PointCloud& pc)
 	
 	return (max - min).cwiseAbs();
 }
-
-
 
 Eigen::VectorXd getDistances(const Eigen::Vector3d &p, const lmu::PointCloud& pc) {
 	auto v = Eigen::VectorXd(pc.rows()); 

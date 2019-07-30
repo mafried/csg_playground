@@ -52,6 +52,8 @@ namespace lmu
   PointCloudCharacteristics getPointCloudCharacteristics(const PointCloud& pc, int k, double octreeResolution);
 
   void projectPointCloudOnPlane(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& n);
+  void projectPointCloudOnSphere(PointCloud& pc, const Eigen::Vector3d& p, double r);
+
 }
 
 #endif

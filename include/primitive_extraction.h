@@ -51,7 +51,7 @@ namespace lmu
 
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon, int maxPrimitiveSetSize);
+		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 		std::string info() const;
@@ -61,6 +61,8 @@ namespace lmu
 	private: 
 		mutable PrimitiveSetRank bestRank;
 		mutable PrimitiveSet bestPrimitives;
+
+		PrimitiveSet staticPrimitives;
 
 		PointCloud pc;
 		ManifoldSet ms;

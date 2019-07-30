@@ -74,6 +74,7 @@ namespace lmu
 			case ManifoldType::Cylinder:
 				break;
 			case ManifoldType::Sphere:
+				projectPointCloudOnSphere(pc, p, r.x());
 				break;
 			case ManifoldType::Cone:
 				break;

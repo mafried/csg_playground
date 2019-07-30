@@ -6,7 +6,7 @@
 lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
 
 
-std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractSpheres(const lmu::ManifoldSet& manifolds)
+std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu::ManifoldSet& manifolds)
 {
 	lmu::PrimitiveSet spheres; 
 	lmu::ManifoldSet restManifolds; 
@@ -181,15 +181,15 @@ lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::Manif
 
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
-	// Spheres are already primitives, so remove them from the set of manifolds to use for primitive generation.
-	auto spheresAndRestManifolds = extractSpheres(ransacRes.manifolds);
-	auto manifolds = std::get<1>(spheresAndRestManifolds);
-	auto spheres = std::get<0>(spheresAndRestManifolds);
+	// static primitives are not changed in the GA process but used t
+	auto staticPrimsAndRestManifolds = extractStaticManifolds(ransacRes.manifolds);
+	auto manifoldsForCreator = std::get<1>(staticPrimsAndRestManifolds);
+	auto staticPrimitives = std::get<0>(staticPrimsAndRestManifolds);
 
 	// Add "ghost planes". 
 	double distT = 0.01;
 	double angleT = /*M_PI / 18.0*/ M_PI / 9.0;
-	manifolds = generateGhostPlanes(ransacRes.pc, ransacRes.manifolds, distT, angleT);
+	manifoldsForCreator = generateGhostPlanes(ransacRes.pc, ransacRes.manifolds, distT, angleT);
 	
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
@@ -197,8 +197,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	int maxPrimitiveSetSize = 10;
 
-	PrimitiveSetCreator creator(manifolds, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, angleT);
-	PrimitiveSetRanker ranker(ransacRes.pc, manifolds, 0.2, maxPrimitiveSetSize);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, angleT);
+	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
@@ -206,7 +206,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	auto res = ga.run(params, selector, creator, ranker, criterion);
 
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
-	result.primitives.insert(result.primitives.begin(), spheres.begin(), spheres.end()); // Re-add spheres 
+	result.primitives.insert(result.primitives.begin(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 
 	//std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet());
@@ -587,9 +587,10 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 // ==================== RANKER ====================
 
-lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, double distanceEpsilon,int maxPrimitiveSetSize) :
+lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon,int maxPrimitiveSetSize) :
 	pc(pc),
 	ms(ms),
+	staticPrimitives(staticPrims),
 	distanceEpsilon(distanceEpsilon),
 	bestRank(-std::numeric_limits<double>::max()),
 	maxPrimitiveSetSize(maxPrimitiveSetSize)
@@ -602,11 +603,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 		return -std::numeric_limits<double>::max();
 
 	CSGNode node = opUnion();
-	for (const auto& p : ps)
-	{
+	for (const auto& p : ps)	
 		node.addChild(geometry(p.imFunc));
-	}
-
+	for (const auto& p : staticPrimitives)		
+		node.addChild(geometry(p.imFunc));
+	
 	const double delta = 0.01;
 
 	int validPoints = 0; 
