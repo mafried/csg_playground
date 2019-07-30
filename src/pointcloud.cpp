@@ -379,6 +379,16 @@ void lmu::projectPointCloudOnSphere(PointCloud & pc, const Eigen::Vector3d & p, 
 	}
 }
 
+void lmu::projectPointCloudOnCylinder(PointCloud & pc, const Eigen::Vector3d & p, const Eigen::Vector3d & dir, double r)
+{
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d pRay = pc.block<1, 3>(i, 0).transpose() - p;
+		
+		//TODO
+	}
+}
+
 double lmu::computeAABBLength(const lmu::PointCloud& points)
 {
   Eigen::VectorXd min = points.colwise().minCoeff();

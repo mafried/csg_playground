@@ -26,8 +26,6 @@ namespace lmu
   std::unordered_map<std::string, PointCloud> readPointCloudXYZPerFunc(const std::string& file, double scaleFactor = 1.0);
   
   PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
-  
-  Eigen::MatrixXd getSIFTKeypoints(Eigen::MatrixXd& points, double minScale, double minContrast, int numOctaves, int numScalesPerOctave, bool normalsAvailable);
 
   double computeAABBLength(const PointCloud& pc);
   Eigen::Vector3d computeAABBDims(const PointCloud& pc);
@@ -53,6 +51,7 @@ namespace lmu
 
   void projectPointCloudOnPlane(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& n);
   void projectPointCloudOnSphere(PointCloud& pc, const Eigen::Vector3d& p, double r);
+  void projectPointCloudOnCylinder(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& dir, double r);
 
 }
 

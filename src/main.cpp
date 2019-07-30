@@ -58,10 +58,10 @@ int main(int argc, char *argv[])
 
 		// Extraction using RANSAC
 
-		/*double samplingStepSize = 0.3;
+		/*double samplingStepSize = 0.2;
 		double maxDistance = 0.2;
 		double maxAngleDistance = 0.2;
-		double noiseSigma = 0.03;
+		double noiseSigma = 0.0;
 		
 		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
 		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 		params.probability = 0.001;
 		params.min_points = 500;
 		params.normal_threshold = 0.9; 
-		params.cluster_epsilon = 0.02;
+		params.cluster_epsilon = 0.01;
 		params.epsilon = 0.01;
 
 		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params, false, 1, lmu::RansacMergeParams(0.01, 0.95, 0.62831));
@@ -84,12 +84,13 @@ int main(int argc, char *argv[])
 		for(auto const& m : ransacRes.manifolds)
 			viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
 
-		//viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
+		viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
 		goto _LAUNCH;
 		*/
 
-		/*double samplingStepSize = 0.05;
+		/*
+		double samplingStepSize = 0.05;
 		double maxDistance = 0.05;
 		double maxAngleDistance = 1;
 		double noiseSigma = 0.0;
@@ -109,9 +110,9 @@ int main(int argc, char *argv[])
 		
 		viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
 
-		goto _LAUNCH;*/
+		goto _LAUNCH;
 		
-		
+		*/
 		
 		// =========================================================================================================
 		
@@ -126,7 +127,7 @@ int main(int argc, char *argv[])
 			
 			auto params = lmu::RansacParams();
 			params.probability = 0.1;
-			params.min_points = 500;
+			params.min_points = std::min((int)cluster.pc.rows(), 500);
 			params.normal_threshold = 0.9; 
 			params.cluster_epsilon = 0.2;
 			params.epsilon = 0.2;
@@ -140,7 +141,7 @@ int main(int argc, char *argv[])
 			}
 			ransacResults.push_back(
 				lmu::extractManifoldsWithOrigRansac(
-					cluster.pc, params, true, 1, lmu::RansacMergeParams(0.01, 0.95, 0.62831)));
+					cluster.pc, params, true, 3, lmu::RansacMergeParams(0.01, 0.95, 0.62831)));
 
 			//auto plane = ransacResults.back().manifolds[0];
 			//if(plane->type == lmu::ManifoldType::Plane)
@@ -153,12 +154,12 @@ int main(int argc, char *argv[])
 		std::cout << "Merge RANSAC Results" << std::endl;
 		auto ransacRes = lmu::mergeRansacResults(ransacResults);
 	
-		std::cout << "Manifolds: " << ransacRes.manifolds.size() << std::endl;
+		std::cout << " ########################################### Manifolds: " << ransacRes.manifolds.size() << std::endl;
 		for (const auto& m : ransacRes.manifolds)
 		{
 			std::cout << manifoldTypeToString(m->type) << std::endl;
 
-			m->pc = lmu::farthestPointSampling(m->pc, 50);
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
 			//viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
 		}
 

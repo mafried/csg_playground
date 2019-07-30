@@ -12,7 +12,8 @@ namespace lmu
 
 	struct PrimitiveSetCreator
 	{
-		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, double createNewMutationProb, int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
+		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
+			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -22,6 +23,15 @@ namespace lmu
 		std::string info() const;
 
 	private:
+
+		enum class MutationType
+		{
+			NEW,
+			REPLACE,
+			MODIFY,
+			REMOVE,
+			ADD
+		};
 
 		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection = false) const;
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
@@ -37,8 +47,7 @@ namespace lmu
 		std::unordered_set<ManifoldType> availableManifoldTypes;
 		double intraCrossProb;
 
-		double intraMutationProb;
-		double createNewMutationProb;
+		std::vector<double> mutationDistribution;
 
 		int maxMutationIterations;
 		int maxCrossoverIterations;
@@ -68,6 +77,8 @@ namespace lmu
 		ManifoldSet ms;
 		double distanceEpsilon;
 		int maxPrimitiveSetSize;
+
+		double getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const;
 	};
 
 	struct GAResult

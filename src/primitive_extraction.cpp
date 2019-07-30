@@ -193,11 +193,11 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(1000, 0.001, 50);
+	PrimitiveSetIterationStopCriterion criterion(1000, 0.001, 500);
 
 	int maxPrimitiveSetSize = 10;
 
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, 0.5, 0.3, 1, 1, maxPrimitiveSetSize, angleT);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, {0.4, 0.15, 0.15, 0.15, 0.15}, 1, 1, maxPrimitiveSetSize, angleT);
 	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
@@ -208,20 +208,23 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
 	result.primitives.insert(result.primitives.begin(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
-
-	//std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet());
+	
+	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
+	std::cout << "Manifold Set: " << std::endl;
+	for (const auto& m : ransacRes.manifolds)
+		std::cout << *m << std::endl;
 
 	return result;
 }
 
 // ==================== CREATOR ====================
 
-lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, double intraMutationProb, double createNewMutationProb, int maxMutationIterations,
-	int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon) :
+lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, 
+	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations, 
+	int maxPrimitiveSetSize, double angleEpsilon) :
 	ms(ms),
 	intraCrossProb(intraCrossProb),
-	intraMutationProb(intraMutationProb),
-	createNewMutationProb(createNewMutationProb),
+	mutationDistribution(mutationDistribution),
 	maxMutationIterations(maxMutationIterations),
 	maxCrossoverIterations(maxCrossoverIterations),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
@@ -241,48 +244,74 @@ int lmu::PrimitiveSetCreator::getRandomPrimitiveIdx(const PrimitiveSet& ps) cons
 
 lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 {
-	static std::bernoulli_distribution db{};
-	using parmb_t = decltype(db)::param_type;
-
+	static std::discrete_distribution<int> dd { mutationDistribution.begin(), mutationDistribution.end() };
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	if (db(rndEngine, parmb_t{ createNewMutationProb }) || ps.empty())
+	MutationType mt = (MutationType)dd(rndEngine);
+
+	if (mt == MutationType::NEW || ps.empty())
 	{
-		std::cout << "Mutation Create New" << std::endl;
+		std::cout << "Mutation New" << std::endl;
 		return create();
 	}
-
-	auto newPS = ps;
-	
-	for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxMutationIterations }); ++i)
+	else
 	{
-		bool intra = db(rndEngine, parmb_t{ intraMutationProb });
+		auto newPS = ps;
 
-		if (intra)
-		{			
-			std::cout << "Mutation Intra" << std::endl;
-
-			int idx = getRandomPrimitiveIdx(newPS);
-			auto newP = mutatePrimitive(newPS[idx], angleEpsilon);
-			newPS[idx] = newP.isNone() ? newPS[idx] : newP;
-		}
-		else
+		for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxMutationIterations }); ++i)
 		{
-			std::cout << "Mutation Extra" << std::endl;
-
-			int idx = getRandomPrimitiveIdx(newPS);
-			if (idx != -1)
+			switch (mt)
 			{
-				auto newP = createPrimitive();
+			case MutationType::REPLACE:
+			{
+				std::cout << "Mutation Replace" << std::endl;
+
+				int idx = getRandomPrimitiveIdx(newPS);
+				if (idx != -1)
+				{
+					auto newP = createPrimitive();
+					newPS[idx] = newP.isNone() ? newPS[idx] : newP;
+				}
+
+				break;
+			}
+			case MutationType::MODIFY:
+			{
+				std::cout << "Mutation Modify" << std::endl;
+
+				int idx = getRandomPrimitiveIdx(newPS);
+				auto newP = mutatePrimitive(newPS[idx], angleEpsilon);
 				newPS[idx] = newP.isNone() ? newPS[idx] : newP;
+
+				break;
+			}
+			case MutationType::REMOVE:
+			{
+				std::cout << "Mutation Remove" << std::endl;
+
+				int idx = getRandomPrimitiveIdx(newPS);
+				newPS.erase(newPS.begin() + idx);
+
+				break;
+			}
+			case MutationType::ADD:
+			{
+				std::cout << "Mutation Add" << std::endl;
+
+				auto newP = createPrimitive();
+				if (!newP.isNone())
+					newPS.push_back(newP);
+
+				break;
+			}
+			default: 
+				std::cout << "Warning: Unknown mutation type." << std::endl;
 			}
 		}
 
-		//TODO: Add mutation operators that change the size of the primitive set.
+		return newPS;
 	}
-
-	return newPS;
 }
 
 std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const
@@ -300,7 +329,7 @@ std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const Primiti
 
 	for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxCrossoverIterations }); ++i)
 	{
-		bool intra = db(rndEngine, parmb_t{ intraMutationProb });
+		bool intra = db(rndEngine, parmb_t{ intraCrossProb });
 
 		if (intra)
 		{
@@ -609,10 +638,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 		node.addChild(geometry(p.imFunc));
 	
 	const double delta = 0.01;
-
 	int validPoints = 0; 
 	int checkedPoints = 0;
-
 	for (const auto& manifold : ms)
 	{
 		for (int i = 0; i < manifold->pc.rows(); ++i)
@@ -630,67 +657,33 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 			checkedPoints++;
 		}
 	}
+	double geoScore = (double)validPoints / (double)checkedPoints;
 
 	double s = 0.2;
+	double sizeScore = (double)ps.size() / (double)maxPrimitiveSetSize;
 
-	//std::cout << "Rank Ready." << std::endl;
+	double completeUseScore = 0.0;// getCompleteUseScore(ms, ps);
 
-	double r = (double)validPoints / (double)checkedPoints - s * (double)ps.size() / (double)maxPrimitiveSetSize;
+	double r = completeUseScore + geoScore - s * sizeScore;
 
 	if(bestRank < r) 
 	{
 		bestRank = r;
 		bestPrimitives = ps;
-		//std::cout << "NEW BEST: " << r << std::endl;
 	}
 
-	return r; 
-	/*double meanGeometryScore = 0.0;
-	std::vector<int> totalValidPoints(pc.rows(), 0);
+	return r; 	
+}
 
-	for (const auto prim : ps)
-	{
-		double geometryScore = 0.0;
-		double validPoints = 0.0;
-		double wrongPoints = 0.0;
+double lmu::PrimitiveSetRanker::getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const
+{
+	std::unordered_set<ManifoldPtr> manifoldsInPS; 
+	for (const auto& p : ps)
+		std::copy_if(p.ms.begin(), p.ms.end(), std::inserter(manifoldsInPS, manifoldsInPS.end()), 
+			[](const ManifoldPtr& m) {return m->type != ManifoldType::Plane; });
 
-		for (int i = 0; i < pc.rows(); ++i)
-		{
-			Eigen::Vector3d p = pc.block<1, 3>(i, 0);
-			Eigen::Vector3d n = pc.block<1, 3>(i, 3);
-
-			//TODO: do something with the normal.
-
-			double d = 0.0;
-
-			if (prim.imFunc)
-				d = prim.imFunc->signedDistance(p);
-
-			if (d <= distanceEpsilon)
-			{
-				validPoints += 1.0;
-
-				if (d < -distanceEpsilon)
-				{
-					wrongPoints += 1.0;
-				}
-				else
-				{
-					totalValidPoints[i] = 1;
-				}
-			}
-		}
-
-		geometryScore = (validPoints - wrongPoints) / validPoints;
-		meanGeometryScore += geometryScore;
-	}
-	meanGeometryScore /= (double)ps.size();
-
-	double totalGeometryScore = (double)std::accumulate(totalValidPoints.begin(), totalValidPoints.end(), 0) / (double)pc.rows();
-
-	double s = 0.01;
-
-	return totalGeometryScore + meanGeometryScore - s * ps.size();*/
+	return (double) manifoldsInPS.size() / 
+		(double) std::count_if(ms.begin(), ms.end(), [](const ManifoldPtr& m) {return m->type != ManifoldType::Plane; });
 }
 
 std::string lmu::PrimitiveSetRanker::info() const
@@ -942,7 +935,8 @@ lmu::ManifoldPtr lmu::estimateSecondCylinderPlaneFromPointCloud(const Manifold& 
 	//Take the point of the point cloud's min-max points which is farer away from the first plane as the second plane's point.
 	Eigen::Vector3d p = (firstPlane.p - minPos).norm() > (firstPlane.p - maxPos).norm() ? minPos : maxPos;
 
-	auto secondPlane = std::make_shared<Manifold>(ManifoldType::Plane, p, -firstPlane.n, Eigen::Vector3d(0, 0, 0), PointCloud());
+	auto secondPlane = 
+		std::make_shared<Manifold>(ManifoldType::Plane, p, -firstPlane.n, Eigen::Vector3d(0, 0, 0), PointCloud());
 
 	return secondPlane;
 }
