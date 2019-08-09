@@ -145,6 +145,22 @@ std::unordered_map<std::string, lmu::PointCloud> lmu::readPointCloudXYZPerFunc(c
 	return res;
 }
 
+void lmu::scalePointCloud(PointCloud & pc, double scaleFactor)
+{
+	auto dims = computeAABBDims(pc);
+
+	double f = dims.maxCoeff();
+
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d p = pc.row(i).leftCols(3).transpose();
+
+		p /= (f * scaleFactor);
+
+		pc.row(i).leftCols(3) << p.transpose();
+	}
+}
+
 lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)
 {
 	size_t numRows;

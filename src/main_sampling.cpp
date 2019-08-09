@@ -497,9 +497,9 @@ int main(int argc, char *argv[])
 
   CSGNodeSamplingParams samplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize);
 
-  auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+  //auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
   
-  auto pointCloud = pointCloudFromMesh(mesh, maxDistance, samplingStepSize, noiseSigma);
+  auto pointCloud = computePointCloud(node, samplingParams);
   
   //lmu::computePointCloud(node, samplingParams);
   std::cout << "NUM POINTS: " << pointCloud.rows() << std::endl;
@@ -512,7 +512,7 @@ int main(int argc, char *argv[])
     std::cout << "Shape: " << geoNode->function()->name() << std::endl;
   }
 
-  std::cout << "Simulate RANSAC" << std::endl;
+  /*std::cout << "Simulate RANSAC" << std::endl;
   double pointsInPrimitiveRate = lmu::ransacWithSim(pointCloud, CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize), node);
   std::cout << "Points in Primitive: " << pointsInPrimitiveRate << "%." << std::endl;
 
@@ -520,8 +520,9 @@ int main(int argc, char *argv[])
   for (const auto& s : shapes)
   {
 	  pcs[s->name()] = s->points();
-  }
-  lmu::writePointCloudXYZ(pcName, pcs);
+  }*/
+
+  lmu::writePointCloud(pcName, pointCloud);
 
   std::string primName = modelBasename + ".prim"; //"model.prim";
   lmu::writePrimitives(primName, shapes);

@@ -45,11 +45,30 @@ MergeCandidatePrimitives(const std::vector<std::vector<Primitive>>& all_candidat
 			Vec3f normal(0.f, 0.f, 0.f);
 			float offset = 0.f;
 
+			// keep for reference
+			PlanePrimitiveShape* pcref = (PlanePrimitiveShape*)candidates[0]->Clone();
+			Plane plane_ref = pcref->Internal();
+			Vec3f normal_ref = plane_ref.getNormal();
+			float sgn_offset = plane_ref.SignedDistToOrigin() > 0.0 ? 1.0 : -1.0;
+
 			for (const auto& c : candidates) {
 				PlanePrimitiveShape* pc = (PlanePrimitiveShape*)c->Clone();
 				Plane plane = pc->Internal();
-				normal += plane.getNormal();
-				offset += plane.SignedDistToOrigin();
+				if (normal_ref.dot(plane.getNormal()) > 0) {
+					normal += plane.getNormal();
+				}
+				else {
+					normal += -plane.getNormal();
+				}
+
+				float sgn_dist = plane.SignedDistToOrigin() > 0.0 ? 1.0 : -1.0;
+				if (sgn_dist*sgn_offset > 0.0) {
+					offset += plane.SignedDistToOrigin();
+				}
+				else {
+					offset += -plane.SignedDistToOrigin();
+				}
+
 			}
 
 			normal /= candidate_num;
@@ -166,10 +185,10 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 		const Plane& cp = cps->Internal();
 
 		Vec3f normalp = pp.getNormal();
-		float distp = pp.SignedDistToOrigin();
+		float distp = std::fabs(pp.SignedDistToOrigin());
 
 		Vec3f normalc = cp.getNormal();
-		float distc = cp.SignedDistToOrigin();
+		float distc = std::fabs(cp.SignedDistToOrigin());
 
 		if (std::fabs(distc - distp) > DIST_THRESHOLD) return false;
 

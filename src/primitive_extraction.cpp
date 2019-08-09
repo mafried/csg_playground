@@ -8,14 +8,18 @@ lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
 
 std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu::ManifoldSet& manifolds)
 {
-	lmu::PrimitiveSet spheres; 
-	lmu::ManifoldSet restManifolds; 
+	lmu::PrimitiveSet primitives;
+	lmu::ManifoldSet restManifolds;
 
 	for (const auto& manifold : manifolds)
 	{
 		if (manifold->type == lmu::ManifoldType::Sphere)
 		{
-			spheres.push_back(lmu::createSpherePrimitive(manifold));
+			primitives.push_back(lmu::createSpherePrimitive(manifold));
+		}
+		else if (manifold->type == lmu::ManifoldType::Cylinder) {
+			lmu::ManifoldSet planes;
+			primitives.push_back(lmu::createCylinderPrimitive(manifold, planes));
 		}
 		else
 		{
@@ -23,7 +27,7 @@ std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu
 		}
 	}
 
-	return std::make_tuple(spheres, restManifolds);
+	return std::make_tuple(primitives, restManifolds);
 }
 
 #include <CGAL/Cartesian.h>
@@ -56,8 +60,8 @@ std::vector<Point_2> get2DPoints(const lmu::ManifoldPtr& plane)
 		Eigen::Vector3d p = plane->pc.row(i).leftCols(3).transpose();
 		points.push_back(cPlane.to_2d(Point_3(p.x(), p.y(), p.z())));
 	}
-		
-	return points; 
+
+	return points;
 }
 
 std::vector<Eigen::Vector3d> get3DPoints(const lmu::ManifoldPtr& plane, const std::vector<Point_2>& points)
@@ -79,7 +83,7 @@ lmu::ManifoldSet generateGhostPlanesForSinglePlane(const lmu::ManifoldPtr& plane
 {
 	//Project points on plane.
 	std::vector<Point_2> points = get2DPoints(plane);
-	
+
 	// One of two algorithms is used, depending on the type of iterator used to specify the input points. 
 	// For input iterators, the algorithm used is that of Bykat [Byk78], which has a worst-case running time 
 	// of O(n h), where n is the number of input points and h is the number of extreme points. 
@@ -107,7 +111,7 @@ lmu::ManifoldSet generateGhostPlanesForSinglePlane(const lmu::ManifoldPtr& plane
 	planeP[1] = recPts[1] - 0.5 * (recPts[1] - recPts[2]);
 	planeP[2] = recPts[2] - 0.5 * (recPts[2] - recPts[3]);
 	planeP[3] = recPts[3] - 0.5 * (recPts[3] - recPts[0]);
-	
+
 	lmu::ManifoldSet res;
 	res.reserve(4);
 	for (int i = 0; i < 4; ++i)
@@ -135,7 +139,7 @@ lmu::ManifoldSet filterClosePlanes(const lmu::ManifoldSet& ms, double distanceTh
 
 		bool addPlane = true;
 		for (const auto& existingPlane : res)
-		{		
+		{
 			if (std::abs((plane->p - existingPlane->p).dot(existingPlane->n.normalized())) < distanceThreshold &&
 				std::acos(plane->n.normalized().dot(existingPlane->n.normalized())) < angleThreshold)
 			{
@@ -143,7 +147,7 @@ lmu::ManifoldSet filterClosePlanes(const lmu::ManifoldSet& ms, double distanceTh
 				break;
 			}
 			else
-				std::cout << "DT: " << 
+				std::cout << "DT: " <<
 				std::abs((plane->p - existingPlane->p).dot(existingPlane->n.normalized())) << std::endl;
 		}
 
@@ -162,7 +166,7 @@ lmu::ManifoldSet filterClosePlanes(const lmu::ManifoldSet& ms, double distanceTh
 	return res;
 }
 
-lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::ManifoldSet& ms, double distanceThreshold, 
+lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::ManifoldSet& ms, double distanceThreshold,
 	double angleThreshold)
 {
 	lmu::ManifoldSet res = ms;
@@ -187,20 +191,23 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	auto staticPrimitives = std::get<0>(staticPrimsAndRestManifolds);
 
 	// Add "ghost planes". 
-	double distT = 0.01;
+	double distT = 0.02;
 	double angleT = /*M_PI / 18.0*/ M_PI / 9.0;
-	manifoldsForCreator = generateGhostPlanes(ransacRes.pc, ransacRes.manifolds, distT, angleT);
-	
+	//manifoldsForCreator = generateGhostPlanes(ransacRes.pc, ransacRes.manifolds, distT, angleT);
+	manifoldsForCreator = generateGhostPlanes(ransacRes.pc, manifoldsForCreator, distT, angleT);
+
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
 	PrimitiveSetIterationStopCriterion criterion(1000, 0.001, 500);
 
 	int maxPrimitiveSetSize = 10;
 
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, {0.4, 0.15, 0.15, 0.15, 0.15}, 1, 1, maxPrimitiveSetSize, angleT);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
+	//PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.3, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
 	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
+	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, true, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -208,7 +215,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
 	result.primitives.insert(result.primitives.begin(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
-	
+
 	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
 	std::cout << "Manifold Set: " << std::endl;
 	for (const auto& m : ransacRes.manifolds)
@@ -219,8 +226,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 // ==================== CREATOR ====================
 
-lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, 
-	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations, 
+lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb,
+	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
 	int maxPrimitiveSetSize, double angleEpsilon) :
 	ms(ms),
 	intraCrossProb(intraCrossProb),
@@ -244,7 +251,7 @@ int lmu::PrimitiveSetCreator::getRandomPrimitiveIdx(const PrimitiveSet& ps) cons
 
 lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 {
-	static std::discrete_distribution<int> dd { mutationDistribution.begin(), mutationDistribution.end() };
+	static std::discrete_distribution<int> dd{ mutationDistribution.begin(), mutationDistribution.end() };
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
@@ -305,7 +312,7 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 
 				break;
 			}
-			default: 
+			default:
 				std::cout << "Warning: Unknown mutation type." << std::endl;
 			}
 		}
@@ -313,6 +320,48 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 		return newPS;
 	}
 }
+
+/*
+std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const
+{
+std::cout << "Crossover" << std::endl;
+
+static std::bernoulli_distribution db{};
+using parmb_t = decltype(db)::param_type;
+
+static std::uniform_int_distribution<> du{};
+using parmu_t = decltype(du)::param_type;
+
+PrimitiveSet newPS1 = ps1;
+PrimitiveSet newPS2 = ps2;
+
+for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxCrossoverIterations }); ++i)
+{
+bool intra = db(rndEngine, parmb_t{ intraCrossProb });
+
+if (intra)
+{
+//TODO (if it makes sense).
+}
+else
+{
+if (!ps1.empty() && !ps2.empty())
+{
+int idx1 = getRandomPrimitiveIdx(ps1);
+int idx2 = getRandomPrimitiveIdx(ps2);
+
+if (idx1 != -1 && idx2 != -1)
+{
+newPS1[idx1] = ps2[idx2];
+newPS2[idx2] = ps1[idx1];
+}
+}
+}
+}
+
+return { newPS1, newPS2 };
+}
+*/
 
 std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const
 {
@@ -339,13 +388,20 @@ std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const Primiti
 		{
 			if (!ps1.empty() && !ps2.empty())
 			{
-				int idx1 = getRandomPrimitiveIdx(ps1); 
+				int idx1 = getRandomPrimitiveIdx(ps1);
 				int idx2 = getRandomPrimitiveIdx(ps2);
 
 				if (idx1 != -1 && idx2 != -1)
 				{
-					newPS1[idx1] = ps2[idx2];
-					newPS2[idx2] = ps1[idx1];
+					//newPS1[idx1] = ps2[idx2];
+					//newPS2[idx2] = ps1[idx1];
+					for (int j = idx2; j < std::min(newPS1.size(), ps2.size()); ++j) {
+						newPS1[j] = ps2[j];
+					}
+
+					for (int j = idx1; j < std::min(ps1.size(), newPS2.size()); ++j) {
+						newPS2[j] = ps1[j];
+					}
 				}
 			}
 		}
@@ -358,14 +414,14 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::create() const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
-	
+
 	static std::bernoulli_distribution db{};
 	using parmb_t = decltype(db)::param_type;
 
 	int setSize = du(rndEngine, parmu_t{ 1, (int)maxPrimitiveSetSize });
 
 	PrimitiveSet ps;
-	
+
 	// Fill primitive set with randomly created primitives. 
 	while (ps.size() < setSize)
 	{
@@ -467,19 +523,21 @@ std::unordered_set<lmu::ManifoldType> lmu::PrimitiveSetCreator::getAvailableMani
 	std::unordered_set<lmu::ManifoldType> amt;
 
 	std::transform(ms.begin(), ms.end(), std::inserter(amt, amt.begin()),
-		[](const auto& m) -> lmu::ManifoldType{ return m->type; });
-	
+		[](const auto& m) -> lmu::ManifoldType { return m->type; });
+
 	return amt;
 }
 
-lmu::PrimitiveType lmu::PrimitiveSetCreator::getRandomPrimitiveType() const 
+lmu::PrimitiveType lmu::PrimitiveSetCreator::getRandomPrimitiveType() const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
-	
+
 	auto n = du(rndEngine, parmu_t{ 0, (int)availableManifoldTypes.size() - 1 });
 	auto it = std::begin(availableManifoldTypes);
 	std::advance(it, n);
+
+	return PrimitiveType::Box;
 
 	switch (*it)
 	{
@@ -517,22 +575,22 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		if (!plane)
 			break;
 		planes.push_back(plane);
-		
+
 		plane = getPerpendicularPlane(planes, planes, angleEpsilon);
 		if (!plane)
 			break;
 		planes.push_back(plane);
-		
+
 		plane = getParallelPlane(plane, planes, angleEpsilon);
 		if (!plane)
 			break;
 		planes.push_back(plane);
-		
+
 		plane = getPerpendicularPlane(planes, planes, angleEpsilon);
 		if (!plane)
 			break;
 		planes.push_back(plane);
-		
+
 		plane = getParallelPlane(plane, planes, angleEpsilon);
 		if (!plane)
 			break;
@@ -560,7 +618,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			primitive = createCylinderPrimitive(cyl, planes);
 		}
 	}
-	break;	
+	break;
 	}
 
 	return primitive;
@@ -577,38 +635,38 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 	auto primitive = p;
 
 	switch (primitive.type)
-	{	
-		case PrimitiveType::Box:
+	{
+	case PrimitiveType::Box:
+	{
+		// Find a new parallel plane to a randomly chosen plane (parallel planes come in pairs).
+		int planePairIdx = du(rndEngine, parmu_t{ 0, 2 }) * 2;
+		auto newPlane = getParallelPlane(p.ms[planePairIdx], p.ms, angleEpsilon);
+		if (newPlane)
 		{
-			// Find a new parallel plane to a randomly chosen plane (parallel planes come in pairs).
-			int planePairIdx = du(rndEngine, parmu_t{ 0, 2 }) * 2;			
-			auto newPlane = getParallelPlane(p.ms[planePairIdx], p.ms, angleEpsilon);
-			if (newPlane)
-			{
-				auto newPlanes = ManifoldSet(p.ms);
-				newPlanes[planePairIdx+1] = newPlane;
+			auto newPlanes = ManifoldSet(p.ms);
+			newPlanes[planePairIdx + 1] = newPlane;
 
-				primitive = createBoxPrimitive(newPlanes);
-			}
-
-			break;
+			primitive = createBoxPrimitive(newPlanes);
 		}
 
-		case PrimitiveType::Cylinder: 
+		break;
+	}
 
-			ManifoldSet planes;
-			auto numPlanesToSelect = du(rndEngine, parmu_t{ 0, 2 });
-			auto cyl = p.ms[0]; //First element in manifold set is always the cylinder.
-			for (int i = 0; i < numPlanesToSelect; ++i)
-			{
-				auto m = getManifold(ManifoldType::Plane, cyl->n, planes, angleEpsilon);
-				if (m)
-					planes.push_back(m);
-			}
+	case PrimitiveType::Cylinder:
 
-			primitive = createCylinderPrimitive(cyl, planes);
-				
-			break;
+		ManifoldSet planes;
+		auto numPlanesToSelect = du(rndEngine, parmu_t{ 0, 2 });
+		auto cyl = p.ms[0]; //First element in manifold set is always the cylinder.
+		for (int i = 0; i < numPlanesToSelect; ++i)
+		{
+			auto m = getManifold(ManifoldType::Plane, cyl->n, planes, angleEpsilon);
+			if (m)
+				planes.push_back(m);
+		}
+
+		primitive = createCylinderPrimitive(cyl, planes);
+
+		break;
 	}
 
 	return primitive;
@@ -616,7 +674,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 // ==================== RANKER ====================
 
-lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon,int maxPrimitiveSetSize) :
+lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize) :
 	pc(pc),
 	ms(ms),
 	staticPrimitives(staticPrims),
@@ -628,24 +686,26 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const Manifold
 
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
 {
-	if (ps.empty())
+	if (ps.empty()) {
 		return -std::numeric_limits<double>::max();
+	}
 
 	CSGNode node = opUnion();
-	for (const auto& p : ps)	
+	for (const auto& p : ps)
 		node.addChild(geometry(p.imFunc));
-	for (const auto& p : staticPrimitives)		
+	for (const auto& p : staticPrimitives)
 		node.addChild(geometry(p.imFunc));
-	
+
 	const double delta = 0.01;
-	int validPoints = 0; 
+	int validPoints = 0;
 	int checkedPoints = 0;
+	int validNormals = 0;
 	for (const auto& manifold : ms)
 	{
 		for (int i = 0; i < manifold->pc.rows(); ++i)
 		{
 			Eigen::Vector3d p = manifold->pc.block<1, 3>(i, 0);
-			
+
 			//Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
 			//auto dg = node.signedDistanceAndGradient(p);
 			//double d = dg[0];
@@ -655,9 +715,19 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 			validPoints += std::abs(d) < delta;
 			checkedPoints++;
+
+
+			Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
+			auto dg = node.signedDistanceAndGradient(p);
+			Eigen::Vector3d g = dg.bottomRows(3);
+			g.normalize();
+
+			double dot = std::fabs(n.dot(g));
+			if (dot > 0 && dot > 0.95) validNormals += 1;
+
 		}
 	}
-	double geoScore = (double)validPoints / (double)checkedPoints;
+	double geoScore = 0.5*((double)validPoints / (double)checkedPoints + (double)validNormals / (double)checkedPoints);
 
 	double s = 0.2;
 	double sizeScore = (double)ps.size() / (double)maxPrimitiveSetSize;
@@ -666,24 +736,24 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 	double r = completeUseScore + geoScore - s * sizeScore;
 
-	if(bestRank < r) 
+	if (bestRank < r)
 	{
 		bestRank = r;
 		bestPrimitives = ps;
 	}
 
-	return r; 	
+	return r;
 }
 
 double lmu::PrimitiveSetRanker::getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const
 {
-	std::unordered_set<ManifoldPtr> manifoldsInPS; 
+	std::unordered_set<ManifoldPtr> manifoldsInPS;
 	for (const auto& p : ps)
-		std::copy_if(p.ms.begin(), p.ms.end(), std::inserter(manifoldsInPS, manifoldsInPS.end()), 
+		std::copy_if(p.ms.begin(), p.ms.end(), std::inserter(manifoldsInPS, manifoldsInPS.end()),
 			[](const ManifoldPtr& m) {return m->type != ManifoldType::Plane; });
 
-	return (double) manifoldsInPS.size() / 
-		(double) std::count_if(ms.begin(), ms.end(), [](const ManifoldPtr& m) {return m->type != ManifoldType::Plane; });
+	return (double)manifoldsInPS.size() /
+		(double)std::count_if(ms.begin(), ms.end(), [](const ManifoldPtr& m) {return m->type != ManifoldType::Plane; });
 }
 
 std::string lmu::PrimitiveSetRanker::info() const
@@ -731,7 +801,7 @@ lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 
 		n.push_back(newPlane1->n);
 
-		if(strictlyParallel)
+		if (strictlyParallel)
 			n.push_back(newPlane1->n * -1.0);
 		else
 			n.push_back(newPlane2->n);
@@ -935,7 +1005,7 @@ lmu::ManifoldPtr lmu::estimateSecondCylinderPlaneFromPointCloud(const Manifold& 
 	//Take the point of the point cloud's min-max points which is farer away from the first plane as the second plane's point.
 	Eigen::Vector3d p = (firstPlane.p - minPos).norm() > (firstPlane.p - maxPos).norm() ? minPos : maxPos;
 
-	auto secondPlane = 
+	auto secondPlane =
 		std::make_shared<Manifold>(ManifoldType::Plane, p, -firstPlane.n, Eigen::Vector3d(0, 0, 0), PointCloud());
 
 	return secondPlane;

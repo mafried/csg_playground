@@ -8,7 +8,10 @@
 #include "curvature.h"
 #include <Eigen/Core>
 
-//#define WITH_VIEWER_GUI
+#include <boost/algorithm/string.hpp>
+
+
+#define WITH_VIEWER_GUI
 
 std::vector<lmu::ImplicitFunctionPtr> splitCylinder(const lmu::ImplicitFunctionPtr& cyl)
 {
@@ -70,13 +73,17 @@ void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& dir
 	primitiveIds[type] = primitiveIds[type] + 1;
 }
 
-lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d& dims)
+lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d& dims, const std::unordered_set<int>& types)
 {
 	static std::random_device rd;     
 	static std::mt19937 rng(rd());   
 	std::uniform_int_distribution<int> uni(0, 2); 
 
-	switch (uni(rng))
+	int type = uni(rng);
+	while (types.count(type) == 0)
+		type = uni(rng);
+
+	switch (type)
 	{
 	case 0:
 		return lmu::geo<lmu::IFBox>(trans, Eigen::Vector3d(dims.z(), dims.x(), dims.y()), 2, "");
@@ -97,9 +104,9 @@ int main(int argc, char** argv)
 
 	try
 	{
-		if (argc != 12)
+		if (argc != 13)
 		{
-			std::cerr << "Must have 11 arguments." << std::endl;
+			std::cerr << "Must have 12 arguments." << std::endl;
 			return -1;
 		}
 
@@ -114,6 +121,8 @@ int main(int argc, char** argv)
 		int pointCloudSize = 1024;
 		double cutOutProb = 0.1;
 		int maxIterations = 1;
+		bool withLabels = false;
+		std::unordered_set<int> types;
 
 		modelType = std::string(argv[1]);
 		modelPath = std::string(argv[2]);
@@ -125,9 +134,17 @@ int main(int argc, char** argv)
 		k = std::stoi(argv[8]);
 		pointCloudSize = std::stoi(argv[9]);
 		cutOutProb = std::stod(argv[10]);
-		maxIterations = std::stoi(argv[11]);
+		maxIterations = std::stoi(argv[11]);		
 
+		std::unordered_set<std::string> strTypes;
+		boost::split(strTypes, std::string(argv[12]), [](char c) {return c == ';'; });
+		std::transform(strTypes.begin(), strTypes.end(), std::inserter(types, types.end()),
+			[](const std::string& s) -> int { std::cout << "Primitive Type: " << s << std::endl; return  std::stoi(s); });
+
+		
 		lmu::CSGNodeSamplingParams params(maxDistance, maxAngleDistance, errorSigma);
+
+		double preSamplingFactor = 5.0;
 
 		// Load object from node json or object mesh file.
 		lmu::PointCloud pc;
@@ -140,13 +157,13 @@ int main(int argc, char** argv)
 		{
 			auto mesh = lmu::fromOBJFile(modelPath);
 			lmu::scaleMesh(mesh, 1.0);
-			pc = lmu::pointCloudFromMesh(mesh, maxDistance, samplingRate, errorSigma);
+			pc = lmu::pointCloudFromMesh(mesh, maxDistance * preSamplingFactor, samplingRate * preSamplingFactor, errorSigma * preSamplingFactor);
 		}
 		else if (modelType == "off")
 		{
 			auto mesh = lmu::fromOFFFile(modelPath);
 			lmu::scaleMesh(mesh, 1.0);
-			pc = lmu::pointCloudFromMesh(mesh, maxDistance, samplingRate, errorSigma);
+			pc = lmu::pointCloudFromMesh(mesh, maxDistance * preSamplingFactor, samplingRate * preSamplingFactor, errorSigma * preSamplingFactor);
 		}
 		else
 		{
@@ -164,8 +181,8 @@ int main(int argc, char** argv)
 		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 		std::cout << "Input point cloud size: " << pc.rows() << std::endl;
-		pc = lmu::farthestPointSampling(pc, pointCloudSize * 4);
-		std::cout << "Reduced to " << pc.rows() << " Should be: " << (pointCloudSize * 4) << std::endl;
+		//pc = lmu::farthestPointSampling(pc, pointCloudSize);
+		//std::cout << "Reduced to " << pc.rows() << " Should be: " << (pointCloudSize) << std::endl;
 
 		std::cout << "Clustering" << std::endl;
 		
@@ -193,7 +210,7 @@ int main(int argc, char** argv)
 
 				auto trans = lmu::getOrientation(std::get<1>(cluster));
 
-				auto geo = selectPrimitive(trans, dims);//lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");
+				auto geo = selectPrimitive(trans, dims, types);//lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");
 				if (db(rng, parmb_t{ cutOutProb }))
 				{
 					std::cout << "As cutout." << std::endl;
@@ -205,15 +222,12 @@ int main(int argc, char** argv)
 				}
 			}
 
-			// Get point cloud from model (set of primitives, union-combined).
 			auto modelPC = lmu::computePointCloud(model, params);
-			std::cout << "Point cloud size before farthest point sampling: " << modelPC.rows() << std::endl;
-			modelPC = lmu::farthestPointSampling(modelPC, pointCloudSize);
 
 			// Apply pseudo RANSAC to segment point cloud per primitive.
 			double ratio = lmu::ransacWithSim(modelPC, params, model);
 			std::cout << "RANSAC Sim Ratio: " << ratio << std::endl;
-
+			
 			// Split cylinders.
 			auto prims = lmu::allDistinctFunctions(model);
 			std::vector<lmu::ImplicitFunctionPtr> splittedPrims;
@@ -231,15 +245,34 @@ int main(int argc, char** argv)
 			}
 			prims = splittedPrims;
 
+			auto primFile = outputFolder + std::to_string(iter) + "_prim.prim";
+			std::ofstream ps(primFile);
+
 			//Write primitive point clouds to file.
 			i = 0;
+			int pointIdx = 0;
 			std::unordered_map<lmu::ImplicitFunctionType, int> primitiveIds;
+			std::vector<Eigen::Matrix<double, 1, 8>> points;
 			for (const auto& prim : prims)
 			{
-				writePrimitive(prim, outputFolder, iter, primitiveIds);
+				//writePrimitive(prim, outputFolder, iter, primitiveIds);
+
+				for (int j = 0; j < prim->pointsCRef().rows(); ++j)
+				{
+					auto point = Eigen::Matrix<double, 1, 8>();
+					point << prim->pointsCRef().row(j), (double)prim->type(), (double)i;
+					points.push_back(point);
+				}
+
+				ps << (int)prim->type() << std::endl;
+				ps << pointIdx << " " << prim->pointsCRef().rows() << std::endl;
+				ps << prim->serializeTransform() << std::endl;
+				ps << prim->serializeParameters() << std::endl;
+				
+				pointIdx += prim->pointsCRef().rows();
+				i++;
 
 #ifdef WITH_VIEWER_GUI
-				i++;
 				double c = (double)i / (double)prims.size();
 				viewer.data().add_points(prim->pointsCRef().leftCols(3),
 					Eigen::RowVector3d(c, 0, 0).replicate(prim->pointsCRef().rows(), 1));
@@ -252,7 +285,15 @@ int main(int argc, char** argv)
 			//viewer.data().set_points(modelPC.leftCols(3), modelPC.rightCols(3));
 			auto pcFile = outputFolder + std::to_string(iter) +"_pc.xyz";
 			std::cout << "Write point cloud to " << pcFile << "." << std::endl;
-			lmu::writePointCloudXYZ(pcFile, modelPC);
+			std::ofstream s(pcFile);
+			s << points.size() << " " << 8 << std::endl;
+			for (int i = 0; i < points.size(); i++)
+			{
+				for (int j = 0; j < points[i].cols(); j++)
+					s << points[i].col(j) << " ";
+				s << std::endl;
+			}
+			
 		}
 
 #ifdef WITH_VIEWER_GUI

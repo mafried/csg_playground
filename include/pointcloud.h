@@ -25,6 +25,8 @@ namespace lmu
   PointCloud readPointCloudXYZ(const std::string& file, double scaleFactor=1.0);
   std::unordered_map<std::string, PointCloud> readPointCloudXYZPerFunc(const std::string& file, double scaleFactor = 1.0);
   
+  void scalePointCloud(PointCloud& pc, double scaleFactor = 1.0);
+
   PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
 
   double computeAABBLength(const PointCloud& pc);
