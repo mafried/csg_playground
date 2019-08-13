@@ -146,9 +146,9 @@ lmu::ManifoldSet filterClosePlanes(const lmu::ManifoldSet& ms, double distanceTh
 				addPlane = false;
 				break;
 			}
-			else
-				std::cout << "DT: " <<
-				std::abs((plane->p - existingPlane->p).dot(existingPlane->n.normalized())) << std::endl;
+			//else
+			//	std::cout << "DT: " <<
+			//	std::abs((plane->p - existingPlane->p).dot(existingPlane->n.normalized())) << std::endl;
 		}
 
 		if (addPlane)
@@ -159,9 +159,9 @@ lmu::ManifoldSet filterClosePlanes(const lmu::ManifoldSet& ms, double distanceTh
 		}
 	}
 
-	std::cout << "MANIFOLDS: " << std::endl;
-	for (const auto& m : ms)
-		std::cout << *m << std::endl;
+	//std::cout << "MANIFOLDS: " << std::endl;
+	//for (const auto& m : ms)
+	//	std::cout << *m << std::endl;
 
 	return res;
 }
@@ -198,7 +198,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(1000, 0.001, 500);
+	PrimitiveSetIterationStopCriterion criterion(100, 0.001, 100);
 
 	int maxPrimitiveSetSize = 10;
 
@@ -722,8 +722,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 			Eigen::Vector3d g = dg.bottomRows(3);
 			g.normalize();
 
-			double dot = std::fabs(n.dot(g));
-			if (dot > 0 && dot > 0.95) validNormals += 1;
+			//double dot = std::fabs(n.dot(g));
+			//if (dot > 0 && dot > 0.95) validNormals += 1;
 
 		}
 	}

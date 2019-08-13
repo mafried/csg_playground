@@ -294,7 +294,7 @@ RansacShapeDetector::FindBestCandidate(
 {
 
   if(!candidates.size()) {
-    std::cout << "candidates size 2: " << candidates.size() << std::endl;
+    //std::cout << "candidates size 2: " << candidates.size() << std::endl;
     return false;
   }
 
@@ -303,11 +303,11 @@ RansacShapeDetector::FindBestCandidate(
   
   // Some code for debug
   // Remove later
-  CandidatesType::iterator it;
-  for (it = candidates.begin(); it != candidates.end(); ++it) {
-    std::cout << ((*it).Shape())->Identifier() << std::endl;
-  }
-  std::cout << "-----------" << std::endl;
+  //CandidatesType::iterator it;
+  //for (it = candidates.begin(); it != candidates.end(); ++it) {
+  //  std::cout << ((*it).Shape())->Identifier() << std::endl;
+  //}
+  //std::cout << "-----------" << std::endl;
 
 
   // DEBUG
@@ -736,7 +736,7 @@ RansacShapeDetector::Detect(
   size_t maxImproveSubsetDuringMaxSearch = octrees.size();
 
   do {
-    std::cout << "main loop" << std::endl;
+    //std::cout << "main loop" << std::endl;
           
     std::vector< std::pair< float, size_t > > sampleLevelScores(
         sampleLevelProbability.size());
@@ -786,13 +786,13 @@ RansacShapeDetector::Detect(
     // -----------
     // print the generated candidates
     //
-    std::cout << "candidates size 1: " << candidates.size() << std::endl;
+    //std::cout << "candidates size 1: " << candidates.size() << std::endl;
     CandidatesType::iterator it;
     for (it = candidates.begin(); it != candidates.end(); ++it) {
-      std::cout << "shape id: " << it->Shape()->Identifier() << std::endl;
+      //std::cout << "shape id: " << it->Shape()->Identifier() << std::endl;
     }
 
-    std::cout << "-----------" << std::endl;
+    //std::cout << "-----------" << std::endl;
     // -----------
     
     
@@ -808,7 +808,7 @@ RansacShapeDetector::Detect(
               globalOctTreeMaxNodeDepth, &maxForgottenCandidate,
               &bestCandidateFailureProbability))
     {
-      std::cout << "Find best candidate" << std::endl;
+      //std::cout << "Find best candidate" << std::endl;
                   
       if(!foundCandidate)
       {
@@ -894,7 +894,7 @@ RansacShapeDetector::Detect(
       if(candidates.back().Size() == 0)
         std::cout << "ERROR: candidate size == 0 after fitting" << std::endl;
 
-      std::cout << "best candidate ok" << std::endl;
+      //std::cout << "best candidate ok" << std::endl;
 
       // best candidate is ok!
       // remove the points

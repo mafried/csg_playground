@@ -45,6 +45,39 @@ lmu::PointCloud getPoints(const CGAL::Shape_detection_3::Shape_base<Traits>& sha
 	return points;
 }
 
+lmu::ManifoldType lmu::fromPrimitiveType(PrimitiveType pt)
+{
+	switch (pt)
+	{
+		case PrimitiveType::Box:
+			return ManifoldType::Plane;
+		case PrimitiveType::Sphere: 
+			return ManifoldType::Sphere;
+		case PrimitiveType::Cylinder:
+			return ManifoldType::Cylinder; 
+		case PrimitiveType::Cone:
+			return ManifoldType::Cone;
+		default:
+		case PrimitiveType::None: 
+			return ManifoldType::None;
+	}
+}
+
+lmu::ManifoldType lmu::fromPredictedTypeType(int pt)
+{
+	switch (pt)
+	{
+	case 0: 
+		return ManifoldType::Sphere;
+	case 1: 
+		return ManifoldType::Cylinder; 
+	case 3: 
+		return ManifoldType::Plane; 
+	default:
+		return ManifoldType::None;
+	}
+}
+
 std::string lmu::primitiveTypeToString(PrimitiveType type)
 {
 	switch (type)
@@ -346,10 +379,10 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 		std::vector<::PointCloud> perIterPointClouds;
 
 		size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &perIterShapes);
-		std::cout << "detection finished " << remaining << std::endl;
-		std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
+		// std::cout << "detection finished " << remaining << std::endl;
+		// std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
 				
-		std::cout << "Split" << std::endl;
+		// std::cout << "Split" << std::endl;
 		SplitPointsPrimitives(perIterShapes, pcConv, perIterPrimitives, perIterPointClouds);
 
 		shapes.insert(shapes.end(), perIterShapes.begin(), perIterShapes.end());
@@ -359,7 +392,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 	std::vector<::Primitive> mergedShapes;
 	std::vector<::PointCloud> mergedPointclouds;
 
-	std::cout << "Merge" << std::endl;
+	// std::cout << "Merge" << std::endl;
 	MergeSimilarPrimitives(primitives, pointClouds, 
 		rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold, mergedShapes, mergedPointclouds);
 	

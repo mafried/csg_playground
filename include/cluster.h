@@ -10,16 +10,16 @@ namespace lmu
 {	
 	struct Cluster
 	{
-		Cluster(const PointCloud& pc, int label, ManifoldType type) :
+		Cluster(const PointCloud& pc, int label, const std::set<ManifoldType>& types) :
 			pc(pc),
 			label(label),
-			manifoldType(type)
+			manifoldTypes(types)
 		{
 		}
 
 		PointCloud pc; 
 		int label;
-		ManifoldType manifoldType;
+		std::set<ManifoldType> manifoldTypes;
 	};
 
 	std::vector<Cluster> readClusterFromFile(const std::string& file, double scaleFactor);

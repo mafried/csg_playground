@@ -17,6 +17,11 @@
 #include "cluster.h"
 
 
+lmu::ManifoldSet g_manifoldSet; 
+int g_manifoldIdx = 0;
+lmu::PointCloud g_res_pc;
+bool g_show_res = false;
+
 void update(igl::opengl::glfw::Viewer& viewer)
 {
 }
@@ -33,7 +38,76 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	case '+':
 		viewer.core.camera_dnear += 0.1;
 		return true;
+
+	case '1':
+		g_manifoldIdx++;
+		if (g_manifoldSet.size() <= g_manifoldIdx)
+			g_manifoldIdx = 0;
+		break;
+	
+	case '2':
+		g_manifoldIdx--;
+		if (g_manifoldIdx < 0)
+			g_manifoldIdx = g_manifoldSet.empty() ? 0 : g_manifoldSet.size() - 1;
+		break;
+	case '3':
+		g_show_res = !g_show_res;
+		break;
 	}
+
+	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
+	std::cout << "Show Result: " << g_show_res << std::endl;
+
+	viewer.data().set_points(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+	update(viewer);
+
+	if (!g_show_res)
+	{		
+		if (!g_manifoldSet.empty())
+		{
+			for (int i = 0; i < g_manifoldSet.size(); ++i)
+			{
+				if (i != g_manifoldIdx)
+				{
+					Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+					cm.setZero();
+					viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+				}
+				else
+				{
+					Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+
+					for (int j = 0; j < cm.rows(); ++j)
+					{
+						Eigen::Vector3d c;
+						switch ((int)(g_manifoldSet[i]->type))
+						{
+						case 0:
+							c = Eigen::Vector3d(1, 0, 0);
+							break;
+						case 1:
+							c = Eigen::Vector3d(1, 1, 0);
+							break;
+						case 2:
+							c = Eigen::Vector3d(1, 0, 1);
+							break;
+						case 3:
+							c = Eigen::Vector3d(0, 0, 1);
+							break;
+						}
+						cm.row(j) << c.transpose();
+					}
+
+					viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+				}
+			}
+		}
+	}
+	else
+	{
+		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
+	}
+
 	update(viewer);
 	return true;
 }
@@ -42,83 +116,19 @@ int main(int argc, char *argv[])
 {
 	using namespace Eigen;
 	using namespace std;
-
-	//RUN_TEST(CSGNodeTest);
-
-
+	
 	igl::opengl::glfw::Viewer viewer;
 	viewer.mouse_mode = igl::opengl::glfw::Viewer::MouseMode::Rotation;
+	viewer.callback_key_down = &key_down;
 
 	// Initialize
 	update(viewer);
 
 	try
 	{
-		// =========================================================================================================
-
-		// Extraction using RANSAC
-
-		/*double samplingStepSize = 0.2;
-		double maxDistance = 0.2;
-		double maxAngleDistance = 0.2;
-		double noiseSigma = 0.0;
-
-		lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
-		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		//auto pointCloud = lmu::readPointCloudXYZ("C:/Users/friedrich/Downloads/RANSAC_TEST/RANSAC_TEST/cms_seg-segmented.xyzn");
-		auto pointCloud = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma,samplingStepSize));
-		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
-
-		std::cout << "Point cloud size: " << pointCloud.rows() << std::endl;
-
-		auto params = lmu::RansacParams();
-		params.probability = 0.001;
-		params.min_points = 500;
-		params.normal_threshold = 0.9;
-		params.cluster_epsilon = 0.01;
-		params.epsilon = 0.01;
-
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(pointCloud, params, false, 1, lmu::RansacMergeParams(0.01, 0.95, 0.62831));
-		lmu::writeToFile("ransac_res.txt", ransacRes);
-
-		for(auto const& m : ransacRes.manifolds)
-		viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
-
-		viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
-		goto _LAUNCH;
-		*/
-
-		/*
-		double samplingStepSize = 0.05;
-		double maxDistance = 0.05;
-		double maxAngleDistance = 1;
-		double noiseSigma = 0.0;
-
-		auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
-		Eigen::Vector3d(0,1,0),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
-
-		auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
-		Eigen::Vector3d(0,1,1),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
-
-		//viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
-		auto poly = std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), _p, _n, "P1");
-
-		auto pointCloud = lmu::computePointCloud(lmu::geometry(poly),
-		lmu::CSGNodeSamplingParams(maxDistance, maxAngleDistance, noiseSigma, samplingStepSize, Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1)));
-
-		viewer.data().add_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
-		goto _LAUNCH;
-
-		*/
-
-		// =========================================================================================================
-
 		// Primitive estimation based on clusters.
 
-		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/PycharmProjects/open3d_test/test.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/work/code/csg_playground/seg4csg/data/test.txt", 1.0);
 		lmu::TimeTicker t;
 		std::vector<lmu::RansacResult> ransacResults;
@@ -132,7 +142,7 @@ int main(int argc, char *argv[])
 			params.normal_threshold = 0.9;
 			params.cluster_epsilon = 0.1;// 0.2;
 			params.epsilon = 0.002;// 0.2;
-			params.types = { cluster.manifoldType };
+			params.types = cluster.manifoldTypes;
 
 			std::cout << "CLUSTER PC: " << cluster.pc.rows() << std::endl;
 			if (cluster.pc.rows() < params.min_points)
@@ -163,17 +173,13 @@ int main(int argc, char *argv[])
 		std::cout << "Merge RANSAC Results" << std::endl;
 		auto ransacRes = lmu::mergeRansacResults(ransacResults);
 
-		std::cout << " ########################################### Manifolds: " << ransacRes.manifolds.size() << std::endl;
+		g_manifoldSet = ransacRes.manifolds;
+
+		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			std::cout << manifoldTypeToString(m->type) << std::endl;
-
 			m->pc = lmu::farthestPointSampling(m->pc, 100);
-			//viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
 		}
-
-		t.tick();
-		std::cout << "RANSAC Time: " << t.current << std::endl;
 
 		//goto _LAUNCH;
 
@@ -237,126 +243,7 @@ int main(int argc, char *argv[])
 		auto node = lmu::opUnion(childs);
 		lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		auto m = lmu::computePointCloud(node, p);
-		viewer.data().set_points(m.leftCols(3), m.rightCols(3));
-
-		//auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		//viewer.data().set_mesh(m.vertices, m.indices);
-
-
-
-		/*auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.0700974, -0.0241359, 0.682183),Eigen::Vector3d(-0.00842728, -0.0110942, -0.281548), Eigen::Vector3d(0.00995219, -0.47185, -0.00839383),
-		Eigen::Vector3d(0.00245973, 0.287677, 0.00328013),Eigen::Vector3d(0.151568, -0.0039502, -0.00301725), Eigen::Vector3d(-0.457327, 0.00124607, 0.065478) });
-
-		//auto _p = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0, 0, 0.682183),Eigen::Vector3d(0,0,-0.281548), Eigen::Vector3d(0, -0.47185, 0),
-		//	Eigen::Vector3d(0, 0.287677, 0),Eigen::Vector3d(0.151568, 0, 0), Eigen::Vector3d(-0.457327, 0, 0) });
-
-		auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(-0.102153, -0.0351733, 0.994147),Eigen::Vector3d(-0.0298953, -0.0393559, -0.998778), Eigen::Vector3d(0.0210838, -0.99962, -0.0177824),
-		Eigen::Vector3d(-0.00854944, -0.999898, -0.01140),Eigen::Vector3d(-0.999463, 0.0260481, 0.0198961), Eigen::Vector3d(0.989902, -0.00269717, -0.14173) });
-
-		//auto _n = std::vector<Eigen::Vector3d>({ Eigen::Vector3d(0,0,1),Eigen::Vector3d(0,0,-1), Eigen::Vector3d(0, -1, 0),
-		//	Eigen::Vector3d(0,1,0),Eigen::Vector3d(1,0,0), Eigen::Vector3d(-1,0,0) });
-
-		//_p = _n;
-
-		auto poly = std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), _p, _n, "P1");
-		//	Plane n : -0.102153 - 0.0351733 0.994147 p : -0.0700974 - 0.0241359 0.682183
-		//	Plane n : -0.0298953 - 0.0393559 - 0.998778 p : -0.00842728 - 0.0110942 - 0.281548
-		//	Plane n : 0.0210838 - 0.99962 - 0.0177824 p : 0.00995219 - 0.47185 - 0.00839383
-		//	Plane n : -0.00854944 - 0.999898 - 0.011401 p : 0.00245973 0.287677 0.00328013
-		//	Plane n : -0.999463 0.0260481 0.0198961 p : 0.151568 - 0.0039502 - 0.00301725
-		//	Plane n : 0.989902 - 0.00269717 - 0.14173 p : -0.457327 0.00124607 0.065478
-
-		viewer.data().set_mesh(poly->meshCRef().vertices, poly->meshCRef().indices);
-
-		//viewer.data().set_points(ransacRes.pc.leftCols(3), ransacRes.pc.rightCols(3));
-		std::cout << "P: " << _p.size() << std::endl;
-
-		for (int i = 0; i < _p.size(); ++i)
-		viewer.data().add_points(_p[i].transpose(), _n[i].transpose());
-
-		viewer.data().add_points(poly->meshCRef().vertices, poly->meshCRef().vertices);
-		*/
-
-
-
-		////EITHER: Create RANSAC results based on csg tree.		
-		//double samplingStepSize = 0.2;
-		//double maxDistance = 0.2;
-		//double maxAngleDistance = 0.2;
-		//double noiseSigma = 0.03;
-		//
-		//lmu::CSGNode node = lmu::fromJSONFile("C:/Projekte/csg_playground_build/Debug/ransac.json");
-		//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
-		//auto pointCloud = pointCloudFromMesh(mesh, node, maxDistance, samplingStepSize, noiseSigma);		
-		////viewer.data().set_mesh(mesh.vertices, mesh.indices);
-		////viewer.data().set_points(pointCloud.leftCols(3), pointCloud.rightCols(3));
-
-		//auto params = lmu::RansacParams();
-		//params.probability = 0.1;
-		//params.min_points = 500;
-		//params.normal_threshold = 0.9; 
-		//params.cluster_epsilon = 0.2;
-		//params.epsilon = 0.2;
-
-		//auto ransacRes = lmu::extractManifoldsWithCGALRansac(pointCloud, params);
-		//	lmu::writeToFile("ransac_res.txt", ransacRes);
-		//
-
-		////OR: Read RANSAC results from file.
-		////auto ransacRes = lmu::readFromFile("ransac_res.txt");
-		//
-		////auto res = lmu::extractPrimitivesWithGA(ransacRes);
-		////lmu::PrimitiveSet primitives = res.primitives;
-		//lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
-
-		////for (const auto& p : primitives)
-		////	std::cout << p << std::endl;
-		//
-		////Display result primitives.
-		//		
-		//std::vector<lmu::CSGNode> childs;
-		////for (const auto& p : primitives)
-		////	childs.push_back(lmu::geometry(p.imFunc));		
-		//lmu::CSGNode n = lmu::opUnion(childs);
-		//Eigen::Vector3d min = ransacRes.pc.leftCols(3).colwise().minCoeff();
-		//Eigen::Vector3d max = ransacRes.pc.leftCols(3).colwise().maxCoeff();
-		//auto m = lmu::computeMesh(n, Eigen::Vector3i(20, 20, 20), min, max);
-
-		//viewer.data().set_mesh(m.vertices, m.indices);
-		//		
-		////Display result manifolds.
-
-		//int i = 0;
-		//for (const auto& m : manifolds)
-		//{	
-		//	Eigen::Matrix<double, -1, 3> cm(m->pc.rows(),3);
-
-		//	for (int j = 0; j < cm.rows(); ++j)
-		//	{
-		//		Eigen::Vector3d c;
-		//		switch ((int)(m->type))
-		//		{
-		//		case 0:
-		//			c = Eigen::Vector3d(1, 0, 0);
-		//			break;
-		//		case 1:
-		//			c = Eigen::Vector3d(1, 1, 0);
-		//			break;
-		//		case 2:
-		//			c = Eigen::Vector3d(1, 0, 1);
-		//			break;
-		//		case 3:
-		//			c = Eigen::Vector3d(0, 0, 1);
-		//			break;
-		//		}
-		//		cm.row(j) << c.transpose();
-		//	}
-
-		//	i++;
-		//	
-		//	viewer.data().add_points(m->pc.leftCols(3), cm);
-		//  }
-
+		g_res_pc = m;
 	}
 	catch (const std::exception& ex)
 	{
