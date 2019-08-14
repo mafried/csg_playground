@@ -120,7 +120,6 @@ namespace lmu
 	};
 
 	ManifoldType fromPrimitiveType(PrimitiveType pt);
-	ManifoldType fromPredictedTypeType(int pt);
 
 	std::string primitiveTypeToString(PrimitiveType type);
 	PrimitiveType primitiveTypeFromString(std::string type);

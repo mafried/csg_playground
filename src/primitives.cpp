@@ -63,21 +63,6 @@ lmu::ManifoldType lmu::fromPrimitiveType(PrimitiveType pt)
 	}
 }
 
-lmu::ManifoldType lmu::fromPredictedTypeType(int pt)
-{
-	switch (pt)
-	{
-	case 0: 
-		return ManifoldType::Sphere;
-	case 1: 
-		return ManifoldType::Cylinder; 
-	case 3: 
-		return ManifoldType::Plane; 
-	default:
-		return ManifoldType::None;
-	}
-}
-
 std::string lmu::primitiveTypeToString(PrimitiveType type)
 {
 	switch (type)

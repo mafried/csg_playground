@@ -28,7 +28,7 @@ std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double sc
 		std::vector<std::string> strTypes;
 		boost::split(strTypes, manifoldTypesStr, [](char c) {return c == ';'; });
 		std::transform(strTypes.begin(), strTypes.end(), std::inserter(manifoldTypes, manifoldTypes.end()),
-			[](const std::string& s) -> ManifoldType { return  lmu::fromPredictedTypeType(std::stoi(s)); });
+			[](const std::string& s) -> ManifoldType { return  lmu::fromPrimitiveType((PrimitiveType)std::stoi(s)); });
 
 		for (const auto& mt : manifoldTypes)
 		{

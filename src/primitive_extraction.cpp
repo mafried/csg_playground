@@ -722,8 +722,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 			Eigen::Vector3d g = dg.bottomRows(3);
 			g.normalize();
 
-			//double dot = std::fabs(n.dot(g));
-			//if (dot > 0 && dot > 0.95) validNormals += 1;
+			double dot = std::fabs(n.dot(g));
+			if (dot > 0 && dot > 0.95) validNormals += 1;
 
 		}
 	}
