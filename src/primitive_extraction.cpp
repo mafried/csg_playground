@@ -25,6 +25,10 @@ std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu
 		{
 			restManifolds.push_back(manifold);
 		}
+
+		// All manifolds are non-static.
+		//restManifolds.push_back(manifold);
+
 	}
 
 	return std::make_tuple(primitives, restManifolds);
@@ -198,7 +202,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(100, 0.001, 100);
+	PrimitiveSetIterationStopCriterion criterion(100, 0.001, 1000);
 
 	int maxPrimitiveSetSize = 10;
 
@@ -537,8 +541,6 @@ lmu::PrimitiveType lmu::PrimitiveSetCreator::getRandomPrimitiveType() const
 	auto it = std::begin(availableManifoldTypes);
 	std::advance(it, n);
 
-	return PrimitiveType::Box;
-
 	switch (*it)
 	{
 	case ManifoldType::Plane:
@@ -558,6 +560,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	const auto anyDirection = Eigen::Vector3d(0, 0, 0);
 
 	auto primitiveType = getRandomPrimitiveType();
+	//std::cout << "Primitive Type: " << (int)primitiveType << std::endl;
 	auto primitive = Primitive::None();
 
 	switch (primitiveType)
@@ -873,7 +876,7 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 	{
 		auto heightPos = lmu::estimateCylinderHeightAndPosFromPointCloud(*m);
 		auto height = std::get<0>(heightPos);
-		auto pos = std::get<1>(heightPos);
+		auto pos = m->p;//std::get<1>(heightPos);
 
 		Eigen::Matrix3d rot = getRotationMatrix(m->n);
 		Eigen::Affine3d t = (Eigen::Affine3d)(Eigen::Translation3d(pos) * rot);

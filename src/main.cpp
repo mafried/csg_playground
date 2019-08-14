@@ -153,8 +153,7 @@ int main(int argc, char *argv[])
 			ransacResults.push_back(
 				lmu::extractManifoldsWithOrigRansac(
 					cluster.pc, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831)));
-
-
+			
 			// HELPER for analysis - to REMOVE LATER
 			//std::cout << "Press a key to continue" << std::endl;
 			//char key;
@@ -175,36 +174,20 @@ int main(int argc, char *argv[])
 
 		g_manifoldSet = ransacRes.manifolds;
 
-		// Farthest point sampling applied to all manifolds.
-		for (const auto& m : ransacRes.manifolds)
-		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+		/*lmu::PrimitiveSet prims;
+		for (const auto& manifold : ransacRes.manifolds)
+		{			
+			if (manifold->type == lmu::ManifoldType::Cylinder) {
+				lmu::ManifoldSet planes;
+				prims.push_back(lmu::createCylinderPrimitive(manifold, planes));
+			}
 		}
-
-		//goto _LAUNCH;
-
-		auto res = lmu::extractPrimitivesWithGA(ransacRes);
-		lmu::PrimitiveSet primitives = res.primitives;
-		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
-
-		for (const auto& p : primitives)
-		{
-			std::cout << p << std::endl;
-			//viewer.data().add_points(p.imFunc->meshCRef().vertices, p.imFunc->meshCRef().vertices);
-			//viewer.data().set_mesh(p.imFunc->meshCRef().vertices, p.imFunc->meshCRef().indices);
-
-		}
-
-		//Display result primitives.
 
 		int vRows = 0;
 		int iRows = 0;
 		std::vector<lmu::CSGNode> childs;
-		for (const auto& p : primitives)
+		for (const auto& p : prims)
 		{
-			//if (p.type == lmu::PrimitiveType::Box)
-			//	continue;
-
 			auto mesh = p.imFunc->createMesh();
 
 			childs.push_back(lmu::geometry(p.imFunc));
@@ -217,11 +200,8 @@ int main(int argc, char *argv[])
 		Eigen::MatrixXd vertices(vRows, 3);
 		int vOffset = 0;
 		int iOffset = 0;
-		for (const auto& p : primitives)
+		for (const auto& p : prims)
 		{
-			//if (p.type == lmu::PrimitiveType::Box)
-			//	continue;
-
 			auto mesh = p.imFunc->createMesh();
 
 			Eigen::MatrixXi newIndices(mesh.indices.rows(), 3);
@@ -235,10 +215,27 @@ int main(int argc, char *argv[])
 			vOffset += mesh.vertices.rows();
 			iOffset += mesh.indices.rows();
 		}
-		//viewer.data().set_mesh(vertices, indices);
+		viewer.data().set_mesh(vertices, indices);
 
-		//Eigen::Vector3d min = Eigen::Vector3d(-2, -2, -2);
-		//Eigen::Vector3d max = Eigen::Vector3d(2, 2, 2);
+		goto _LAUNCH;*/
+
+		// Farthest point sampling applied to all manifolds.
+		for (const auto& m : ransacRes.manifolds)
+		{
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
+		}
+				
+		auto res = lmu::extractPrimitivesWithGA(ransacRes);
+		lmu::PrimitiveSet primitives = res.primitives;
+		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
+		
+		std::vector<lmu::CSGNode> childs;
+		std::cout << std::endl;
+		for (const auto& p : primitives)
+		{
+			childs.push_back(lmu::geometry(p.imFunc));
+			std::cout << p << std::endl;
+		}
 
 		auto node = lmu::opUnion(childs);
 		lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
