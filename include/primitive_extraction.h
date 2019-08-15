@@ -62,7 +62,7 @@ namespace lmu
 	{
 		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize);
 
-		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
+		PrimitiveSetRank rank(const PrimitiveSet& ps, bool ignoreStaticPrimitives = false) const;
 		std::string info() const;
 
 		PrimitiveSet bestPrimitiveSet() const;

@@ -642,6 +642,7 @@ std::ostream& lmu::operator <<(std::ostream& os, const Primitive& p)
 	os << lmu::primitiveTypeToString(p.type) << " manifolds: " << std::endl;
 	for (const auto& m : p.ms)
 		os << *m << std::endl;
+	os << "Cutout: " << p.cutout << std::endl;
 
 	return os;
 }

@@ -128,7 +128,9 @@ int main(int argc, char *argv[])
 	{
 		// Primitive estimation based on clusters.
 
-		auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
+		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
+
 		//auto clusters = lmu::readClusterFromFile("C:/work/code/csg_playground/seg4csg/data/test.txt", 1.0);
 		lmu::TimeTicker t;
 		std::vector<lmu::RansacResult> ransacResults;
@@ -185,13 +187,9 @@ int main(int argc, char *argv[])
 
 		int vRows = 0;
 		int iRows = 0;
-		std::vector<lmu::CSGNode> childs;
 		for (const auto& p : prims)
 		{
 			auto mesh = p.imFunc->createMesh();
-
-			childs.push_back(lmu::geometry(p.imFunc));
-
 			vRows += mesh.vertices.rows();
 			iRows += mesh.indices.rows();
 		}
@@ -233,12 +231,12 @@ int main(int argc, char *argv[])
 		std::cout << std::endl;
 		for (const auto& p : primitives)
 		{
-			childs.push_back(lmu::geometry(p.imFunc));
+			childs.push_back(p.cutout ? lmu::opComp({ lmu::geometry(p.imFunc) }) : lmu::geometry(p.imFunc));
 			std::cout << p << std::endl;
 		}
 
 		auto node = lmu::opUnion(childs);
-		lmu::CSGNodeSamplingParams p(0.02, 0.02, 0.00, 0.02, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+		lmu::CSGNodeSamplingParams p(0.02, 0.01, 0.00, 0.02, Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		auto m = lmu::computePointCloud(node, p);
 		g_res_pc = m;
 	}

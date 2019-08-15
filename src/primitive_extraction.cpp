@@ -189,7 +189,7 @@ lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::Manif
 
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
-	// static primitives are not changed in the GA process but used t
+	// static primitives are not changed in the GA process but used.
 	auto staticPrimsAndRestManifolds = extractStaticManifolds(ransacRes.manifolds);
 	auto manifoldsForCreator = std::get<1>(staticPrimsAndRestManifolds);
 	auto staticPrimitives = std::get<0>(staticPrimsAndRestManifolds);
@@ -202,7 +202,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(100, 0.001, 1000);
+	PrimitiveSetIterationStopCriterion criterion(200, 0.00001, 1000);
 
 	int maxPrimitiveSetSize = 10;
 
@@ -216,11 +216,30 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
 
+	// Try best cutout combination for each satic primitive.
+	for (auto& p : staticPrimitives)
+	{
+		PrimitiveSet ps;
+		ps.push_back(p);
+
+		ps[0].cutout = false;
+		double score = ranker.rank(ps, true);
+		
+		ps[0].cutout = true;
+		double score_cutout = ranker.rank(ps, true);
+
+		if (score < score_cutout)
+			ps[0].cutout = true;
+		else
+			ps[0].cutout = false;
+	}
+
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
 	result.primitives.insert(result.primitives.begin(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 
 	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
+	std::cout << "-------------------------------------------------" << std::endl;
 	std::cout << "Manifold Set: " << std::endl;
 	for (const auto& m : ransacRes.manifolds)
 		std::cout << *m << std::endl;
@@ -557,6 +576,9 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
 	const auto anyDirection = Eigen::Vector3d(0, 0, 0);
 
 	auto primitiveType = getRandomPrimitiveType();
@@ -622,7 +644,21 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		}
 	}
 	break;
+
+	case PrimitiveType::Sphere:
+	{
+		auto sphere = getManifold(ManifoldType::Sphere, anyDirection, {}, 0.0, true);
+		if (sphere)
+		{
+			primitive = createSpherePrimitive(sphere);
+		}
 	}
+	break;
+	}
+
+	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
+	//std::cout << "PC0: " << primitive.cutout << std::endl;
+
 
 	return primitive;
 }
@@ -672,6 +708,9 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 		break;
 	}
 
+	primitive.cutout = db(rndEngine, parmb_t{ 0.5 });
+	//std::cout << "PC1: " << primitive.cutout << std::endl;
+
 	return primitive;
 }
 
@@ -687,7 +726,7 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const Manifold
 {
 }
 
-lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
+lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
 {
 	if (ps.empty()) {
 		return -std::numeric_limits<double>::max();
@@ -695,49 +734,50 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 	CSGNode node = opUnion();
 	for (const auto& p : ps)
-		node.addChild(geometry(p.imFunc));
-	for (const auto& p : staticPrimitives)
-		node.addChild(geometry(p.imFunc));
+	{
+		if (p.cutout)
+			node.addChild(opComp({geometry(p.imFunc)}));
+		else
+			node.addChild(geometry(p.imFunc));
+	}
+
+	if (!ignoreStaticPrimitives)
+	{
+		for (const auto& p : staticPrimitives)
+			node.addChild(geometry(p.imFunc));
+	}
 
 	const double delta = 0.01;
 	int validPoints = 0;
 	int checkedPoints = 0;
-	int validNormals = 0;
 	for (const auto& manifold : ms)
 	{
 		for (int i = 0; i < manifold->pc.rows(); ++i)
 		{
 			Eigen::Vector3d p = manifold->pc.block<1, 3>(i, 0);
 
-			//Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
-			//auto dg = node.signedDistanceAndGradient(p);
-			//double d = dg[0];
-			//Eigen::Vector3d g = dg.bottomRows(3);
-
-			double d = node.signedDistance(p);
-
-			validPoints += std::abs(d) < delta;
-			checkedPoints++;
-
-
 			Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
 			auto dg = node.signedDistanceAndGradient(p);
+			double d = dg[0];
 			Eigen::Vector3d g = dg.bottomRows(3);
 			g.normalize();
-
 			double dot = std::fabs(n.dot(g));
-			if (dot > 0 && dot > 0.95) validNormals += 1;
 
+			validPoints += std::abs(d) < delta && dot > 0 && dot > 0.95;
+			checkedPoints++;
 		}
 	}
-	double geoScore = 0.5*((double)validPoints / (double)checkedPoints + (double)validNormals / (double)checkedPoints);
+	
+	double g = 1.0;
+	double geoScore = ((double)validPoints / (double)checkedPoints);
 
 	double s = 0.2;
 	double sizeScore = (double)ps.size() / (double)maxPrimitiveSetSize;
 
-	double completeUseScore = 0.0;// getCompleteUseScore(ms, ps);
+	//double p = 0.5;
+	//double noteUsedScore = 1.0 - getCompleteUseScore(ms, ps);
 
-	double r = completeUseScore + geoScore - s * sizeScore;
+	double r = g * geoScore - s * sizeScore; // -p * noteUsedScore;
 
 	if (bestRank < r)
 	{

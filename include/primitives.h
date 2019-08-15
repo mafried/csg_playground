@@ -144,6 +144,7 @@ namespace lmu
 		ImplicitFunctionPtr imFunc; 
 		ManifoldSet ms;
 		PrimitiveType type;
+		bool cutout;
 
 		friend std::ostream& operator<<(std::ostream& os, const Primitive& p);
 
