@@ -105,7 +105,7 @@ namespace lmu
 	
 	PrimitiveSet extractCylindersFromCurvedManifolds(const ManifoldSet& manifolds, bool estimateHeight);
 
-	std::tuple<double, Eigen::Vector3d> estimateCylinderHeightAndPosFromPointCloud(const Manifold& m);
+	double estimateCylinderHeightFromPointCloud(const Manifold& m);
 	ManifoldPtr estimateSecondCylinderPlaneFromPointCloud(const Manifold& m, const Manifold& firstPlane);
 
 }

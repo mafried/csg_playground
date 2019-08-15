@@ -874,10 +874,9 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 	}
 	case 0:	//Estimate cylinder height and center position using the point cloud only since no planes exist.
 	{
-		auto heightPos = lmu::estimateCylinderHeightAndPosFromPointCloud(*m);
-		auto height = std::get<0>(heightPos);
-		auto pos = m->p;//std::get<1>(heightPos);
-
+		auto height = lmu::estimateCylinderHeightFromPointCloud(*m);
+		auto pos = m->p;
+		std::cout << "POS: " << m->p << std::endl;
 		Eigen::Matrix3d rot = getRotationMatrix(m->n);
 		Eigen::Affine3d t = (Eigen::Affine3d)(Eigen::Translation3d(pos) * rot);
 
@@ -898,9 +897,8 @@ lmu::PrimitiveSet lmu::extractCylindersFromCurvedManifolds(const ManifoldSet& ma
 	{
 		if (m->type == ManifoldType::Cylinder)
 		{
-			auto heightAndPos = estimateCylinderHeightAndPosFromPointCloud(*m);
-			double height = std::get<0>(heightAndPos);
-			Eigen::Vector3d estimatedPos = std::get<1>(heightAndPos);
+			double height = estimateCylinderHeightFromPointCloud(*m);			
+			Eigen::Vector3d estimatedPos = m->p;
 
 			Eigen::Vector3d up(0, 0, 1);
 			Eigen::Vector3d f = m->n;
@@ -936,67 +934,33 @@ lmu::PrimitiveSet lmu::extractCylindersFromCurvedManifolds(const ManifoldSet& ma
 	return primitives;
 }
 
-std::tuple<double, Eigen::Vector3d> lmu::estimateCylinderHeightAndPosFromPointCloud(const Manifold& m)
+double lmu::estimateCylinderHeightFromPointCloud(const Manifold& m)
 {
 	// Get matrix for transform to identity rotation.
-
-	Eigen::Vector3d up(0, 0, 1);
-	Eigen::Vector3d f = m.n;
-	Eigen::Vector3d r = (f).cross(up).normalized();
-	Eigen::Vector3d u = (r).cross(f).normalized();
-
-	Eigen::Matrix3d rot = Eigen::Matrix3d::Identity();
-	rot <<
-		r.x(), f.x(), u.x(),
-		r.y(), f.y(), u.y(),
-		r.z(), f.z(), u.z();
-
-	Eigen::Affine3d t = (Eigen::Affine3d)(rot);
-	auto tinv = t.inverse();
-
-	// Transform cylinder direction to identity rotation and find index of principal axis.
-
-	Eigen::Vector3d f2 = (tinv * Eigen::Vector3d(0, 0, 0)) - (tinv * m.n);
-	double fa[3] = { std::abs(f2.x()), std::abs(f2.y()), std::abs(f2.z()) };
-	int coordinateIdx = std::distance(fa, std::max_element(fa, fa + 3));
-
-	double minC = std::numeric_limits<double>::max();
-	double maxC = -std::numeric_limits<double>::max();
-
-	// Get largest extend along principal axis (= cylinder height)
+	double min_t = std::numeric_limits<double>::max();
+	double max_t = -std::numeric_limits<double>::max();
 
 	for (int i = 0; i < m.pc.rows(); ++i)
 	{
-		Eigen::Vector3d p = m.pc.row(i).leftCols(3);
-		p = tinv * p;
+		Eigen::Vector3d p = m.pc.row(i).leftCols(3).transpose();
+		Eigen::Vector3d a = m.p;
+		Eigen::Vector3d ab = m.n;
+		Eigen::Vector3d ap = p - a;
 
-		double c = p.coeff(coordinateIdx);
+		//A + dot(AP, AB) / dot(AB, AB) * AB
+		Eigen::Vector3d proj_p = a + ap.dot(ab) / ab.dot(ab) * ab;
 
-		if (c < minC)
-		{
-			minC = c;
+		// proj_p = m.p + m.n *t 
+		double t = (proj_p.x() - m.p.x()) / m.n.x();
 
-		}
-		if (c > maxC)
-		{
-			maxC = c;
-
-		}
+		min_t = t < min_t ? t : min_t;
+		max_t = t > max_t ? t : max_t;
 	}
 
-	double height = std::abs(maxC - minC);
+	Eigen::Vector3d min_p = m.p + m.n * min_t;
+	Eigen::Vector3d max_p = m.p + m.n * max_t;
 
-	// Get min / max extend of point cloud to calculate the center of the point cloud's AABB (= cylinder pos).
-
-	Eigen::Vector3d minPos = (Eigen::Vector3d)(m.pc.leftCols(3).colwise().minCoeff());
-	Eigen::Vector3d maxPos = (Eigen::Vector3d)(m.pc.leftCols(3).colwise().maxCoeff());
-
-	//std::cout << minPos << std::endl;
-	//std::cout << maxPos << std::endl;
-
-	Eigen::Vector3d pos = (minPos + ((maxPos - minPos) * 0.5));
-
-	return std::make_tuple(height, pos);
+	return (max_p - min_p).norm();
 }
 
 

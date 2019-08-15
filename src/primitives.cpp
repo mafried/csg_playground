@@ -303,6 +303,35 @@ void compute_bbox(const PointCloud& pc, Vec3f& min_pt, Vec3f& max_pt)
 	}
 }
 
+Eigen::Vector3d estimateCylinderPosFromPointCloud(const lmu::Manifold& m)
+{
+	double min_t = std::numeric_limits<double>::max();
+	double max_t = -std::numeric_limits<double>::max();
+
+	for (int i = 0; i < m.pc.rows(); ++i)
+	{
+		Eigen::Vector3d p = m.pc.row(i).leftCols(3).transpose();
+		Eigen::Vector3d a = m.p;
+		Eigen::Vector3d ab = m.n;
+		Eigen::Vector3d ap = p - a;
+
+		//A + dot(AP, AB) / dot(AB, AB) * AB
+		Eigen::Vector3d proj_p = a + ap.dot(ab) / ab.dot(ab) * ab;
+
+		// proj_p = m.p + m.n *t 
+		double t = (proj_p.x() - m.p.x()) / m.n.x();
+
+		min_t = t < min_t ? t : min_t;
+		max_t = t > max_t ? t : max_t;
+	}
+
+	Eigen::Vector3d min_p = m.p + m.n * min_t; 
+	Eigen::Vector3d max_p = m.p + m.n * max_t;
+	
+	return min_p + (max_p - min_p) * 0.5;
+}
+
+
 lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, 
 	bool projectPointsOnSurface, int ransacIterations, const lmu::RansacMergeParams& rmParams)
 {
@@ -420,6 +449,8 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 			auto cylinder = dynamic_cast<CylinderPrimitiveShape*>(shape.Ptr());
 			auto cylinderParams = cylinder->Internal();
 
+			auto p = Eigen::Vector3d(cylinderParams.AxisPosition()[0], cylinderParams.AxisPosition()[1], cylinderParams.AxisPosition()[2]);
+		
 			m = std::make_shared<lmu::Manifold>(
 				lmu::ManifoldType::Cylinder,
 				Eigen::Vector3d(cylinderParams.AxisPosition()[0], cylinderParams.AxisPosition()[1], cylinderParams.AxisPosition()[2]),
@@ -453,6 +484,13 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 			manifolds[i]->pc.row(j).rightCols(3).normalize();
 		}
 	}
+
+	// Correct cylinder position based on the assigned point cloud. 
+	for (auto& m : manifolds) {		
+		if (m->type == ManifoldType::Cylinder)
+			m->p = estimateCylinderPosFromPointCloud(*m);
+	}
+
 
 	if (projectPointsOnSurface) {
 		for (auto& m : manifolds) {

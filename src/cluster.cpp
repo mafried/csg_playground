@@ -16,7 +16,7 @@ std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double sc
 	size_t numClusters;
 	s >> numClusters;
 
-	//std::cout << "Num Clusters: " << numClusters << std::endl;
+	std::cout << "Num Clusters: " << numClusters << std::endl;
 
 	for (int i = 0; i < numClusters; ++i)
 	{
