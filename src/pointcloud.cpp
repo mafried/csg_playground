@@ -26,6 +26,26 @@ lmu::PointCloud lmu::pointCloudFromVector(const std::vector<Eigen::Matrix<double
 	return pc;
 }
 
+lmu::PointCloud lmu::mergePointClouds(const std::vector<PointCloud>& pointClouds)
+{
+	if (pointClouds.empty())
+		return lmu::PointCloud(0, 0);
+
+	size_t size = 0; 
+	for (const auto& pc : pointClouds)
+		size += pc.rows();
+
+	PointCloud res_pc(size, pointClouds[0].cols());
+	size_t row_offset = 0;
+	for (size_t mat_idx = 0; mat_idx < pointClouds.size(); ++mat_idx) {
+		long cur_rows = pointClouds[mat_idx].rows();
+		res_pc.middleRows(row_offset, cur_rows) = pointClouds[mat_idx];
+		row_offset += cur_rows;
+	}
+
+	return res_pc;
+}
+
 void lmu::writePointCloud(const std::string& file, PointCloud& points)
 {
 	//if (points.cols() != 6)

@@ -41,6 +41,7 @@ std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu
 #include <CGAL/min_quadrilateral_2.h>
 #include <CGAL/convex_hull_2.h>
 #include <CGAL/Plane_3.h>
+#include <CGAL/convex_hull_2.h>
 
 struct Kernel : public CGAL::Cartesian<double> {};
 
@@ -52,6 +53,21 @@ typedef Kernel::Vector_3                          Vector_3;
 
 typedef CGAL::Polygon_2<Kernel>                   Polygon_2;
 typedef CGAL::Random_points_in_square_2<Point_2>  Generator;
+
+std::vector<Point_2> get2DPoints(const lmu::ManifoldPtr& plane, const Eigen::Vector3d* input_points, size_t num_points)
+{
+	Plane_3 cPlane(Point_3(plane->p.x(), plane->p.y(), plane->p.z()), Vector_3(plane->n.x(), plane->n.y(), plane->n.z()));
+
+	std::vector<Point_2> points;
+	points.reserve(num_points);
+	for (int i = 0; i < num_points; ++i)
+	{
+		Eigen::Vector3d p = input_points[i];
+		points.push_back(cPlane.to_2d(Point_3(p.x(), p.y(), p.z())));
+	}
+
+	return points;
+}
 
 std::vector<Point_2> get2DPoints(const lmu::ManifoldPtr& plane)
 {
@@ -194,6 +210,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	auto manifoldsForCreator = std::get<1>(staticPrimsAndRestManifolds);
 	auto staticPrimitives = std::get<0>(staticPrimsAndRestManifolds);
 
+	// get union of all non-static manifold pointclouds.
+	std::vector<PointCloud> pointClouds; 
+	std::transform(manifoldsForCreator.begin(), manifoldsForCreator.end(), std::back_inserter(pointClouds), 
+		[](const ManifoldPtr m){return m->pc; });
+	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
+
 	// Add "ghost planes". 
 	double distT = 0.02;
 	double angleT = /*M_PI / 18.0*/ M_PI / 9.0;
@@ -202,16 +224,16 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(200, 0.00001, 1000);
+	PrimitiveSetIterationStopCriterion criterion(1000, 0.00001, 1000);
 
-	int maxPrimitiveSetSize = 10;
+	int maxPrimitiveSetSize = 20;
 
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
 	//PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.3, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
-	PrimitiveSetRanker ranker(ransacRes.pc, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
+	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, true, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -728,6 +750,9 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const Manifold
 
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
 {
+	return rank2(ps, ignoreStaticPrimitives);
+
+
 	if (ps.empty()) {
 		return -std::numeric_limits<double>::max();
 	}
@@ -778,6 +803,161 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 	//double noteUsedScore = 1.0 - getCompleteUseScore(ms, ps);
 
 	double r = g * geoScore - s * sizeScore; // -p * noteUsedScore;
+
+	if (bestRank < r)
+	{
+		bestRank = r;
+		bestPrimitives = ps;
+	}
+
+	return r;
+}
+
+lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
+{
+	if (ps.empty()) 
+	{
+		return -std::numeric_limits<double>::max();
+	}
+
+	// ===================== PART I: Computation of the Geometry Score =====================
+	
+	const double delta = 0.01;
+	int validPoints = 0;
+	int checkedPoints = 0;
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d point = pc.block<1, 3>(i, 0);
+		Eigen::Vector3d n = pc.block<1, 3>(i, 3);
+
+		// Get distance to closest primitive. 
+		double min_d = std::numeric_limits<double>::max();
+		Eigen::Vector3d min_normal;
+		for (const auto& p : ps)
+		{
+			auto dg = p.imFunc->signedDistanceAndGradient(point);
+			double d = std::abs(dg[0]);
+			Eigen::Vector3d g = dg.bottomRows(3);
+					
+			if (min_d > d)
+			{
+				min_d = d; 
+				min_normal = g.normalized(); 
+			}			
+		}
+
+		double dot = std::fabs(n.dot(min_normal));
+
+		validPoints += min_d < delta && dot > 0 && dot > 0.95;
+		checkedPoints++;
+	}
+
+
+	// ===================== PART II: Computation of the Area Score =====================
+
+	double area_score = 0.0;
+	for (const auto& p : ps)
+	{
+		if (p.type != PrimitiveType::Box)
+		{
+			std::cout << "Warning: primitive type is not a box." << std::endl;
+			continue;
+		}
+
+		if (p.ms.size() != 6)
+		{
+			std::cout << "Warning: not exactly 6 planes available." << std::endl;
+			continue;
+		}
+
+		auto mesh = createPolytope(Eigen::Affine3d::Identity(), 
+		{ p.ms[0]->p, p.ms[1]->p, p.ms[2]->p, p.ms[3]->p, p.ms[4]->p, p.ms[5]->p },
+		{ p.ms[0]->n, p.ms[1]->n, p.ms[2]->n, p.ms[3]->n, p.ms[4]->n, p.ms[5]->n });
+
+		if (mesh.empty())
+		{
+			std::cout << "Warning: mesh is empty." << std::endl;
+			continue; // TODO: Check if this is correct.
+		}
+
+		if (mesh.indices.rows() != 12)
+		{
+			std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
+			continue;
+		}
+
+		double per_primitive_area_coeff = 0.0;
+		for (int i = 0; i < 12; ++i)
+		{
+			Eigen::Vector3d triangle[3] = {
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[0])),
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[1])),
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[2]))
+			};				
+			Eigen::Vector3d triangle_normal = (triangle[0] - triangle[1]).cross(triangle[0] - triangle[2]).normalized();
+			
+			// Find plane that has the same orientation as the triangle.
+			ManifoldPtr plane = nullptr;
+			for (const auto& m : p.ms)
+			{
+				if (triangle_normal.dot(m->n) > 0.0)
+				{
+					plane = m;
+					break;
+				}
+			}
+			// TODO: what if plane == nullptr?
+			if (!plane) 
+			{
+				std::cout << "Warning: plane is nullptr." << std::endl;
+				continue;
+			}
+
+			// Project points of triangle and point cloud points on the plane.
+			auto triangle_points_2d = get2DPoints(plane, triangle, 3);
+			auto plane_points_2d = get2DPoints(plane);
+
+			// Get all plane points that are inside triangle. 
+			Polygon_2 triangle_polygon(triangle_points_2d.begin(), triangle_points_2d.end());
+			if (!triangle_polygon.is_simple())
+			{
+				std::cout << "Warning polygon is not simple! " << triangle_polygon << std::endl;
+				continue;
+			}
+			std::vector<Point_2> points_in_triangle_2d;
+			for (const auto plane_point : plane_points_2d)
+				if (triangle_polygon.bounded_side(plane_point) != CGAL::ON_UNBOUNDED_SIDE)
+					points_in_triangle_2d.push_back(plane_point);
+
+			// Compute convex hull of point cloud points. 
+			std::vector<Point_2> convex_hull;
+			CGAL::convex_hull_2(points_in_triangle_2d.begin(), points_in_triangle_2d.end(), std::back_inserter(convex_hull));
+
+			// TODO: compute concave hull based on convex hull.
+
+			// Compute area encompassed by points based on hull. 			
+			double hull_area = Polygon_2(convex_hull.begin(), convex_hull.end()).area();
+			double triangle_area = triangle_polygon.area();
+
+			per_primitive_area_coeff += hull_area / triangle_area;
+		}
+		per_primitive_area_coeff /= 12.0;
+
+		area_score += per_primitive_area_coeff;
+	}
+	area_score /= (double)ps.size();
+
+	// ===================== PART III: Compute Weighted Sum =====================
+
+	double s = 0.2;
+	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
+
+	double g = 1.0;
+	double geo_score = ((double)validPoints / (double)checkedPoints);
+
+	double a = 1.0;
+
+	double r = a * area_score + g * geo_score - s * size_score;
 
 	if (bestRank < r)
 	{
