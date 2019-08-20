@@ -882,7 +882,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 		if (mesh.indices.rows() != 12)
 		{
-			std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
+			//std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
 			continue;
 		}
 
@@ -890,29 +890,33 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		for (int i = 0; i < 12; ++i)
 		{
 			Eigen::Vector3d triangle[3] = {
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[0])),
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[1])),
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.row(i)[2]))
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,0))),
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,1))),
+				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,2)))
 			};				
-			Eigen::Vector3d triangle_normal = (triangle[0] - triangle[1]).cross(triangle[0] - triangle[2]).normalized();
+			Eigen::Vector3d triangle_normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized();
 			
 			// Find plane that has the same orientation as the triangle.
-			ManifoldPtr plane = nullptr;
-			for (const auto& m : p.ms)
+			int plane_idx = -1;
+			double min_delta = std::numeric_limits<double>::max();
+			for (int i = 0; i < p.ms.size(); ++i)
 			{
-				if (triangle_normal.dot(m->n) > 0.0)
+				double d = std::abs(triangle_normal.dot(p.ms[i]->n) - 1.0);
+
+				if (d < min_delta)
 				{
-					plane = m;
-					break;
+					min_delta = d; 
+					plane_idx = i;
 				}
 			}
-			// TODO: what if plane == nullptr?
-			if (!plane) 
+			if (plane_idx == -1)
 			{
-				std::cout << "Warning: plane is nullptr." << std::endl;
+				std::cout << "Warning: plane is not defined." << std::endl;
 				continue;
 			}
 
+			ManifoldPtr plane = p.ms[plane_idx];
+						
 			// Project points of triangle and point cloud points on the plane.
 			auto triangle_points_2d = get2DPoints(plane, triangle, 3);
 			auto plane_points_2d = get2DPoints(plane);
@@ -964,6 +968,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		bestRank = r;
 		bestPrimitives = ps;
 	}
+
+	std::cout << "SCORE: " << r << std::endl;
 
 	return r;
 }
