@@ -471,7 +471,7 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 	//Assign point clouds to manifolds.
 	for (unsigned int i = 0; i < mergedPointclouds.size(); ++i)
 	{
-		std::cout << "I: " << i << std::endl;
+		//std::cout << "I: " << i << std::endl;
 
 		manifolds[i]->pc = lmu::PointCloud(mergedPointclouds[i].size(), 6);
 
@@ -635,6 +635,11 @@ std::ostream& lmu::operator <<(std::ostream& os, const Manifold& m)
 	os << manifoldTypeToString(m.type) << " n: " << m.n.x() << " " << m.n.y() << " " << m.n.z() << " p: " << m.p.x() << " " << m.p.y() << " " << m.p.z();
 
 	return os;
+}
+
+bool lmu::manifoldsEqual(const Manifold & m1, const Manifold & m2, double epsilon)
+{
+	return m1.type == m2.type && m1.n.isApprox(m2.n, epsilon) && m1.p.isApprox(m2.p, epsilon);
 }
 
 std::ostream& lmu::operator <<(std::ostream& os, const Primitive& p)

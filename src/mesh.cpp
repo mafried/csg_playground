@@ -360,15 +360,18 @@ typedef K::Segment_3                              Segment_3;
 typedef K::Triangle_3                             Triangle_3;
 
 
+
+void lmu::initializePolytopeCreator()
+{
+	dd_set_global_constants();  /* First, this must be called to use cddlib. */
+}
+
 Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n)
 {	
-
 	dd_PolyhedraPtr poly;
 	dd_MatrixPtr A, G;
 	dd_ErrorType err;
-
-	dd_set_global_constants();  /* First, this must be called to use cddlib. */
-
+	
 	A = dd_CreateMatrix(p.size(), 4);
 	A->representation = dd_Inequality;
 
@@ -405,9 +408,19 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 		//std::cout << "Poly point: " << points.back().x() << " " << points.back().y() << " " << points.back().z() << std::endl;
 	}
 
+	/*std::cout << "--------------------------------------------" << std::endl;
+	if (points.size() < 8)
+	{
+		for (int i = 0; i < p.size(); ++i)
+		{
+			std::cout
+				<< "p: " << p[i].x() << " " << p[i].y() << " " << p[i].z()
+				<< " n: " << n[i].x() << " " << n[i].y() << " " << n[i].z() << std::endl;
+		}
+	}*/
+
 	dd_FreeMatrix(A);
 	dd_FreeMatrix(G);	
-	dd_free_global_constants();
 		
 	//CGAL::advancing_front_surface_reconstruction(points.begin(),
 	//	points.end(),

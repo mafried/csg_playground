@@ -13,7 +13,8 @@ namespace lmu
 	struct PrimitiveSetCreator
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
-			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon);
+			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
+			double minDistanceBetweenParallelPlanes);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -33,9 +34,12 @@ namespace lmu
 			ADD
 		};
 
-		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection = false) const;
+		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, 
+			double angleEpsilon, bool ignoreDirection = false, 
+			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0) const;
+
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
-		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
+		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon, double minDistanceToPlanePoint) const;
 
 		std::unordered_set<ManifoldType> getAvailableManifoldTypes(const ManifoldSet& ms) const;
 		PrimitiveType getRandomPrimitiveType() const;
@@ -53,6 +57,7 @@ namespace lmu
 		int maxCrossoverIterations;
 		int maxPrimitiveSetSize;
 		double angleEpsilon;
+		double minDistanceBetweenParallelPlanes;
 
 		mutable std::default_random_engine rndEngine;
 		mutable std::random_device rndDevice;
@@ -81,6 +86,9 @@ namespace lmu
 		int maxPrimitiveSetSize;
 
 		double getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const;
+
+		mutable std::unordered_map<size_t, double> primitiveAreaScoreLookup;
+		mutable std::mutex lookupMutex;
 	};
 
 	struct GAResult

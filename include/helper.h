@@ -98,6 +98,21 @@ namespace lmu
 		std::rotate(first, k, last);
 		return false;
 	}
+
+	// https://stackoverflow.com/questions/40577720/hashing-stdvector-independent-of-items-order
+	template<template<class...>class element_hash = std::hash>
+	struct symmetric_range_hash {
+		template<class T>
+		std::size_t operator()(T const& t) const {
+			std::size_t r = element_hash<int>{}(0); // seed with the hash of 0.
+			for (auto&& x : t) {
+				using element_type = std::decay_t<decltype(x)>;
+				auto next = element_hash<element_type>{}(x);
+				r = r + next;
+			}
+			return r;
+		}
+	};
 }
 
 #endif

@@ -2,6 +2,7 @@
 #include "primitive_helper.h"
 #include "csgnode.h"
 #include "csgnode_helper.h"
+#include "helper.h"
 
 lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
 
@@ -205,6 +206,9 @@ lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::Manif
 
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
+	// Initialize polytope creator.
+	initializePolytopeCreator();
+
 	// static primitives are not changed in the GA process but used.
 	auto staticPrimsAndRestManifolds = extractStaticManifolds(ransacRes.manifolds);
 	auto manifoldsForCreator = std::get<1>(staticPrimsAndRestManifolds);
@@ -219,21 +223,20 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	// Add "ghost planes". 
 	double distT = 0.02;
 	double angleT = /*M_PI / 18.0*/ M_PI / 9.0;
-	//manifoldsForCreator = generateGhostPlanes(ransacRes.pc, ransacRes.manifolds, distT, angleT);
-	manifoldsForCreator = generateGhostPlanes(ransacRes.pc, manifoldsForCreator, distT, angleT);
+	//manifoldsForCreator = generateGhostPlanes(ransacRes.pc, manifoldsForCreator, distT, angleT);
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(1000, 0.00001, 1000);
+	PrimitiveSetIterationStopCriterion criterion(300, 0.00001, 300);
 
 	int maxPrimitiveSetSize = 20;
 
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.01);
 	//PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.3, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(15, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -273,7 +276,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
-	int maxPrimitiveSetSize, double angleEpsilon) :
+	int maxPrimitiveSetSize, double angleEpsilon,double minDistanceBetweenParallelPlanes) :
 	ms(ms),
 	intraCrossProb(intraCrossProb),
 	mutationDistribution(mutationDistribution),
@@ -281,7 +284,8 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	maxCrossoverIterations(maxCrossoverIterations),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
 	angleEpsilon(angleEpsilon),
-	availableManifoldTypes(getAvailableManifoldTypes(ms))
+	availableManifoldTypes(getAvailableManifoldTypes(ms)),
+	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes)
 {
 	rndEngine.seed(rndDevice());
 }
@@ -494,7 +498,9 @@ std::string lmu::PrimitiveSetCreator::info() const
 	return std::string();
 }
 
-lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection) const
+lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const Eigen::Vector3d& direction, 
+	const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection, 
+	const Eigen::Vector3d& point, double minimumPointDistance) const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
@@ -504,14 +510,18 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 
 	// Filter manifold list.
 	std::copy_if(ms.begin(), ms.end(), std::back_inserter(candidates),
-		[type, &alreadyUsed, &direction, cos_e, ignoreDirection](const ManifoldPtr& m)
+		[type, &alreadyUsed, &direction, cos_e, ignoreDirection, &point, minimumPointDistance](const ManifoldPtr& m)
 	{
 		//std::cout << (direction.norm() || ignoreDirection) << " " << m->n.norm() << std::endl;
 
 		return
-			m->type == type &&																// same type.
-			std::find(alreadyUsed.begin(), alreadyUsed.end(), m) == alreadyUsed.end() &&	// not already used.
-			(ignoreDirection || std::abs(direction.dot(m->n)) > cos_e);						// same direction (or flipped).
+			m->type == type &&												// same type.
+			std::find_if(alreadyUsed.begin(), alreadyUsed.end(),			// not already used.
+				[&m, minimumPointDistance](const ManifoldPtr& alreadyUsedM) {
+					return lmu::manifoldsEqual(*m, *alreadyUsedM, 0.0001);
+				}) == alreadyUsed.end() &&
+			(ignoreDirection || std::abs(direction.dot(m->n)) > cos_e) &&	// same direction (or flipped).
+			std::abs((point - m->p).dot(m->n)) > minimumPointDistance;		// distance between point and plane  
 	});
 
 	if (candidates.empty())
@@ -520,7 +530,8 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 	return candidates[du(rndEngine, parmu_t{ 0, (int)candidates.size() - 1 })];
 }
 
-lmu::ManifoldPtr lmu::PrimitiveSetCreator::getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const
+lmu::ManifoldPtr lmu::PrimitiveSetCreator::getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, 
+	const ManifoldSet& alreadyUsed, double angleEpsilon) const
 {
 	//std::cout << "perp ";
 
@@ -534,8 +545,16 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getPerpendicularPlane(const std::vect
 	std::copy_if(ms.begin(), ms.end(), std::back_inserter(candidates),
 		[&alreadyUsed, &planes, cos_e](const ManifoldPtr& m)
 	{
-		if (m->type != ManifoldType::Plane || std::find(alreadyUsed.begin(), alreadyUsed.end(), m) != alreadyUsed.end()) // only planes that weren't used before.
+		if (m->type != ManifoldType::Plane)
+		{
 			return false;
+		}
+
+		if (std::find_if(alreadyUsed.begin(), alreadyUsed.end(), [&m](const ManifoldPtr& alreadyUsedM)
+			{ return lmu::manifoldsEqual(*m, *alreadyUsedM, 0.0001); }) != alreadyUsed.end())
+		{
+			return false;
+		}
 
 		for (const auto& plane : planes)
 		{
@@ -556,10 +575,10 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getPerpendicularPlane(const std::vect
 	return candidates[du(rndEngine, parmu_t{ 0, (int)candidates.size() - 1 })];
 }
 
-lmu::ManifoldPtr lmu::PrimitiveSetCreator::getParallelPlane(const ManifoldPtr& plane, const ManifoldSet & alreadyUsed, double angleEpsilon) const
+lmu::ManifoldPtr lmu::PrimitiveSetCreator::getParallelPlane(const ManifoldPtr& plane, const ManifoldSet & alreadyUsed, 
+	double angleEpsilon, double minDistanceToParallelPlane) const
 {
-	auto foundPlane = getManifold(ManifoldType::Plane, plane->n, alreadyUsed, angleEpsilon);
-
+	auto foundPlane = getManifold(ManifoldType::Plane, plane->n, alreadyUsed, angleEpsilon, false, plane->p, minDistanceToParallelPlane);
 	return foundPlane;
 }
 
@@ -618,7 +637,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			break;
 		planes.push_back(plane);
 
-		plane = getParallelPlane(plane, planes, angleEpsilon);
+		plane = getParallelPlane(plane, planes, angleEpsilon, minDistanceBetweenParallelPlanes);
 		if (!plane)
 			break;
 		planes.push_back(plane);
@@ -628,7 +647,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			break;
 		planes.push_back(plane);
 
-		plane = getParallelPlane(plane, planes, angleEpsilon);
+		plane = getParallelPlane(plane, planes, angleEpsilon, minDistanceBetweenParallelPlanes);
 		if (!plane)
 			break;
 		planes.push_back(plane);
@@ -638,10 +657,21 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			break;
 		planes.push_back(plane);
 
-		plane = getParallelPlane(plane, planes, angleEpsilon);
+		plane = getParallelPlane(plane, planes, angleEpsilon, minDistanceBetweenParallelPlanes);
 		if (!plane)
 			break;
 		planes.push_back(plane);
+
+		/*std::cout << "####################################" << std::endl;
+		if (planes.size() == 6)
+		{
+			for (int i = 0; i < planes.size(); ++i)
+			{
+				std::cout
+					<< "p: " << planes[i]->p.x() << " " << planes[i]->p.y() << " " << planes[i]->p.z()
+					<< " n: " << planes[i]->n.x() << " " << planes[i]->n.y() << " " << planes[i]->n.z() << std::endl;
+			}
+		}*/
 
 		primitive = createBoxPrimitive(planes);
 	}
@@ -701,7 +731,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 	{
 		// Find a new parallel plane to a randomly chosen plane (parallel planes come in pairs).
 		int planePairIdx = du(rndEngine, parmu_t{ 0, 2 }) * 2;
-		auto newPlane = getParallelPlane(p.ms[planePairIdx], p.ms, angleEpsilon);
+		auto newPlane = getParallelPlane(p.ms[planePairIdx], p.ms, angleEpsilon, minDistanceBetweenParallelPlanes);
 		if (newPlane)
 		{
 			auto newPlanes = ManifoldSet(p.ms);
@@ -815,14 +845,12 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
 {
-	if (ps.empty()) 
-	{
+	if (ps.empty()) 	
 		return -std::numeric_limits<double>::max();
-	}
-
+	
 	// ===================== PART I: Computation of the Geometry Score =====================
 	
-	const double delta = 0.01;
+	const double delta = 0.0001;
 	int validPoints = 0;
 	int checkedPoints = 0;
 	for (int i = 0; i < pc.rows(); ++i)
@@ -835,7 +863,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		Eigen::Vector3d min_normal;
 		for (const auto& p : ps)
 		{
-			auto dg = p.imFunc->signedDistanceAndGradient(point);
+			auto dg = (1.0 - 2.0 * (double)p.cutout) * p.imFunc->signedDistanceAndGradient(point);
 			double d = std::abs(dg[0]);
 			Eigen::Vector3d g = dg.bottomRows(3);
 					
@@ -846,9 +874,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			}			
 		}
 
-		double dot = std::fabs(n.dot(min_normal));
+		//double dot = std::fabs(n.dot(min_normal));
 
-		validPoints += min_d < delta && dot > 0 && dot > 0.95;
+		//std::cout << "MIN D: " << min_d << std::endl;
+
+		validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
 		checkedPoints++;
 	}
 
@@ -858,6 +888,18 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 	double area_score = 0.0;
 	for (const auto& p : ps)
 	{
+		//size_t hash = p.hash(0);
+		//{
+		//	std::lock_guard<std::mutex> lk(lookupMutex);
+		//
+		//	if (primitiveAreaScoreLookup.count(hash) != 0)
+		//	{
+		//		area_score += primitiveAreaScoreLookup.at(hash);
+		//		//std::cout << "Found in Lookup" << std::endl;
+		//		continue;
+		//	}
+		//}
+
 		if (p.type != PrimitiveType::Box)
 		{
 			std::cout << "Warning: primitive type is not a box." << std::endl;
@@ -947,6 +989,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		}
 		per_primitive_area_coeff /= 12.0;
 
+		//{
+		//	std::lock_guard<std::mutex> lk(lookupMutex);
+		//	primitiveAreaScoreLookup[hash] = per_primitive_area_coeff;
+		//}
+
 		area_score += per_primitive_area_coeff;
 	}
 	area_score /= (double)ps.size();
@@ -967,9 +1014,13 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 	{
 		bestRank = r;
 		bestPrimitives = ps;
+
+		std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
 	}
 
-	std::cout << "SCORE: " << r << std::endl;
+	//std::cout << "SCORE: " << r << std::endl;
+
+	
 
 	return r;
 }

@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 #include "pointcloud.h"
 #include "mesh.h"
+#include "helper.h"
 
 namespace lmu
 {
@@ -106,6 +107,8 @@ namespace lmu
 	};
 	std::ostream& operator<<(std::ostream& os, const Manifold& m);
 
+	bool manifoldsEqual(const Manifold& m1, const Manifold& m2, double epsilon);
+
 	using ManifoldPtr = std::shared_ptr<Manifold>;
 	using ManifoldSet = std::vector<ManifoldPtr>;
 
@@ -141,6 +144,11 @@ namespace lmu
 			return Primitive();
 		}
 
+		size_t hash(size_t seed) const
+		{
+			return symmetric_range_hash<>().operator()<>(ms);
+		}
+
 		ImplicitFunctionPtr imFunc; 
 		ManifoldSet ms;
 		PrimitiveType type;
@@ -160,7 +168,7 @@ namespace lmu
 	{
 		size_t hash(size_t seed) const
 		{
-			return 0; //TODO
+			return 0;// symmetric_range_hash<>().operator() < > (*this);
 		}
 	};
 
