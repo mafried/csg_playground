@@ -227,7 +227,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(300, 0.00001, 300);
+	PrimitiveSetIterationStopCriterion criterion(2000, 0.00001, 2000);
 
 	int maxPrimitiveSetSize = 20;
 
@@ -236,7 +236,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(15, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -843,6 +843,74 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 	return r;
 }
 
+#include <igl/opengl/glfw/Viewer.h>
+
+Eigen::MatrixXd concatMatrices(const std::vector<Eigen::MatrixXd>& matrices)
+{
+	if (matrices.empty())
+		return Eigen::MatrixXd(0, 0);
+
+	size_t size = 0;
+	for (const auto& m : matrices)
+		size += m.rows();
+
+	Eigen::MatrixXd res_m(size, matrices[0].cols());
+	size_t row_offset = 0;
+	for (size_t mat_idx = 0; mat_idx < matrices.size(); ++mat_idx) 
+	{
+		long cur_rows = matrices[mat_idx].rows();
+		res_m.middleRows(row_offset, cur_rows) = matrices[mat_idx];
+		row_offset += cur_rows;
+	}
+
+	return res_m;
+}
+
+void debug_visualize(lmu::Mesh& mesh, const lmu::ManifoldSet& planes, const std::vector<std::vector<Point_2>>& convex_hulls,
+	const std::vector<std::vector<Point_2>>& points_in_triangles)
+{
+	igl::opengl::glfw::Viewer viewer;
+	std::vector<Eigen::MatrixXd> lines;
+
+	std::cout << "Planes: " << planes.size() << " Convex Hulls: " << convex_hulls.size() << " Pts in Triangles: " << points_in_triangles.size() << std::endl;
+	
+	for (int i = 0; i < planes.size(); ++i)
+	{
+		if (!convex_hulls[i].empty())
+		{
+			auto convex_hull_3d = get3DPoints(planes[i], convex_hulls[i]);
+			Eigen::MatrixXd linesPerPlane(convex_hull_3d.size(), 9);
+			for (int j = 0; j < convex_hull_3d.size() - 1; ++j)
+			{
+				linesPerPlane.row(j) << convex_hull_3d[j].transpose(), convex_hull_3d[j + 1].transpose(), Eigen::RowVector3d(1, 0, 0);
+			}
+			linesPerPlane.row(convex_hull_3d.size() - 1) << convex_hull_3d[0].transpose(), convex_hull_3d[convex_hull_3d.size() - 1].transpose(), Eigen::RowVector3d(1, 0, 0);
+
+			lines.push_back(linesPerPlane);
+		}
+
+		if (!points_in_triangles[i].empty())
+		{
+			auto points_in_triangle = get3DPoints(planes[i], points_in_triangles[i]);
+			lmu::PointCloud pc(points_in_triangle.size(), 6);
+			for (int j = 0; j < points_in_triangle.size(); ++j)
+			{
+				pc.row(j) << points_in_triangle[j].transpose(), Eigen::RowVector3d(0, 1, 0);
+			}
+			viewer.data().add_points(pc.leftCols(3), pc.rightCols(3));
+		}
+	}
+
+	viewer.data().set_mesh(mesh.vertices, mesh.indices);
+	viewer.data().lines = concatMatrices(lines);
+	viewer.data().show_lines = true;
+	viewer.data().point_size = 5.0;
+	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
+
+	viewer.launch();
+}
+
+
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
 {
 	if (ps.empty()) 	
@@ -912,7 +980,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			continue;
 		}
 
-		auto mesh = createPolytope(Eigen::Affine3d::Identity(), 
+		auto mesh = createPolytope(Eigen::Affine3d::Identity(),
 		{ p.ms[0]->p, p.ms[1]->p, p.ms[2]->p, p.ms[3]->p, p.ms[4]->p, p.ms[5]->p },
 		{ p.ms[0]->n, p.ms[1]->n, p.ms[2]->n, p.ms[3]->n, p.ms[4]->n, p.ms[5]->n });
 
@@ -929,15 +997,20 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		}
 
 		double per_primitive_area_coeff = 0.0;
+
+		ManifoldSet selected_planes;
+		std::vector<std::vector<Point_2>> convex_hulls;
+		std::vector<std::vector<Point_2>> points_in_triangles;
+
 		for (int i = 0; i < 12; ++i)
 		{
 			Eigen::Vector3d triangle[3] = {
 				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,0))),
 				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,1))),
 				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,2)))
-			};				
+			};
 			Eigen::Vector3d triangle_normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized();
-			
+
 			// Find plane that has the same orientation as the triangle.
 			int plane_idx = -1;
 			double min_delta = std::numeric_limits<double>::max();
@@ -947,10 +1020,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 				if (d < min_delta)
 				{
-					min_delta = d; 
+					min_delta = d;
 					plane_idx = i;
 				}
 			}
+			std::cout << std::endl << "--------------------" << std::endl;
 			if (plane_idx == -1)
 			{
 				std::cout << "Warning: plane is not defined." << std::endl;
@@ -958,7 +1032,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			}
 
 			ManifoldPtr plane = p.ms[plane_idx];
-						
+			selected_planes.push_back(plane);
+
 			// Project points of triangle and point cloud points on the plane.
 			auto triangle_points_2d = get2DPoints(plane, triangle, 3);
 			auto plane_points_2d = get2DPoints(plane);
@@ -975,10 +1050,12 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 				if (triangle_polygon.bounded_side(plane_point) != CGAL::ON_UNBOUNDED_SIDE)
 					points_in_triangle_2d.push_back(plane_point);
 
+			points_in_triangles.push_back(points_in_triangle_2d);
+
 			// Compute convex hull of point cloud points. 
 			std::vector<Point_2> convex_hull;
 			CGAL::convex_hull_2(points_in_triangle_2d.begin(), points_in_triangle_2d.end(), std::back_inserter(convex_hull));
-
+			convex_hulls.push_back(convex_hull);
 			// TODO: compute concave hull based on convex hull.
 
 			// Compute area encompassed by points based on hull. 			
@@ -995,12 +1072,16 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		//}
 
 		area_score += per_primitive_area_coeff;
+
+		debug_visualize(mesh, selected_planes, convex_hulls, points_in_triangles);
 	}
 	area_score /= (double)ps.size();
 
+	
+
 	// ===================== PART III: Compute Weighted Sum =====================
 
-	double s = 0.2;
+	double s = 0.4;
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	double g = 1.0;

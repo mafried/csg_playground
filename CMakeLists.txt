@@ -83,7 +83,7 @@ endif()
 
 # Compile the lib
 add_library(csg_playground_lib STATIC ${CSG_LIB_HEADERS} ${CSG_LIB_SOURCES})
-target_link_libraries(csg_playground_lib igl::core igl::cgal ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES}  ${PCL_SURFACE_LIBRARIES}  ${PCL_ML_LIBRARIES} cddlib orig_ransac)
+target_link_libraries(csg_playground_lib igl::core igl::cgal igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES}  ${PCL_SURFACE_LIBRARIES}  ${PCL_ML_LIBRARIES} cddlib orig_ransac)
 
 add_library(csg_c SHARED "include/c.h" "src/c.cpp")
 target_link_libraries(csg_c csg_playground_lib igl::core igl::cgal)
