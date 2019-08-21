@@ -45,6 +45,10 @@ include_directories(${PROJECT_SOURCE_DIR}/include/)
 #INIH
 include_directories(${PROJECT_SOURCE_DIR}/third_party/inih) 
 
+#CONCAVEMAN
+include_directories(${PROJECT_SOURCE_DIR}/third_party/concaveman/src/main/cpp) 
+
+
 #find_package(Boost COMPONENTS system filesystem REQUIRED)
 
 #PCL

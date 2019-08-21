@@ -1,4 +1,5 @@
 #include "..\include\primitives.h"
+#include "..\include\cluster.h"
 
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -98,7 +99,7 @@ lmu::PrimitiveType lmu::primitiveTypeFromString(std::string type)
 		return PrimitiveType::None;
 }
 
-lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& results)
+lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& results, bool mergePlanes)
 {
 	RansacResult res;
 
@@ -332,76 +333,82 @@ Eigen::Vector3d estimateCylinderPosFromPointCloud(const lmu::Manifold& m)
 }
 
 
-lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc, const lmu::RansacParams& params, 
+lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>& clusters, const lmu::RansacParams& params,
 	bool projectPointsOnSurface, int ransacIterations, const lmu::RansacMergeParams& rmParams)
 {
-	// Convert point cloud.
-	::PointCloud pcConv;
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		::Point point(
-			Vec3f(pc.coeff(i, 0), pc.coeff(i, 1), pc.coeff(i, 2)),
-			Vec3f(pc.coeff(i, 3), pc.coeff(i, 4), pc.coeff(i, 5))
-		);
-		
-		//std::cout << pc.row(i).x() << " " << pc.row(i).y() << " " << pc.row(i).z() << std::endl;
-		//std::cout << point[0] << " " << point[1] << " " << point[2] << std::endl;
-
-		pcConv.push_back(point);
-	}
-
-	// Compute bounding box.
-	Vec3f min_pt, max_pt;
-	compute_bbox(pcConv, min_pt, max_pt);
-	pcConv.setBBox(min_pt, max_pt);
-
-	//std::cout << "Scale: " << pcConv.getScale() << std::endl;
-
-	RansacShapeDetector::Options ransacOptions;
-	
-	ransacOptions.m_epsilon = params.epsilon * pcConv.getScale();
-	ransacOptions.m_bitmapEpsilon = params.cluster_epsilon * pcConv.getScale();
-	ransacOptions.m_normalThresh = params.normal_threshold;
-	ransacOptions.m_minSupport = params.min_points;
-	ransacOptions.m_probability = params.probability;
-
-	RansacShapeDetector detector(ransacOptions);
-
-	if (params.types.count(ManifoldType::Cylinder) || params.types.empty())
-	{
-		detector.Add(new CylinderPrimitiveShapeConstructor());
-		std::cout << "Added cylinder detector." << std::endl;
-	}
-	if (params.types.count(ManifoldType::Plane) || params.types.empty())
-	{
-		detector.Add(new PlanePrimitiveShapeConstructor());
-		std::cout << "Added plane detector." << std::endl;
-	}
-	if (params.types.count(ManifoldType::Sphere) || params.types.empty())
-	{
-		detector.Add(new SpherePrimitiveShapeConstructor());
-		std::cout << "Added sphere detector." << std::endl;
-	}
 	std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > shapes;
 	std::vector<::Primitive> primitives;
 	std::vector<::PointCloud> pointClouds;
 
-	for (int i = 0; i < ransacIterations; ++i)
+
+	std::vector<Cluster> filtered_clusters;
+	std::copy_if(clusters.begin(), clusters.end(), std::back_inserter(filtered_clusters),
+		[&params](const Cluster& c) { return c.pc.rows() > params.min_points; });
+
+	for (const auto& cluster : filtered_clusters)
 	{
-		std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > perIterShapes;
-		std::vector<::Primitive> perIterPrimitives;
-		std::vector<::PointCloud> perIterPointClouds;
+		// Convert point cloud.
+		::PointCloud pcConv;
+		for (int i = 0; i < cluster.pc.rows(); ++i)
+		{
+			::Point point(
+				Vec3f(cluster.pc.coeff(i, 0), cluster.pc.coeff(i, 1), cluster.pc.coeff(i, 2)),
+				Vec3f(cluster.pc.coeff(i, 3), cluster.pc.coeff(i, 4), cluster.pc.coeff(i, 5))
+			);
 
-		size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &perIterShapes);
-		// std::cout << "detection finished " << remaining << std::endl;
-		// std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
-				
-		// std::cout << "Split" << std::endl;
-		SplitPointsPrimitives(perIterShapes, pcConv, perIterPrimitives, perIterPointClouds);
+			pcConv.push_back(point);
+		}
 
-		shapes.insert(shapes.end(), perIterShapes.begin(), perIterShapes.end());
-		primitives.insert(primitives.end(), perIterPrimitives.begin(), perIterPrimitives.end());
-		pointClouds.insert(pointClouds.end(), perIterPointClouds.begin(), perIterPointClouds.end());
+		// Compute bounding box and set parameters.
+		Vec3f min_pt, max_pt;
+		compute_bbox(pcConv, min_pt, max_pt);
+		pcConv.setBBox(min_pt, max_pt);
+
+		RansacShapeDetector::Options ransacOptions;
+		ransacOptions.m_epsilon = params.epsilon * pcConv.getScale();
+		ransacOptions.m_bitmapEpsilon = params.cluster_epsilon * pcConv.getScale();
+		ransacOptions.m_normalThresh = params.normal_threshold;
+		ransacOptions.m_minSupport = std::min((size_t)cluster.pc.rows(), params.min_points);
+		ransacOptions.m_probability = params.probability;
+
+		std::set<ManifoldType> types = cluster.manifoldTypes;
+
+		RansacShapeDetector detector(ransacOptions);
+
+
+		if (types.count(ManifoldType::Cylinder) || params.types.empty())
+		{
+			detector.Add(new CylinderPrimitiveShapeConstructor());
+			std::cout << "Added cylinder detector." << std::endl;
+		}
+		if (types.count(ManifoldType::Plane) || params.types.empty())
+		{
+			detector.Add(new PlanePrimitiveShapeConstructor());
+			std::cout << "Added plane detector." << std::endl;
+		}
+		if (types.count(ManifoldType::Sphere) || params.types.empty())
+		{
+			detector.Add(new SpherePrimitiveShapeConstructor());
+			std::cout << "Added sphere detector." << std::endl;
+		}
+		
+		for (int i = 0; i < ransacIterations; ++i)
+		{
+			std::vector< std::pair< MiscLib::RefCountPtr< PrimitiveShape >, size_t > > perIterShapes;
+			std::vector<::Primitive> perIterPrimitives;
+			std::vector<::PointCloud> perIterPointClouds;
+
+			size_t remaining = detector.Detect(pcConv, 0, pcConv.size(), &perIterShapes);
+			// std::cout << "detection finished " << remaining << std::endl;
+			// std::cout << "number of shapes: " << perIterShapes.size() << std::endl;
+
+			// std::cout << "Split" << std::endl;
+			SplitPointsPrimitives(perIterShapes, pcConv, perIterPrimitives, perIterPointClouds);
+
+			shapes.insert(shapes.end(), perIterShapes.begin(), perIterShapes.end());
+			primitives.insert(primitives.end(), perIterPrimitives.begin(), perIterPrimitives.end());
+			pointClouds.insert(pointClouds.end(), perIterPointClouds.begin(), perIterPointClouds.end());
+		}
 	}
 	std::vector<::Primitive> mergedShapes;
 	std::vector<::PointCloud> mergedPointclouds;
@@ -500,7 +507,10 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const lmu::PointCloud& pc,
 
 	RansacResult res;
 	res.manifolds = manifolds;
-	res.pc = pc;
+
+	std::vector<PointCloud> pcs; 
+	std::transform(manifolds.begin(), manifolds.end(), std::back_inserter(pcs), [](const ManifoldPtr& mp) { return mp->pc; });
+	res.pc = lmu::mergePointClouds(pcs);
 
 	std::cout << "number of manifolds: " << manifolds.size() << std::endl;
 	

@@ -38,5 +38,7 @@ std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double sc
 		res.push_back(Cluster(readPointCloud(s, scaleFactor), i, manifoldTypes));
 	}
 
+	std::cout << "Num Clusters: " << res.size() << std::endl;
+
 	return res;
 }

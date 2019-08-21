@@ -10,6 +10,8 @@
 
 namespace lmu
 {
+	struct Cluster;
+
 	//Manifolds without border
 	enum class ManifoldType
 	{
@@ -197,7 +199,7 @@ namespace lmu
 		PointCloud pc;
 	};
 
-	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
+	RansacResult mergeRansacResults(const std::vector<RansacResult>& results, bool mergeManifolds);
 
 	struct RansacMergeParams
 	{
@@ -222,7 +224,7 @@ namespace lmu
 
 	RansacResult extractManifoldsWithCGALRansac(const PointCloud& pc, const RansacParams& params, 
 		bool projectPointsOnSurface = false);
-	RansacResult extractManifoldsWithOrigRansac(const PointCloud& pc, const RansacParams& params, 
+	RansacResult extractManifoldsWithOrigRansac(const std::vector<Cluster>& clusters, const RansacParams& params,
 		bool projectPointsOnSurface = false, int ransacIterations = 1, const RansacMergeParams& rmParams = RansacMergeParams());
 
 	void writeToFile(const std::string& file, const RansacResult& res);

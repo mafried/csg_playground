@@ -246,46 +246,31 @@ int main(int argc, char *argv[])
 
 		//auto clusters = lmu::readClusterFromFile("C:/work/code/csg_playground/seg4csg/data/test.txt", 1.0);
 		lmu::TimeTicker t;
-		std::vector<lmu::RansacResult> ransacResults;
-		for (auto& cluster : clusters)
-		{
-			//std::cout << "cluster" << std::endl;
-
-			auto params = lmu::RansacParams();
-			params.probability = 0.05;//0.1;
-			params.min_points = std::min((int)cluster.pc.rows(), 200);// 500);
-			params.normal_threshold = 0.9;
-			params.cluster_epsilon = 0.1;// 0.2;
-			params.epsilon = 0.002;// 0.2;
-			params.types = cluster.manifoldTypes;
-
-			std::cout << "CLUSTER PC: " << cluster.pc.rows() << std::endl;
-			if (cluster.pc.rows() < params.min_points)
-			{
-				std::cout << "Not enough points." << std::endl;
-				continue;
-			}
-			ransacResults.push_back(
-				lmu::extractManifoldsWithOrigRansac(
-					cluster.pc, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831)));
+		
+		auto params = lmu::RansacParams();
+		params.probability = 0.05;//0.1;
+		params.min_points = 200;
+		params.normal_threshold = 0.9;
+		params.cluster_epsilon = 0.1;// 0.2;
+		params.epsilon = 0.002;// 0.2;
+					
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(
+				clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 			
-			// HELPER for analysis - to REMOVE LATER
-			//std::cout << "Press a key to continue" << std::endl;
-			//char key;
-			//std::cin >> key;
-			// END OF HELPER
+		// HELPER for analysis - to REMOVE LATER
+		//std::cout << "Press a key to continue" << std::endl;
+		//char key;
+		//std::cin >> key;
+		// END OF HELPER
 
 
-			//auto plane = ransacResults.back().manifolds[0];
-			//if(plane->type == lmu::ManifoldType::Plane)
-			//	lmu::generateGhostPlanes({plane}, 0.0, 0.0);
+		//auto plane = ransacResults.back().manifolds[0];
+		//if(plane->type == lmu::ManifoldType::Plane)
+		//	lmu::generateGhostPlanes({plane}, 0.0, 0.0);
 
 
-			//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
-		}
-
-		std::cout << "Merge RANSAC Results" << std::endl;
-		auto ransacRes = lmu::mergeRansacResults(ransacResults);
+		//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
+		
 
 		g_manifoldSet = ransacRes.manifolds;
 
