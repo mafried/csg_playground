@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
 		
 		auto params = lmu::RansacParams();
 		params.probability = 0.05;//0.1;
-		params.min_points = 200;
+		params.min_points = 100;
 		params.normal_threshold = 0.9;
 		params.cluster_epsilon = 0.1;// 0.2;
 		params.epsilon = 0.002;// 0.2;
@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
 		g_manifoldSet = ransacRes.manifolds;
 
 
-		//goto _LAUNCH;
+		goto _LAUNCH;
 
 		
 		// Farthest point sampling applied to all manifolds.

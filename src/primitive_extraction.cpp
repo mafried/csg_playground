@@ -227,7 +227,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(300, 0.00001, 300);
+	PrimitiveSetIterationStopCriterion criterion(100, 0.00001, 100);
 
 	int maxPrimitiveSetSize = 20;
 
@@ -254,13 +254,13 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 		double score_cutout = ranker.rank(ps, true);
 
 		if (score < score_cutout)
-			ps[0].cutout = true;
+			p.cutout = true;
 		else
-			ps[0].cutout = false;
+			p.cutout = false;
 	}
 
 	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
-	result.primitives.insert(result.primitives.begin(), staticPrimitives.begin(), staticPrimitives.end());
+	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 
 	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
@@ -346,8 +346,8 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 			{
 				std::cout << "Mutation Remove" << std::endl;
 
-				int idx = getRandomPrimitiveIdx(newPS);
-				newPS.erase(newPS.begin() + idx);
+				//int idx = getRandomPrimitiveIdx(newPS);
+				//newPS.erase(newPS.begin() + idx);
 
 				break;
 			}
@@ -1047,8 +1047,12 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		{
 			auto dg = p.imFunc->signedDistanceAndGradient(point);
 			double d = std::abs(dg[0]);
-			Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
+			//Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
 					
+			Eigen::Vector3d g = dg.bottomRows(3);
+			if (p.cutout)
+				g = -dg.bottomRows(3);
+
 			if (min_d > d)
 			{
 				min_d = d; 
@@ -1060,7 +1064,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 		//std::cout << "MIN D: " << min_d << std::endl;
 
-		validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
+		//validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
+		if (min_d < delta && n.dot(min_normal) > 0) validPoints++;													
 		checkedPoints++;
 	}
 
@@ -1203,7 +1208,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 	// ===================== PART III: Compute Weighted Sum =====================
 
-	double s = 0.2;
+	double s = 0.05;
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	double g = 2.0;
