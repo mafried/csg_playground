@@ -59,6 +59,8 @@ std::vector<Point_2> get2DPoints(const lmu::ManifoldPtr& plane, const Eigen::Vec
 {
 	Plane_3 cPlane(Point_3(plane->p.x(), plane->p.y(), plane->p.z()), Vector_3(plane->n.x(), plane->n.y(), plane->n.z()));
 
+	//std::cout << "DEBUG: " << cPlane.to_2d(Point_3(plane->p.x(), plane->p.y(), plane->p.z()));
+
 	std::vector<Point_2> points;
 	points.reserve(num_points);
 	for (int i = 0; i < num_points; ++i)
@@ -227,16 +229,16 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(100, 0.00001, 100);
+	PrimitiveSetIterationStopCriterion criterion(2000, 0.00001, 2000);
 
-	int maxPrimitiveSetSize = 20;
+	int maxPrimitiveSetSize = 50;
 
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	//PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.3, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -867,42 +869,71 @@ Eigen::MatrixXd concatMatrices(const std::vector<Eigen::MatrixXd>& matrices)
 }
 
 void debug_visualize(lmu::Mesh& mesh, const lmu::ManifoldSet& planes, const std::vector<std::vector<Point_2>>& hulls,
-	const std::vector<std::vector<Point_2>>& points_in_triangles, const lmu::PointCloud& pc)
+	const std::vector<std::vector<Point_2>>& points_in_triangles, const lmu::PointCloud& pc, 
+	const std::vector<std::vector<Point_2>>& rectangles)
 {
 	igl::opengl::glfw::Viewer viewer;
 	std::vector<Eigen::MatrixXd> lines;
 
+	std::cout << "HERE" << std::endl;
+
 	std::cout << "Planes: " << planes.size() << " Hulls: " << hulls.size() << " Pts in Triangles: " << points_in_triangles.size() << std::endl;
 	
-	for (int i = 0; i < planes.size(); ++i)
+	if (points_in_triangles.size() == planes.size())
 	{
-		if (!hulls[i].empty())
+		for (int i = 0; i < planes.size(); ++i)
 		{
-			auto hull_3d = get3DPoints(planes[i], hulls[i]);
-			Eigen::MatrixXd linesPerPlane(hull_3d.size(), 9);
-			for (int j = 0; j < hull_3d.size() - 1; ++j)
+			if (!hulls.empty() && !hulls[i].empty())
 			{
-				linesPerPlane.row(j) << hull_3d[j].transpose(), hull_3d[j + 1].transpose(), Eigen::RowVector3d(1, 0, 0);
+				auto hull_3d = get3DPoints(planes[i], hulls[i]);
+				Eigen::MatrixXd linesPerPlane(hull_3d.size(), 9);
+				for (int j = 0; j < hull_3d.size() - 1; ++j)
+				{
+					linesPerPlane.row(j) << hull_3d[j].transpose(), hull_3d[j + 1].transpose(), Eigen::RowVector3d(1, 0, 0);
+				}
+				linesPerPlane.row(hull_3d.size() - 1) << hull_3d[0].transpose(), hull_3d[hull_3d.size() - 1].transpose(), Eigen::RowVector3d(1, 0, 0);
+
+				lines.push_back(linesPerPlane);
 			}
-			linesPerPlane.row(hull_3d.size() - 1) << hull_3d[0].transpose(), hull_3d[hull_3d.size() - 1].transpose(), Eigen::RowVector3d(1, 0, 0);
 
-			lines.push_back(linesPerPlane);
-		}
-
-		if (!points_in_triangles[i].empty())
-		{
-			auto points_in_triangle = get3DPoints(planes[i], points_in_triangles[i]);
-			lmu::PointCloud pc(points_in_triangle.size(), 6);
-			for (int j = 0; j < points_in_triangle.size(); ++j)
+			if (!points_in_triangles[i].empty())
 			{
-				pc.row(j) << points_in_triangle[j].transpose(), Eigen::RowVector3d(0, 1, 0);
+				auto points_in_triangle = get3DPoints(planes[i], points_in_triangles[i]);
+				lmu::PointCloud pc(points_in_triangle.size(), 6);
+				for (int j = 0; j < points_in_triangle.size(); ++j)
+				{
+					pc.row(j) << points_in_triangle[j].transpose(), Eigen::RowVector3d(0, 1, 0);
+				}
+				viewer.data().add_points(pc.leftCols(3), pc.rightCols(3));
 			}
-			viewer.data().add_points(pc.leftCols(3), pc.rightCols(3));
+
+			if (!rectangles.empty())
+			{
+				auto rectangle_points = get3DPoints(planes[i], rectangles[i]);
+				for (int j = 0; j < rectangle_points.size(); j += 4)
+				{
+					/*
+						Eigen::Vector2d p0 = (m_inv_rot * Eigen::Vector2d((double)x * raster_size, (double)y * raster_size)) + origin;
+				Eigen::Vector2d p1 = (m_inv_rot * Eigen::Vector2d((double)(x + 1) * raster_size, (double)y * raster_size)) + origin;
+				Eigen::Vector2d p2 = (m_inv_rot * Eigen::Vector2d((double)x * raster_size, (double)(y+1) * raster_size)) + origin;
+				Eigen::Vector2d p3 = (m_inv_rot * Eigen::Vector2d((double)(x + 1) * raster_size, (double)(y+1) * raster_size)) + origin;
+
+					*/
+
+					Eigen::MatrixXd linesPerRectangle(4, 9);
+					linesPerRectangle.row(0) << rectangle_points[j + 0].transpose(), rectangle_points[j + 1].transpose(), Eigen::RowVector3d(0, 0, 1);
+					linesPerRectangle.row(1) << rectangle_points[j + 1].transpose(), rectangle_points[j + 3].transpose(), Eigen::RowVector3d(0, 0, 1);
+					linesPerRectangle.row(2) << rectangle_points[j + 3].transpose(), rectangle_points[j + 2].transpose(), Eigen::RowVector3d(0, 0, 1);
+					linesPerRectangle.row(3) << rectangle_points[j + 2].transpose(), rectangle_points[j + 0].transpose(), Eigen::RowVector3d(0, 0, 1);
+					lines.push_back(linesPerRectangle);
+				}
+			}
 		}
 	}
 
 	viewer.data().add_points(pc.leftCols(3), pc.rightCols(3));
 	viewer.data().set_mesh(mesh.vertices, mesh.indices);
+
 	viewer.data().lines = concatMatrices(lines);
 	viewer.data().show_lines = true;
 	viewer.data().point_size = 5.0;
@@ -935,7 +966,8 @@ std::vector<Point_2> get_concave_hull(const std::vector<Point_2>& pts, const std
 	return concave_hull_res;
 }
 
-double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, const std::vector<Point_2>& triangle_points)
+double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, const std::vector<Point_2>& triangle_points, 
+	std::vector<Point_2>& rectangles)
 {
 	auto c0 = Eigen::Vector2d(triangle_points[0].x(), triangle_points[0].y());
 	auto c1 = Eigen::Vector2d(triangle_points[1].x(), triangle_points[1].y());
@@ -1003,7 +1035,8 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 	//std::cout << "W: " << w << " H: " << h << std::endl;
 	
 	bool* grid = new bool[w*h];
-	std::fill(grid, grid + sizeof(grid), false);
+	std::fill_n(grid, w*h, false);
+
 	int counter = 0;
 	for (const auto& p : pts)
 	{
@@ -1020,6 +1053,28 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 		counter += !grid[idx];
 		grid[idx] = true;
 	}
+	
+	auto m_inv_rot = rot_m.inverse();
+
+	for (int x = 0; x < w; ++x)
+	{
+		for (int y = 0; y < h; ++y)
+		{
+			if (grid[y * w + x])
+			{
+				Eigen::Vector2d p0 = (m_inv_rot * Eigen::Vector2d((double)x * raster_size, (double)y * raster_size)) + origin;
+				Eigen::Vector2d p1 = (m_inv_rot * Eigen::Vector2d((double)(x + 1) * raster_size, (double)y * raster_size)) + origin;
+				Eigen::Vector2d p2 = (m_inv_rot * Eigen::Vector2d((double)x * raster_size, (double)(y+1) * raster_size)) + origin;
+				Eigen::Vector2d p3 = (m_inv_rot * Eigen::Vector2d((double)(x + 1) * raster_size, (double)(y+1) * raster_size)) + origin;
+
+				rectangles.push_back(Point_2(p0.x(), p0.y()));
+				rectangles.push_back(Point_2(p1.x(), p1.y()));
+				rectangles.push_back(Point_2(p2.x(), p2.y()));
+				rectangles.push_back(Point_2(p3.x(), p3.y()));
+			}
+		}
+	}
+
 	delete[] grid;
 
 	return counter * raster_size * raster_size;
@@ -1050,8 +1105,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			//Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
 					
 			Eigen::Vector3d g = dg.bottomRows(3);
-			if (p.cutout)
-				g = -dg.bottomRows(3);
+			//if (p.cutout)
+			//	g = -dg.bottomRows(3);
 
 			if (min_d > d)
 			{
@@ -1065,7 +1120,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		//std::cout << "MIN D: " << min_d << std::endl;
 
 		//validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
-		if (min_d < delta && n.dot(min_normal) > 0) validPoints++;													
+		if (min_d < delta && n.dot(min_normal) > 0.9) validPoints++;													
 		checkedPoints++;
 	}
 
@@ -1073,6 +1128,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 	// ===================== PART II: Computation of the Area Score =====================
 
 	double area_score = 0.0;
+	bool out = false;
+
 	for (const auto& p : ps)
 	{
 		//size_t hash = p.hash(0);
@@ -1120,6 +1177,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		ManifoldSet selected_planes;
 		std::vector<std::vector<Point_2>> hulls;
 		std::vector<std::vector<Point_2>> points_in_triangles;
+		std::vector<std::vector<Point_2>> rectangles;
 
 		for (int i = 0; i < 12; ++i)
 		{
@@ -1184,7 +1242,10 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 			// Compute area encompassed by points based on hull. 			
 			// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
-			double hull_area = get_rasterized_area(0.05, points_in_triangle_2d, triangle_points_2d); 
+			std::vector<Point_2> rectangles_per_triangle;
+			double hull_area = get_rasterized_area(0.05, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
+			rectangles.push_back(rectangles_per_triangle);
+
 			double triangle_area = triangle_polygon.area();
 
 			per_primitive_area_coeff += hull_area / triangle_area;
@@ -1196,22 +1257,25 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		//	primitiveAreaScoreLookup[hash] = per_primitive_area_coeff;
 		//}
 
-		area_score += per_primitive_area_coeff;// per_primitive_area_coeff > 0.5 ? per_primitive_area_coeff : 0.0;
+		area_score += per_primitive_area_coeff;
+
+		//if (per_primitive_area_coeff < 0.5)
+		//	out = true;
 
 		//std::cout << "AREA COEFF: " << per_primitive_area_coeff << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
 		//if (per_primitive_area_coeff > 0.5)
-		//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc);
+		//debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
 	}
 	area_score /= (double)ps.size();
-
+	if (out) area_score = 0.0;
 	
 
 	// ===================== PART III: Compute Weighted Sum =====================
 
-	double s = 0.05;
+	double s = 0.1;
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
-	double g = 2.0;
+	double g = 1.0;
 	double geo_score = ((double)validPoints / (double)checkedPoints);
 
 	double a = 1.0;
