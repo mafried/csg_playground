@@ -199,7 +199,7 @@ namespace lmu
 		PointCloud pc;
 	};
 
-	RansacResult mergeRansacResults(const std::vector<RansacResult>& results, bool mergeManifolds);
+	RansacResult mergeRansacResults(const std::vector<RansacResult>& results);
 
 	struct RansacMergeParams
 	{

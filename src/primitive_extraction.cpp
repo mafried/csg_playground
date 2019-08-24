@@ -229,7 +229,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	GAResult result;
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(2000, 0.00001, 2000);
+	PrimitiveSetIterationStopCriterion criterion(100, 0.00001, 100);
 
 	int maxPrimitiveSetSize = 50;
 
@@ -238,7 +238,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
 
 	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
+	lmu::PrimitiveSetGA::Parameters params(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
 	PrimitiveSetGA ga;
 
 	auto res = ga.run(params, selector, creator, ranker, criterion);
@@ -1085,50 +1085,10 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 	if (ps.empty()) 	
 		return -std::numeric_limits<double>::max();
 	
-	// ===================== PART I: Computation of the Geometry Score =====================
-	
-	const double delta = 0.0001;
-	int validPoints = 0;
-	int checkedPoints = 0;
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		Eigen::Vector3d point = pc.block<1, 3>(i, 0);
-		Eigen::Vector3d n = pc.block<1, 3>(i, 3);
-
-		// Get distance to closest primitive. 
-		double min_d = std::numeric_limits<double>::max();
-		Eigen::Vector3d min_normal;
-		for (const auto& p : ps)
-		{
-			auto dg = p.imFunc->signedDistanceAndGradient(point);
-			double d = std::abs(dg[0]);
-			//Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
-					
-			Eigen::Vector3d g = dg.bottomRows(3);
-			//if (p.cutout)
-			//	g = -dg.bottomRows(3);
-
-			if (min_d > d)
-			{
-				min_d = d; 
-				min_normal = g.normalized(); 
-			}			
-		}
-
-		//double dot = std::fabs(n.dot(min_normal));
-
-		//std::cout << "MIN D: " << min_d << std::endl;
-
-		//validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
-		if (min_d < delta && n.dot(min_normal) > 0.9) validPoints++;													
-		checkedPoints++;
-	}
-
-
 	// ===================== PART II: Computation of the Area Score =====================
 
-	double area_score = 0.0;
-	bool out = false;
+	double summed_area = 0.0;
+	double summed_point_area = 0.0;
 
 	for (const auto& p : ps)
 	{
@@ -1172,8 +1132,8 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			continue;
 		}
 
-		double per_primitive_area_coeff = 0.0;
-
+		double per_primitive_point_area = 0.0;
+		double per_primitive_area = 0.0;
 		ManifoldSet selected_planes;
 		std::vector<std::vector<Point_2>> hulls;
 		std::vector<std::vector<Point_2>> points_in_triangles;
@@ -1243,42 +1203,88 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			// Compute area encompassed by points based on hull. 			
 			// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
 			std::vector<Point_2> rectangles_per_triangle;
-			double hull_area = get_rasterized_area(0.05, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
+			double hull_area = get_rasterized_area(0.04, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
 			rectangles.push_back(rectangles_per_triangle);
 
 			double triangle_area = triangle_polygon.area();
-
-			per_primitive_area_coeff += hull_area / triangle_area;
+			per_primitive_area += triangle_area;
+			
+			per_primitive_point_area += hull_area;
 		}
-		per_primitive_area_coeff /= 12.0;
 
+		summed_area += per_primitive_area;
+		summed_point_area += per_primitive_point_area;
+
+		//if (per_primitive_point_area / per_primitive_area > 0.5)
+		//{
+		//	filtered_ps.push_back(p);
+		//	summed_area += per_primitive_area;
+		//	summed_point_area += per_primitive_point_area;
+		//}
+		
 		//{
 		//	std::lock_guard<std::mutex> lk(lookupMutex);
 		//	primitiveAreaScoreLookup[hash] = per_primitive_area_coeff;
 		//}
-
-		area_score += per_primitive_area_coeff;
-
-		//if (per_primitive_area_coeff < 0.5)
-		//	out = true;
-
-		//std::cout << "AREA COEFF: " << per_primitive_area_coeff << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
-		//if (per_primitive_area_coeff > 0.5)
-		//debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
+		
+		//std::cout << "AREA COEFF: " << (per_primitive_point_area / per_primitive_area) << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
+		
+		//if (per_primitive_point_area / per_primitive_area >= 0.5)
+		//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
 	}
-	area_score /= (double)ps.size();
-	if (out) area_score = 0.0;
 	
+
+	//const_cast<PrimitiveSet&>(ps) = filtered_ps;
+
+	// ===================== PART I: Computation of the Geometry Score =====================
+
+	const double delta = 0.0001;
+	int validPoints = 0;
+	int checkedPoints = 0;
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d point = pc.block<1, 3>(i, 0);
+		Eigen::Vector3d n = pc.block<1, 3>(i, 3);
+
+		// Get distance to closest primitive. 
+		double min_d = std::numeric_limits<double>::max();
+		Eigen::Vector3d min_normal;
+		for (const auto& p : ps)
+		{
+			auto dg = p.imFunc->signedDistanceAndGradient(point);
+			double d = std::abs(dg[0]);
+			//Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
+
+			Eigen::Vector3d g = dg.bottomRows(3);
+			//if (p.cutout)
+			//	g = -dg.bottomRows(3);
+
+			if (min_d > d)
+			{
+				min_d = d;
+				min_normal = g.normalized();
+			}
+		}
+
+		//double dot = std::fabs(n.dot(min_normal));
+
+		//std::cout << "MIN D: " << min_d << std::endl;
+
+		//validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
+		if (min_d < delta && n.dot(min_normal) > 0.9) validPoints++;
+		checkedPoints++;
+	}
 
 	// ===================== PART III: Compute Weighted Sum =====================
 
-	double s = 0.1;
+	double s = 0.0;
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	double g = 1.0;
 	double geo_score = ((double)validPoints / (double)checkedPoints);
 
 	double a = 1.0;
+	double area_score = summed_point_area / summed_area;
 
 	double r = a * area_score + g * geo_score - s * size_score;
 
@@ -1289,10 +1295,6 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 
 		std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
 	}
-
-	//std::cout << "SCORE: " << r << std::endl;
-
-	
 
 	return r;
 }

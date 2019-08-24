@@ -22,25 +22,16 @@ int g_manifoldIdx = 0;
 lmu::PointCloud g_res_pc;
 bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
-int g_prim_opt = 0;
+int g_prim_idx = 0;
 
-enum class PrimitiveMeshOptions
+lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx)
 {
-	CUTOUT_ONLY = 0,
-	NON_CUTOUT_ONLY,
-	BOTH
-};
+	auto filtered_ps = { ps[primitive_idx] };
 
-lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, PrimitiveMeshOptions opt)
-{
 	int vRows = 0;
 	int iRows = 0;
-	for (const auto& p : ps)
-	{
-	
-		if ((p.cutout && opt == PrimitiveMeshOptions::NON_CUTOUT_ONLY) || (!p.cutout && opt == PrimitiveMeshOptions::CUTOUT_ONLY))
-			continue;
-
+	for (const auto& p : filtered_ps)
+	{	
 		auto mesh = p.imFunc->createMesh();
 		vRows += mesh.vertices.rows();
 		iRows += mesh.indices.rows();
@@ -50,11 +41,8 @@ lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, PrimitiveMeshOp
 	Eigen::MatrixXd vertices(vRows, 3);
 	int vOffset = 0;
 	int iOffset = 0;
-	for (const auto& p : ps)
+	for (const auto& p : filtered_ps)
 	{
-		if ((p.cutout && opt == PrimitiveMeshOptions::NON_CUTOUT_ONLY) || (!p.cutout && opt == PrimitiveMeshOptions::CUTOUT_ONLY))
-			continue;
-
 		auto mesh = p.imFunc->createMesh();
 
 		Eigen::MatrixXi newIndices(mesh.indices.rows(), 3);
@@ -104,78 +92,75 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		g_show_res = !g_show_res;
 		break;
 	case '4':
-		g_prim_opt--;
-		if (g_prim_opt < 0)
-			g_prim_opt = 2;
+		g_prim_idx--;
+		if (g_prim_idx < 0)
+			g_prim_idx = g_primitiveSet.size()-1;
 		break;
 	case '5':
-		g_prim_opt++;
-		if (g_prim_opt > 2)
-			g_prim_opt = 0;
+		g_prim_idx++;
+		if (g_prim_idx >= g_primitiveSet.size())
+			g_prim_idx = 0;
 		break;
 	}
 
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
-	std::cout << "Primitive Option: " << g_prim_opt << std::endl;
+	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
 
 	std::cout << "Show Result: " << g_show_res << std::endl;
+
+	viewer.data().clear();
 
 	viewer.data().set_points(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
 	update(viewer);
 
-	if (!g_show_res)
-	{		
-		if (!g_manifoldSet.empty())
+			
+	if (!g_manifoldSet.empty())
+	{
+		for (int i = 0; i < g_manifoldSet.size(); ++i)
 		{
-			for (int i = 0; i < g_manifoldSet.size(); ++i)
+			if (i != g_manifoldIdx)
 			{
-				if (i != g_manifoldIdx)
-				{
-					Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
-					cm.setZero();
-					viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-				}
-				else
-				{
-					Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+				Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+				cm.setZero();
+				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			}
+			else
+			{
+				Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
 
-					for (int j = 0; j < cm.rows(); ++j)
+				for (int j = 0; j < cm.rows(); ++j)
+				{
+					Eigen::Vector3d c;
+					switch ((int)(g_manifoldSet[i]->type))
 					{
-						Eigen::Vector3d c;
-						switch ((int)(g_manifoldSet[i]->type))
-						{
-						case 4:
-							c = Eigen::Vector3d(1, 0, 0);
-							break;
-						case 0:
-							c = Eigen::Vector3d(0, 1, 0);
-							break;
-						case 1:
-							c = Eigen::Vector3d(1, 1, 0);
-							break;
-						case 2:
-							c = Eigen::Vector3d(1, 0, 1);
-							break;
-						case 3:
-							c = Eigen::Vector3d(0, 0, 1);
-							break;
-						}
-						cm.row(j) << c.transpose();
+					case 4:
+						c = Eigen::Vector3d(1, 0, 0);
+						break;
+					case 0:
+						c = Eigen::Vector3d(0, 1, 0);
+						break;
+					case 1:
+						c = Eigen::Vector3d(1, 1, 0);
+						break;
+					case 2:
+						c = Eigen::Vector3d(1, 0, 1);
+						break;
+					case 3:
+						c = Eigen::Vector3d(0, 0, 1);
+						break;
 					}
-
-					viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+					cm.row(j) << c.transpose();
 				}
+
+				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			}
 		}
 	}
-	else
-	{
-		auto opt = (PrimitiveMeshOptions)g_prim_opt;
-		auto mesh = computeMeshFromPrimitives(g_primitiveSet, opt);
-		viewer.data().clear();
-		viewer.data().set_mesh(mesh.vertices, mesh.indices);
-	}
-
+	
+	
+	auto mesh = computeMeshFromPrimitives(g_primitiveSet, g_prim_idx);
+	viewer.data().set_mesh(mesh.vertices, mesh.indices);
+	
 	update(viewer);
 	return true;
 }
@@ -254,8 +239,8 @@ int main(int argc, char *argv[])
 		params.cluster_epsilon = 0.1;// 0.2;
 		params.epsilon = 0.002;// 0.2;
 					
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(
-				clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
+		//auto ransacRes = lmu::extractManifoldsWithOrigRansac(
+		//		clusters, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 			
 		// HELPER for analysis - to REMOVE LATER
 		//std::cout << "Press a key to continue" << std::endl;
@@ -268,14 +253,28 @@ int main(int argc, char *argv[])
 		//if(plane->type == lmu::ManifoldType::Plane)
 		//	lmu::generateGhostPlanes({plane}, 0.0, 0.0);
 
+		/*std::vector<lmu::RansacResult> ransacResCol;
+		for (const auto& c : clusters)
+		{
+			auto rr = lmu::extractManifoldsWithOrigRansac(
+			{ c }, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
+			for (const auto& m : rr.manifolds)
+			{
+				viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
+			}
+			ransacResCol.push_back(rr);
+			//viewer.data().add_points(c.pc.leftCols(3), c.pc.rightCols(3));
 
-		//viewer.data().add_points(cluster.pc.leftCols(3), cluster.pc.rightCols(3));
+		}
 		
+		auto ransacRes = lmu::mergeRansacResults(ransacResCol);
+		*/
+
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
-
-
-		goto _LAUNCH;
+		
+		//goto _LAUNCH;
 
 		
 		// Farthest point sampling applied to all manifolds.

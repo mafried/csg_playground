@@ -102,11 +102,22 @@ MergeCandidatePrimitives(const std::vector<std::vector<Primitive>>& all_candidat
 			Vec3f dir(0.f, 0.f, 0.f);
 			float radius = 0.0;
 
+			// keep for reference
+			CylinderPrimitiveShape* ccref = (CylinderPrimitiveShape*)candidates[0]->Clone();
+			Cylinder cyl_ref = ccref->Internal();
+			Vec3f dir_ref = cyl_ref.AxisDirection();
+
 			for (const auto& c : candidates) {
 				CylinderPrimitiveShape* cc = (CylinderPrimitiveShape*)c->Clone();
 				Cylinder cylinder = cc->Internal();
 				center += cylinder.AxisPosition();
-				dir += cylinder.AxisDirection();
+
+				Vec3f c_dir = cylinder.AxisDirection();
+				if (dir_ref.dot(c_dir) > 0)
+					dir += c_dir;
+				else
+					dir += -c_dir;
+				
 				radius += cylinder.Radius();
 			}
 
@@ -185,9 +196,11 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 		const Plane& cp = cps->Internal();
 
 		Vec3f normalp = pp.getNormal();
+		float sgn_distp = pp.SignedDistToOrigin();
 		float distp = std::fabs(pp.SignedDistToOrigin());
 
 		Vec3f normalc = cp.getNormal();
+		float sgn_distc = cp.SignedDistToOrigin();
 		float distc = std::fabs(cp.SignedDistToOrigin());
 
 		if (std::fabs(distc - distp) > DIST_THRESHOLD) return false;
@@ -195,6 +208,10 @@ ArePrimitivesClose(const Primitive& p, const Primitive& c,
 		float dot = normalp.dot(normalc);
 		float abs_dot = std::fabs(dot);
 		if (abs_dot < DOT_THRESHOLD) return false;
+
+		if (sgn_distp*sgn_distc < 0 && normalp.dot(normalc) > 0) return false;
+
+		if (sgn_distp*sgn_distc > 0 && normalp.dot(normalc) < 0) return false;
 
 		return true;
 	}

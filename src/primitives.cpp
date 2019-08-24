@@ -99,7 +99,7 @@ lmu::PrimitiveType lmu::primitiveTypeFromString(std::string type)
 		return PrimitiveType::None;
 }
 
-lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& results, bool mergePlanes)
+lmu::RansacResult lmu::mergeRansacResults(const std::vector<RansacResult>& results)
 {
 	RansacResult res;
 
