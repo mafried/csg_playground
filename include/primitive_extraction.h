@@ -63,16 +63,100 @@ namespace lmu
 		mutable std::random_device rndDevice;
 	};
 
+	struct PrimitiveSetCreatorBasedOnPrimitiveSet
+	{
+		PrimitiveSetCreatorBasedOnPrimitiveSet(const PrimitiveSet& primitives, const std::vector<double>& mutationDistribution,
+			int maxMutationIterations, int maxCrossoverIterations);
+
+		PrimitiveSet mutate(const PrimitiveSet& ps) const;
+		std::vector<PrimitiveSet> crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const;
+		PrimitiveSet create() const;
+		std::string info() const;
+
+		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
+
+	private:
+
+
+		enum class MutationType
+		{
+			NEW,
+			REPLACE,
+			REMOVE,
+			ADD
+		};
+		std::vector<double> mutationDistribution;
+		int maxMutationIterations;
+		int maxCrossoverIterations;
+		PrimitiveSet primitives;
+
+		mutable std::default_random_engine rndEngine;
+		mutable std::random_device rndDevice;
+	};
+
+
+	struct AreaScore
+	{
+		AreaScore() :
+			AreaScore(0.0, 0.0)
+		{
+		}
+
+		AreaScore(double a, double pa) :
+			area(a),
+			point_area(pa)
+		{
+		}
+
+		AreaScore operator += (const AreaScore& a)
+		{
+			area += a.area;
+			point_area += a.point_area;
+			return *this;
+		}
+
+		bool operator == (const AreaScore& a) const
+		{
+			return area == a.area && point_area == a.point_area;
+		}
+
+		bool operator != (const AreaScore& a) const
+		{
+			return !operator==(a);
+		}
+		static const AreaScore Invalid;
+
+		double point_area;
+		double area;
+	};
+
+	struct GeometryScore
+	{
+		GeometryScore(int cp, int vp) :
+			checked_points(cp),
+			valid_points(vp)
+		{
+		}
+
+		int checked_points;
+		int valid_points;
+	};
+
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize);
+		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize, 
+			double geoWeight, double areaWeight, double sizeWeight);
 
-		PrimitiveSetRank rank(const PrimitiveSet& ps, bool ignoreStaticPrimitives = false) const;
-		PrimitiveSetRank rank2(const PrimitiveSet& ps, bool ignoreStaticPrimitives = false) const;
+		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 
 		std::string info() const;
 
 		PrimitiveSet bestPrimitiveSet() const;
+
+		AreaScore getAreaScore(const Primitive& p, int& cache_hits) const;
+		GeometryScore getGeometryScore(const PrimitiveSet& ps) const;
+
+		double getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const;
 
 	private: 
 		mutable PrimitiveSetRank bestRank;
@@ -85,11 +169,14 @@ namespace lmu
 		double distanceEpsilon;
 		int maxPrimitiveSetSize;
 
-		double getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const;
-
-		mutable std::unordered_map<size_t, double> primitiveAreaScoreLookup;
+		double geoWeight;
+		double areaWeight;
+		double sizeWeight;
+	
+		mutable std::unordered_map<size_t, AreaScore> primitiveAreaScoreLookup;
 		mutable std::mutex lookupMutex;
 	};
+	
 
 	struct GAResult
 	{
@@ -111,6 +198,9 @@ namespace lmu
 		//IterationStopCriterion<RankedCreature<PrimitiveSet, PrimitiveSetRank>>;
 	
 	using PrimitiveSetGA = GeneticAlgorithm<PrimitiveSet, PrimitiveSetCreator, PrimitiveSetRanker, PrimitiveSetRank, 
+		PrimitiveSetTournamentSelector, PrimitiveSetIterationStopCriterion>;
+
+	using PrimitiveSetGABasedOnPrimitiveSet = GeneticAlgorithm<PrimitiveSet, PrimitiveSetCreatorBasedOnPrimitiveSet, PrimitiveSetRanker, PrimitiveSetRank,
 		PrimitiveSetTournamentSelector, PrimitiveSetIterationStopCriterion>;
 	
 	PrimitiveSet extractCylindersFromCurvedManifolds(const ManifoldSet& manifolds, bool estimateHeight);

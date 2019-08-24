@@ -148,7 +148,18 @@ namespace lmu
 
 		size_t hash(size_t seed) const
 		{
-			return symmetric_range_hash<>().operator()<>(ms);
+			size_t s = seed;
+			
+			// We currently don't care about implicit function and cutout.
+			//boost::hash_combine(seed, imFunc);
+			//boost::hash_combine(seed, cutout);
+
+			boost::hash_combine(s, type);
+
+			//https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
+			s ^= symmetric_range_hash<>().operator()<>(ms) + 0x9e3779b9 + (s << 6) + (s >> 2);
+
+			return s;
 		}
 
 		ImplicitFunctionPtr imFunc; 
@@ -170,7 +181,11 @@ namespace lmu
 	{
 		size_t hash(size_t seed) const
 		{
-			return 0;// symmetric_range_hash<>().operator() < > (*this);
+			size_t s = 0;
+			for (auto&& x : *this) {
+				s += x.hash(seed);
+			}		
+			return s;
 		}
 	};
 

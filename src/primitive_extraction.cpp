@@ -4,6 +4,8 @@
 #include "csgnode_helper.h"
 #include "helper.h"
 
+lmu::AreaScore const lmu::AreaScore::Invalid = lmu::AreaScore(-1.0, -1.0);
+
 lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
 
 
@@ -206,8 +208,38 @@ lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::Manif
 	return filterClosePlanes(res, distanceThreshold * lmu::computeAABBLength(pc), angleThreshold);
 }
 
+lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, const lmu::PrimitiveSetRanker& ranker, double areaThreshold)
+{
+	lmu::PrimitiveSet res; 
+	int cache_hits = 0;
+	for (const auto& p : ps)
+	{
+		auto area_score = ranker.getAreaScore(p, cache_hits);
+		double ratio = area_score.point_area / area_score.area; 
+		if (area_score != lmu::AreaScore::Invalid && ratio > areaThreshold)
+			res.push_back(p);
+		else
+			std::cout << "Filtered primitive with ratio: " << ratio << std::endl;
+	}
+
+	return res;
+}
+
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
+	double distT = 0.02;
+	double angleT = M_PI / 9.0;
+	int maxPrimitiveSetSize = 25;
+	double sizeWeightGA1 = 0.0;
+	double geoWeightGA1 = 1.0;
+	double areaWeightGA1 = 4.0;
+	double sizeWeightGA2 = 0.2;
+	double geoWeightGA2 = 1.0;
+	double areaWeightGA2 = 4.0;
+
+	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+	lmu::PrimitiveSetGABasedOnPrimitiveSet::Parameters paramsGA2(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+
 	// Initialize polytope creator.
 	initializePolytopeCreator();
 
@@ -223,54 +255,33 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
 
 	// Add "ghost planes". 
-	double distT = 0.02;
-	double angleT = /*M_PI / 18.0*/ M_PI / 9.0;
 	//manifoldsForCreator = generateGhostPlanes(ransacRes.pc, manifoldsForCreator, distT, angleT);
+	// TODO: add plane merge here.
+
+	// First GA for candidate box generation.
+	PrimitiveSetTournamentSelector selector(2);
+	PrimitiveSetIterationStopCriterion criterion(200, 0.00001, 200);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
+	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, geoWeightGA1, areaWeightGA1, sizeWeightGA1);
+	PrimitiveSetGA ga;
+	ga.run(paramsGA1, selector, creator, ranker, criterion);	
+	auto primitives = postprocessPrimitiveSet(ranker.bestPrimitiveSet(), ranker, 0.3);
+	
+	// Second GA for best candidate box selection.
+	PrimitiveSetCreatorBasedOnPrimitiveSet creator2(primitives, { 0.4, 0.2, 0.2, 0.2}, 1, 1);
+	PrimitiveSetRanker ranker2(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, geoWeightGA2, areaWeightGA2, sizeWeightGA2);
+	PrimitiveSetTournamentSelector selector2(2);
+	PrimitiveSetIterationStopCriterion criterion2(200, 0.00001, 200);
+	PrimitiveSetGABasedOnPrimitiveSet ga2;
+	ga2.run(paramsGA2, selector2, creator2, ranker2, criterion2);
 
 	GAResult result;
-	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(100, 0.00001, 100);
-
-	int maxPrimitiveSetSize = 50;
-
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
-	//PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.3, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT);
-	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize);
-
-	//lmu::PrimitiveSetGA::Parameters params(150, 2, 0.7, 0.7, true, Schedule(), Schedule(), false);
-	lmu::PrimitiveSetGA::Parameters params(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), false);
-	PrimitiveSetGA ga;
-
-	auto res = ga.run(params, selector, creator, ranker, criterion);
-
-	// Try best cutout combination for each satic primitive.
-	for (auto& p : staticPrimitives)
-	{
-		PrimitiveSet ps;
-		ps.push_back(p);
-
-		ps[0].cutout = false;
-		double score = ranker.rank(ps, true);
-		
-		ps[0].cutout = true;
-		double score_cutout = ranker.rank(ps, true);
-
-		if (score < score_cutout)
-			p.cutout = true;
-		else
-			p.cutout = false;
-	}
-
-	result.primitives = ranker.bestPrimitiveSet();//res.population[0].creature;
+	result.primitives = ranker2.bestPrimitiveSet(), ranker2;
 	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
-
+	
 	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
-	std::cout << "-------------------------------------------------" << std::endl;
-	std::cout << "Manifold Set: " << std::endl;
-	for (const auto& m : ransacRes.manifolds)
-		std::cout << *m << std::endl;
-
+	
 	return result;
 }
 
@@ -371,48 +382,6 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 		return newPS;
 	}
 }
-
-/*
-std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const
-{
-std::cout << "Crossover" << std::endl;
-
-static std::bernoulli_distribution db{};
-using parmb_t = decltype(db)::param_type;
-
-static std::uniform_int_distribution<> du{};
-using parmu_t = decltype(du)::param_type;
-
-PrimitiveSet newPS1 = ps1;
-PrimitiveSet newPS2 = ps2;
-
-for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxCrossoverIterations }); ++i)
-{
-bool intra = db(rndEngine, parmb_t{ intraCrossProb });
-
-if (intra)
-{
-//TODO (if it makes sense).
-}
-else
-{
-if (!ps1.empty() && !ps2.empty())
-{
-int idx1 = getRandomPrimitiveIdx(ps1);
-int idx2 = getRandomPrimitiveIdx(ps2);
-
-if (idx1 != -1 && idx2 != -1)
-{
-newPS1[idx1] = ps2[idx2];
-newPS2[idx2] = ps1[idx1];
-}
-}
-}
-}
-
-return { newPS1, newPS2 };
-}
-*/
 
 std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreator::crossover(const PrimitiveSet& ps1, const PrimitiveSet& ps2) const
 {
@@ -770,79 +739,18 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 // ==================== RANKER ====================
 
-lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize) :
+lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize,
+	double geoWeight, double areaWeight, double sizeWeight) :
 	pc(pc),
 	ms(ms),
 	staticPrimitives(staticPrims),
 	distanceEpsilon(distanceEpsilon),
 	bestRank(-std::numeric_limits<double>::max()),
-	maxPrimitiveSetSize(maxPrimitiveSetSize)
+	maxPrimitiveSetSize(maxPrimitiveSetSize),
+	geoWeight(geoWeight),
+	areaWeight(areaWeight),
+	sizeWeight(sizeWeight)
 {
-}
-
-lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
-{
-	return rank2(ps, ignoreStaticPrimitives);
-
-
-	/*if (ps.empty()) {
-		return -std::numeric_limits<double>::max();
-	}
-
-	CSGNode node = opUnion();
-	for (const auto& p : ps)
-	{
-		if (p.cutout)
-			node.addChild(opComp({geometry(p.imFunc)}));
-		else
-			node.addChild(geometry(p.imFunc));
-	}
-
-	if (!ignoreStaticPrimitives)
-	{
-		for (const auto& p : staticPrimitives)
-			node.addChild(geometry(p.imFunc));
-	}
-
-	const double delta = 0.01;
-	int validPoints = 0;
-	int checkedPoints = 0;
-	for (const auto& manifold : ms)
-	{
-		for (int i = 0; i < manifold->pc.rows(); ++i)
-		{
-			Eigen::Vector3d p = manifold->pc.block<1, 3>(i, 0);
-
-			Eigen::Vector3d n = manifold->pc.block<1, 3>(i, 3);
-			auto dg = node.signedDistanceAndGradient(p);
-			double d = dg[0];
-			Eigen::Vector3d g = dg.bottomRows(3);
-			g.normalize();
-			double dot = std::fabs(n.dot(g));
-
-			validPoints += std::abs(d) < delta && dot > 0 && dot > 0.95;
-			checkedPoints++;
-		}
-	}
-	
-	double g = 1.0;
-	double geoScore = ((double)validPoints / (double)checkedPoints);
-
-	double s = 0.2;
-	double sizeScore = (double)ps.size() / (double)maxPrimitiveSetSize;
-
-	//double p = 0.5;
-	//double noteUsedScore = 1.0 - getCompleteUseScore(ms, ps);
-
-	double r = g * geoScore - s * sizeScore; // -p * noteUsedScore;
-
-	if (bestRank < r)
-	{
-		bestRank = r;
-		bestPrimitives = ps;
-	}
-
-	return r;*/
 }
 
 #include <igl/opengl/glfw/Viewer.h>
@@ -1080,164 +988,141 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 	return counter * raster_size * raster_size;
 }
 
-lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, bool ignoreStaticPrimitives) const
+lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, int& cache_hits) const
 {
-	if (ps.empty()) 	
-		return -std::numeric_limits<double>::max();
-	
-	// ===================== PART II: Computation of the Area Score =====================
+	AreaScore area_score = AreaScore(0.0, 0.0);
 
-	double summed_area = 0.0;
-	double summed_point_area = 0.0;
-
-	for (const auto& p : ps)
+	size_t hash = p.hash(0);
 	{
-		//size_t hash = p.hash(0);
-		//{
-		//	std::lock_guard<std::mutex> lk(lookupMutex);
-		//
-		//	if (primitiveAreaScoreLookup.count(hash) != 0)
-		//	{
-		//		area_score += primitiveAreaScoreLookup.at(hash);
-		//		//std::cout << "Found in Lookup" << std::endl;
-		//		continue;
-		//	}
-		//}
+		std::lock_guard<std::mutex> lk(lookupMutex);
 
-		if (p.type != PrimitiveType::Box)
+		if (primitiveAreaScoreLookup.count(hash) != 0)
 		{
-			std::cout << "Warning: primitive type is not a box." << std::endl;
-			continue;
+			cache_hits++;
+			return primitiveAreaScoreLookup.at(hash);
 		}
-
-		if (p.ms.size() != 6)
-		{
-			std::cout << "Warning: not exactly 6 planes available." << std::endl;
-			continue;
-		}
-
-		auto mesh = createPolytope(Eigen::Affine3d::Identity(),
-		{ p.ms[0]->p, p.ms[1]->p, p.ms[2]->p, p.ms[3]->p, p.ms[4]->p, p.ms[5]->p },
-		{ p.ms[0]->n, p.ms[1]->n, p.ms[2]->n, p.ms[3]->n, p.ms[4]->n, p.ms[5]->n });
-
-		if (mesh.empty())
-		{
-			std::cout << "Warning: mesh is empty." << std::endl;
-			continue; // TODO: Check if this is correct.
-		}
-
-		if (mesh.indices.rows() != 12)
-		{
-			//std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
-			continue;
-		}
-
-		double per_primitive_point_area = 0.0;
-		double per_primitive_area = 0.0;
-		ManifoldSet selected_planes;
-		std::vector<std::vector<Point_2>> hulls;
-		std::vector<std::vector<Point_2>> points_in_triangles;
-		std::vector<std::vector<Point_2>> rectangles;
-
-		for (int i = 0; i < 12; ++i)
-		{
-			Eigen::Vector3d triangle[3] = {
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,0))),
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,1))),
-				Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,2)))
-			};
-			Eigen::Vector3d triangle_normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized();
-
-			// Find plane that has the same orientation as the triangle.
-			int plane_idx = -1;
-			double min_delta = std::numeric_limits<double>::max();
-			for (int i = 0; i < p.ms.size(); ++i)
-			{
-				//double d = std::abs(triangle_normal.dot(p.ms[i]->n) - 1.0);
-
-				// Measure distance of triangle points to plane surface and take max distance.
-				double d = std::max(std::max(std::abs((triangle[0] - p.ms[i]->p).dot(p.ms[i]->n)),
-					std::abs((triangle[1] - p.ms[i]->p).dot(p.ms[i]->n))), std::abs((triangle[2] - p.ms[i]->p).dot(p.ms[i]->n)));
-
-				if (d < min_delta)
-				{
-					min_delta = d;
-					plane_idx = i;
-				}
-			}
-			if (plane_idx == -1)
-			{
-				std::cout << "Warning: plane is not defined." << std::endl;
-				continue;
-			}
-
-			ManifoldPtr plane = p.ms[plane_idx];
-			selected_planes.push_back(plane);
-
-			// Project points of triangle and point cloud points on the plane.
-			auto triangle_points_2d = get2DPoints(plane, triangle, 3);
-			auto plane_points_2d = get2DPoints(plane);
-
-			// Get all plane points that are inside triangle. 
-			Polygon_2 triangle_polygon(triangle_points_2d.begin(), triangle_points_2d.end());
-			if (!triangle_polygon.is_simple())
-			{
-				std::cout << "Warning polygon is not simple! " << triangle_polygon << std::endl;
-				continue;
-			}
-			std::vector<Point_2> points_in_triangle_2d;
-			for (const auto plane_point : plane_points_2d)
-				if (triangle_polygon.bounded_side(plane_point) != CGAL::ON_UNBOUNDED_SIDE)
-					points_in_triangle_2d.push_back(plane_point);
-
-			points_in_triangles.push_back(points_in_triangle_2d);
-
-			// Compute convex hull of point cloud points. 
-			//std::vector<Point_2> convex_hull;
-			//CGAL::convex_hull_2(points_in_triangle_2d.begin(), points_in_triangle_2d.end(), std::back_inserter(convex_hull));
-			
-			// Compute concave hull of point cloud points.
-			//auto concave_hull = get_concave_hull(points_in_triangle_2d, convex_hull);			
-			//hulls.push_back(concave_hull);
-
-			// Compute area encompassed by points based on hull. 			
-			// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
-			std::vector<Point_2> rectangles_per_triangle;
-			double hull_area = get_rasterized_area(0.04, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
-			rectangles.push_back(rectangles_per_triangle);
-
-			double triangle_area = triangle_polygon.area();
-			per_primitive_area += triangle_area;
-			
-			per_primitive_point_area += hull_area;
-		}
-
-		summed_area += per_primitive_area;
-		summed_point_area += per_primitive_point_area;
-
-		//if (per_primitive_point_area / per_primitive_area > 0.5)
-		//{
-		//	filtered_ps.push_back(p);
-		//	summed_area += per_primitive_area;
-		//	summed_point_area += per_primitive_point_area;
-		//}
-		
-		//{
-		//	std::lock_guard<std::mutex> lk(lookupMutex);
-		//	primitiveAreaScoreLookup[hash] = per_primitive_area_coeff;
-		//}
-		
-		//std::cout << "AREA COEFF: " << (per_primitive_point_area / per_primitive_area) << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
-		
-		//if (per_primitive_point_area / per_primitive_area >= 0.5)
-		//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
 	}
-	
 
-	//const_cast<PrimitiveSet&>(ps) = filtered_ps;
+	if (p.type != PrimitiveType::Box)
+	{
+		std::cout << "Warning: primitive type is not a box." << std::endl;
+		return AreaScore::Invalid;
+	}
 
-	// ===================== PART I: Computation of the Geometry Score =====================
+	if (p.ms.size() != 6)
+	{
+		std::cout << "Warning: not exactly 6 planes available." << std::endl;
+		return AreaScore::Invalid;
+	}
 
+	auto mesh = createPolytope(Eigen::Affine3d::Identity(),
+	{ p.ms[0]->p, p.ms[1]->p, p.ms[2]->p, p.ms[3]->p, p.ms[4]->p, p.ms[5]->p },
+	{ p.ms[0]->n, p.ms[1]->n, p.ms[2]->n, p.ms[3]->n, p.ms[4]->n, p.ms[5]->n });
+
+	if (mesh.empty())
+	{
+		std::cout << "Warning: mesh is empty." << std::endl;
+		return AreaScore::Invalid;
+	}
+
+	if (mesh.indices.rows() != 12)
+	{
+		//std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
+		return AreaScore::Invalid;
+	}
+
+	ManifoldSet selected_planes;
+	std::vector<std::vector<Point_2>> hulls;
+	std::vector<std::vector<Point_2>> points_in_triangles;
+	std::vector<std::vector<Point_2>> rectangles;
+
+	for (int i = 0; i < 12; ++i)
+	{
+		Eigen::Vector3d triangle[3] = {
+			Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,0))),
+			Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,1))),
+			Eigen::Vector3d(mesh.vertices.row(mesh.indices.coeff(i,2)))
+		};
+		Eigen::Vector3d triangle_normal = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized();
+
+		// Find plane that has the same orientation as the triangle.
+		int plane_idx = -1;
+		double min_delta = std::numeric_limits<double>::max();
+		for (int i = 0; i < p.ms.size(); ++i)
+		{
+			//double d = std::abs(triangle_normal.dot(p.ms[i]->n) - 1.0);
+
+			// Measure distance of triangle points to plane surface and take max distance.
+			double d = std::max(std::max(std::abs((triangle[0] - p.ms[i]->p).dot(p.ms[i]->n)),
+				std::abs((triangle[1] - p.ms[i]->p).dot(p.ms[i]->n))), std::abs((triangle[2] - p.ms[i]->p).dot(p.ms[i]->n)));
+
+			if (d < min_delta)
+			{
+				min_delta = d;
+				plane_idx = i;
+			}
+		}
+		if (plane_idx == -1)
+		{
+			std::cout << "Warning: plane is not defined." << std::endl;
+			continue;
+		}
+
+		ManifoldPtr plane = p.ms[plane_idx];
+		selected_planes.push_back(plane);
+
+		// Project points of triangle and point cloud points on the plane.
+		auto triangle_points_2d = get2DPoints(plane, triangle, 3);
+		auto plane_points_2d = get2DPoints(plane);
+
+		// Get all plane points that are inside triangle. 
+		Polygon_2 triangle_polygon(triangle_points_2d.begin(), triangle_points_2d.end());
+		if (!triangle_polygon.is_simple())
+		{
+			std::cout << "Warning polygon is not simple! " << triangle_polygon << std::endl;
+			continue;
+		}
+		std::vector<Point_2> points_in_triangle_2d;
+		for (const auto plane_point : plane_points_2d)
+			if (triangle_polygon.bounded_side(plane_point) != CGAL::ON_UNBOUNDED_SIDE)
+				points_in_triangle_2d.push_back(plane_point);
+
+		points_in_triangles.push_back(points_in_triangle_2d);
+
+		// Compute convex hull of point cloud points. 
+		//std::vector<Point_2> convex_hull;
+		//CGAL::convex_hull_2(points_in_triangle_2d.begin(), points_in_triangle_2d.end(), std::back_inserter(convex_hull));
+
+		// Compute concave hull of point cloud points.
+		//auto concave_hull = get_concave_hull(points_in_triangle_2d, convex_hull);			
+		//hulls.push_back(concave_hull);
+
+		// Compute area encompassed by points based on hull. 			
+		// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
+		std::vector<Point_2> rectangles_per_triangle;
+		double hull_area = get_rasterized_area(0.04, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
+		rectangles.push_back(rectangles_per_triangle);
+
+		double triangle_area = triangle_polygon.area();
+
+		area_score.area += triangle_area;
+		area_score.point_area += hull_area;
+	}
+
+	//std::cout << "AREA COEFF: " << (per_primitive_point_area / per_primitive_area) << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
+	//if (per_primitive_point_area / per_primitive_area >= 0.5)
+	//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
+
+	{
+		std::lock_guard<std::mutex> lk(lookupMutex);
+		primitiveAreaScoreLookup[hash] = area_score;
+	}
+
+	return area_score;
+}
+
+lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::PrimitiveSet& ps) const
+{
 	const double delta = 0.0001;
 	int validPoints = 0;
 	int checkedPoints = 0;
@@ -1253,7 +1138,6 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 		{
 			auto dg = p.imFunc->signedDistanceAndGradient(point);
 			double d = std::abs(dg[0]);
-			//Eigen::Vector3d g = (1.0 - 2.0 * (double)p.cutout) * dg.bottomRows(3);
 
 			Eigen::Vector3d g = dg.bottomRows(3);
 			//if (p.cutout)
@@ -1266,33 +1150,70 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank2(const PrimitiveSet& ps, boo
 			}
 		}
 
-		//double dot = std::fabs(n.dot(min_normal));
-
-		//std::cout << "MIN D: " << min_d << std::endl;
-
-		//validPoints += (int)(min_d < delta && n.dot(min_normal) > 0);
 		if (min_d < delta && n.dot(min_normal) > 0.9) validPoints++;
+
 		checkedPoints++;
 	}
 
-	// ===================== PART III: Compute Weighted Sum =====================
+	return GeometryScore(checkedPoints, validPoints);
+}
 
-	double s = 0.0;
+
+lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
+{
+	/*static int iteration_counter = 0;
+	static int score_mode = 0;
+
+	if (iteration_counter > 1 * 50)
+	{
+		iteration_counter = 0; 
+		std::cout << "................................................... Score Mode Switch" << std::endl;
+		score_mode = score_mode == 1 ? 0 : 1;
+		bestRank = -std::numeric_limits<double>::max();
+		bestPrimitives = {};
+		primitiveAreaScoreLookup.clear();
+	}
+	iteration_counter++;
+	*/
+
+	if (ps.empty()) 	
+		return -std::numeric_limits<double>::max();
+
+	AreaScore summed_area_score(0.0, 0.0);
+	GeometryScore gs(0, 0);
+
+	double geo_score = 0.0;
+	double area_score = 0.0;
+
+	int pa_cache_hits = 0;
+		
+	for (const auto& p : ps)
+	{
+		auto per_primitive_area_score = getAreaScore(p, pa_cache_hits);
+		if (per_primitive_area_score != AreaScore::Invalid)
+		{
+			summed_area_score += per_primitive_area_score;
+		}
+		else
+		{
+			std::cout << "Warning: Area score for primitive is invalid" << std::endl;
+		}
+	}
+	//std::cout << "Primitive Area Cache Hit Rate: " << (((double)pa_cache_hits / (double)ps.size()) * 100.0) << "%." << std::endl;
+
+	area_score = summed_area_score.point_area / summed_area_score.area;
+
+	gs = getGeometryScore(ps);
+	geo_score = ((double)gs.valid_points / (double)gs.checked_points);
+	
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
-	double g = 1.0;
-	double geo_score = ((double)validPoints / (double)checkedPoints);
-
-	double a = 1.0;
-	double area_score = summed_point_area / summed_area;
-
-	double r = a * area_score + g * geo_score - s * size_score;
+	double r = areaWeight * area_score + geoWeight * geo_score - sizeWeight * size_score;
 
 	if (bestRank < r)
 	{
 		bestRank = r;
 		bestPrimitives = ps;
-
 		std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
 	}
 
@@ -1527,4 +1448,151 @@ lmu::ManifoldPtr lmu::estimateSecondCylinderPlaneFromPointCloud(const Manifold& 
 		std::make_shared<Manifold>(ManifoldType::Plane, p, -firstPlane.n, Eigen::Vector3d(0, 0, 0), PointCloud());
 
 	return secondPlane;
+}
+
+
+// ###################################################################################################################################################################
+
+
+lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::PrimitiveSetCreatorBasedOnPrimitiveSet(const PrimitiveSet & primitives, const std::vector<double>& mutationDistribution, 
+	int maxMutationIterations, int maxCrossoverIterations) : 
+	primitives(primitives),
+	mutationDistribution(mutationDistribution),
+	maxMutationIterations(maxMutationIterations),
+	maxCrossoverIterations(maxCrossoverIterations)
+{
+	rndEngine.seed(rndDevice());
+}
+
+int lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::getRandomPrimitiveIdx(const PrimitiveSet& ps) const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+		
+	return du(rndEngine, parmu_t{ 0, (int)ps.size() - 1 });
+}
+
+lmu::PrimitiveSet lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::mutate(const PrimitiveSet & ps) const
+{
+	static std::discrete_distribution<int> dd{ mutationDistribution.begin(), mutationDistribution.end() };
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	MutationType mt = (MutationType)dd(rndEngine);
+
+	if (mt == MutationType::NEW || ps.empty())
+	{
+		std::cout << "Mutation New" << std::endl;
+		return create();
+	}
+	else
+	{
+		auto newPS = ps;
+
+		for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxMutationIterations }); ++i)
+		{
+			switch (mt)
+			{
+			case MutationType::REPLACE:
+			{
+				std::cout << "Mutation Replace" << std::endl;
+
+				int idx = getRandomPrimitiveIdx(newPS);
+				if (idx != -1)
+				{
+					auto newP = primitives[getRandomPrimitiveIdx(primitives)];
+					newPS[idx] = newP.isNone() ? newPS[idx] : newP;
+				}
+
+				break;
+			}
+			
+			case MutationType::REMOVE:
+			{
+				std::cout << "Mutation Remove" << std::endl;
+
+				//int idx = getRandomPrimitiveIdx(newPS);
+				//newPS.erase(newPS.begin() + idx);
+
+				break;
+			}
+			case MutationType::ADD:
+			{
+				std::cout << "Mutation Add" << std::endl;
+
+				auto newP = primitives[getRandomPrimitiveIdx(primitives)];
+				if (!newP.isNone())
+					newPS.push_back(newP);
+
+				break;
+			}
+			default:
+				std::cout << "Warning: Unknown mutation type." << std::endl;
+			}
+		}
+
+		return newPS;
+	}
+}
+
+std::vector<lmu::PrimitiveSet> lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::crossover(const PrimitiveSet & ps1, const PrimitiveSet & ps2) const
+{
+	std::cout << "Crossover" << std::endl;
+
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	PrimitiveSet newPS1 = ps1;
+	PrimitiveSet newPS2 = ps2;
+
+	for (int i = 0; i < du(rndEngine, parmu_t{ 1, (int)maxCrossoverIterations }); ++i)
+	{
+		if (!ps1.empty() && !ps2.empty())
+		{
+			int idx1 = getRandomPrimitiveIdx(ps1);
+			int idx2 = getRandomPrimitiveIdx(ps2);
+
+			if (idx1 != -1 && idx2 != -1)
+			{
+				for (int j = idx2; j < std::min(newPS1.size(), ps2.size()); ++j) {
+					newPS1[j] = ps2[j];
+				}
+
+				for (int j = idx1; j < std::min(ps1.size(), newPS2.size()); ++j) {
+					newPS2[j] = ps1[j];
+				}
+			}
+		}
+	}
+
+	return { newPS1, newPS2 };
+}
+
+lmu::PrimitiveSet lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::create() const
+{
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+	int setSize = du(rndEngine, parmu_t{ 1, (int)primitives.size() });
+
+	PrimitiveSet ps;
+	
+	// Sample [setSize] primitives from the primitive set.
+	std::set<int> indexes;
+	while (indexes.size() < setSize)
+	{
+		int random_index = du(rndEngine, parmu_t{ 0, (int)primitives.size()-1 });
+		if (indexes.find(random_index) == indexes.end())
+		{
+			ps.push_back(primitives[random_index]);
+			indexes.insert(random_index);
+		}
+	}
+
+	return ps;
+}
+
+std::string lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::info() const
+{
+	return std::string();
 }
