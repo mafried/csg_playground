@@ -24,9 +24,13 @@ bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
 int g_prim_idx = 0;
 
-lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx)
+lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
-	auto filtered_ps = { ps[primitive_idx] };
+	lmu::PrimitiveSet filtered_ps;
+	if (primitive_idx < 0)
+		filtered_ps = ps;
+	else
+		filtered_ps.push_back(ps[primitive_idx]);
 
 	int vRows = 0;
 	int iRows = 0;
@@ -100,6 +104,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		g_prim_idx++;
 		if (g_prim_idx >= g_primitiveSet.size())
 			g_prim_idx = 0;
+		break;
+	case '6': 
+		g_prim_idx = -1;
 		break;
 	}
 
@@ -280,7 +287,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			m->pc = lmu::farthestPointSampling(m->pc, 500);
 		}
 				
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);

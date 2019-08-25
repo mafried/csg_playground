@@ -232,10 +232,10 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	int maxPrimitiveSetSize = 25;
 	double sizeWeightGA1 = 0.0;
 	double geoWeightGA1 = 1.0;
-	double areaWeightGA1 = 4.0;
+	double areaWeightGA1 = 1.0;
 	double sizeWeightGA2 = 0.2;
 	double geoWeightGA2 = 1.0;
-	double areaWeightGA2 = 4.0;
+	double areaWeightGA2 = 1.0;
 
 	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
 	lmu::PrimitiveSetGABasedOnPrimitiveSet::Parameters paramsGA2(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
@@ -988,6 +988,28 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 	return counter * raster_size * raster_size;
 }
 
+double get_optimal_rectangle_size(const std::vector<Point_2>& points)
+{
+	std::vector<double> distances(points.size(),0.0);
+
+	for (int i = 0; i < points.size(); ++i)
+	{
+		double min_distance = std::numeric_limits<double>::max();
+		for (int j = 0; j < points.size(); ++j)
+		{
+			double d = CGAL::squared_distance(points[i], points[j]);
+			if (d < min_distance && i != j)
+			{
+				min_distance = d;
+			}			
+		}
+		distances[i] = min_distance;
+	}
+	double avg_distance = std::accumulate(distances.begin(), distances.end(), 0.0) / (double)points.size();
+	
+	return points.empty() ? std::numeric_limits<double>::max() : std::sqrt(avg_distance);
+}
+
 lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, int& cache_hits) const
 {
 	AreaScore area_score = AreaScore(0.0, 0.0);
@@ -1099,9 +1121,16 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 
 		// Compute area encompassed by points based on hull. 			
 		// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
-		std::vector<Point_2> rectangles_per_triangle;
-		double hull_area = get_rasterized_area(0.04, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
-		rectangles.push_back(rectangles_per_triangle);
+
+		//std::cout << "SIZE: " << get_optimal_rectangle_size(points_in_triangle_2d) << std::endl;
+		double hull_area = 0.0;
+		if (!points_in_triangle_2d.empty())
+		{
+			double rectangle_edge_length = std::min(std::max(get_optimal_rectangle_size(points_in_triangle_2d), 0.01), 0.03);
+			std::vector<Point_2> rectangles_per_triangle;
+			hull_area = get_rasterized_area(rectangle_edge_length, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
+			rectangles.push_back(rectangles_per_triangle);
+		}
 
 		double triangle_area = triangle_polygon.area();
 
@@ -1109,8 +1138,8 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 		area_score.point_area += hull_area;
 	}
 
-	//std::cout << "AREA COEFF: " << (per_primitive_point_area / per_primitive_area) << " GEO: " << ((double)validPoints / (double)checkedPoints)  << std::endl;
-	//if (per_primitive_point_area / per_primitive_area >= 0.5)
+	//std::cout << "AREA COEFF: " << (area_score.point_area / area_score.area) << std::endl;
+	//if (area_score.point_area / area_score.area >= 0.4)
 	//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
 
 	{
@@ -1210,11 +1239,15 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 	double r = areaWeight * area_score + geoWeight * geo_score - sizeWeight * size_score;
 
-	if (bestRank < r)
 	{
-		bestRank = r;
-		bestPrimitives = ps;
-		std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
+		std::lock_guard<std::mutex> lk(bestMutex);
+
+		if (bestRank < r)
+		{
+			bestRank = r;
+			bestPrimitives = ps;
+			std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
+		}
 	}
 
 	return r;

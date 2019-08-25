@@ -161,6 +161,7 @@ namespace lmu
 	private: 
 		mutable PrimitiveSetRank bestRank;
 		mutable PrimitiveSet bestPrimitives;
+		mutable std::mutex bestMutex;
 
 		PrimitiveSet staticPrimitives;
 
