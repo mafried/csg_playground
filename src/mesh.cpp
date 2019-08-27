@@ -943,6 +943,7 @@ Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, d
 
 double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 {
+	
 	double d = std::numeric_limits<double>::max(); 
 
 	for (int i = 0; i < _p.size(); ++i)

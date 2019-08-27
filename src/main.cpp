@@ -26,6 +26,9 @@ int g_prim_idx = 0;
 
 lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
+	if (ps.empty())
+		return lmu::Mesh();
+
 	lmu::PrimitiveSet filtered_ps;
 	if (primitive_idx < 0)
 		filtered_ps = ps;
@@ -166,7 +169,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	
 	
 	auto mesh = computeMeshFromPrimitives(g_primitiveSet, g_prim_idx);
-	viewer.data().set_mesh(mesh.vertices, mesh.indices);
+	if(!mesh.empty())
+		viewer.data().set_mesh(mesh.vertices, mesh.indices);
 	
 	update(viewer);
 	return true;
@@ -188,10 +192,10 @@ int main(int argc, char *argv[])
 	{
 		// Primitive estimation based on clusters.
 
-		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
 
-		auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
+		//auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
 		
 		int i = 0;
 		for (auto& cluster : clusters)
@@ -241,7 +245,7 @@ int main(int argc, char *argv[])
 		
 		auto params = lmu::RansacParams();
 		params.probability = 0.05;//0.1;
-		params.min_points = 100;
+		params.min_points = 20;
 		params.normal_threshold = 0.9;
 		params.cluster_epsilon = 0.1;// 0.2;
 		params.epsilon = 0.002;// 0.2;
@@ -280,7 +284,7 @@ int main(int argc, char *argv[])
 		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
-		
+				
 		//goto _LAUNCH;
 
 		

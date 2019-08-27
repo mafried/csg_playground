@@ -937,13 +937,12 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 	//std::cout << "V0: " << (rot_m * v0).normalized() << " V1: " << (rot_m * v1).normalized() << std::endl;
 
 
-	int w = (int)std::ceil(v0.norm() / raster_size);
-	int h = (int)std::ceil(v1.norm() / raster_size);
+	int w = ((int)(std::ceil(v0.norm() / raster_size))) + 1;
+	int h = ((int)(std::ceil(v1.norm() / raster_size))) + 1;
 
 	//std::cout << "W: " << w << " H: " << h << std::endl;
 	
-	bool* grid = new bool[w*h];
-	std::fill_n(grid, w*h, false);
+	std::vector<int> grid(w*h, 0);
 
 	int counter = 0;
 	for (const auto& p : pts)
@@ -959,7 +958,7 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 		//std::cout << "X: " << x << "  Y: " << y << " IDX: " << idx << std::endl;
 
 		counter += !grid[idx];
-		grid[idx] = true;
+		grid[idx] = 1;
 	}
 	
 	auto m_inv_rot = rot_m.inverse();
@@ -968,7 +967,7 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 	{
 		for (int y = 0; y < h; ++y)
 		{
-			if (grid[y * w + x])
+			if (grid[y * w + x] == 1)
 			{
 				Eigen::Vector2d p0 = (m_inv_rot * Eigen::Vector2d((double)x * raster_size, (double)y * raster_size)) + origin;
 				Eigen::Vector2d p1 = (m_inv_rot * Eigen::Vector2d((double)(x + 1) * raster_size, (double)y * raster_size)) + origin;
@@ -982,8 +981,6 @@ double get_rasterized_area(double raster_size, const std::vector<Point_2>& pts, 
 			}
 		}
 	}
-
-	delete[] grid;
 
 	return counter * raster_size * raster_size;
 }
@@ -1049,7 +1046,7 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 
 	if (mesh.indices.rows() != 12)
 	{
-		//std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
+		std::cout << "Warning: mesh has != 12 triangles (" << mesh.indices.rows()  << ")" << std::endl;
 		return AreaScore::Invalid;
 	}
 
@@ -1123,6 +1120,7 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 		// double hull_area = Polygon_2(concave_hull.begin(), concave_hull.end()).area();
 
 		//std::cout << "SIZE: " << get_optimal_rectangle_size(points_in_triangle_2d) << std::endl;
+
 		double hull_area = 0.0;
 		if (!points_in_triangle_2d.empty())
 		{
@@ -1155,6 +1153,7 @@ lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::Primitiv
 	const double delta = 0.0001;
 	int validPoints = 0;
 	int checkedPoints = 0;
+
 	for (int i = 0; i < pc.rows(); ++i)
 	{
 		Eigen::Vector3d point = pc.block<1, 3>(i, 0);
@@ -1163,6 +1162,7 @@ lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::Primitiv
 		// Get distance to closest primitive. 
 		double min_d = std::numeric_limits<double>::max();
 		Eigen::Vector3d min_normal;
+
 		for (const auto& p : ps)
 		{
 			auto dg = p.imFunc->signedDistanceAndGradient(point);
@@ -1234,7 +1234,6 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 
 	gs = getGeometryScore(ps);
 	geo_score = ((double)gs.valid_points / (double)gs.checked_points);
-	
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	double r = areaWeight * area_score + geoWeight * geo_score - sizeWeight * size_score;
@@ -1605,6 +1604,12 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::create() const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
+
+	if (primitives.empty())
+	{
+		std::cout << "Warning: The used primitive set is empty." << std::endl;
+		return PrimitiveSet();
+	}
 
 	int setSize = du(rndEngine, parmu_t{ 1, (int)primitives.size() });
 
