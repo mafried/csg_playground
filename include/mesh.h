@@ -58,6 +58,10 @@ namespace lmu
 	Mesh createCylinder(const Eigen::Affine3d& transform, float bottomRadius, float topRadius, float height, int stacks, int slices);
 	Mesh createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n);
 
+	Mesh createFromPointCloud(const PointCloud& pc);
+
+	double computeMeshArea(const Mesh& m);
+
 	void initializePolytopeCreator();
 
 	Mesh fromOBJFile(const std::string& file);

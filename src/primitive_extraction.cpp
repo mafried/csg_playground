@@ -4,6 +4,13 @@
 #include "csgnode_helper.h"
 #include "helper.h"
 
+std::ostream& lmu::operator<<(std::ostream& out, const lmu::PrimitiveSetRank& r)
+{
+	return out << "geo: " << r.geo << " total area: " << r.total_area << " relative area: " << r.relative_area << " size: " << r.size << " combined: " << r.combined;
+}
+
+lmu::PrimitiveSetRank const lmu::PrimitiveSetRank::Invalid = lmu::PrimitiveSetRank(-std::numeric_limits<double>::max());
+
 lmu::AreaScore const lmu::AreaScore::Invalid = lmu::AreaScore(-1.0, -1.0);
 
 lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m);
@@ -229,16 +236,16 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 {
 	double distT = 0.02;
 	double angleT = M_PI / 9.0;
-	int maxPrimitiveSetSize = 25;
+	int maxPrimitiveSetSize = 75;
 	double sizeWeightGA1 = 0.0;
 	double geoWeightGA1 = 1.0;
 	double areaWeightGA1 = 1.0;
-	double sizeWeightGA2 = 0.2;
+	double sizeWeightGA2 = 0.1;
 	double geoWeightGA2 = 1.0;
 	double areaWeightGA2 = 1.0;
 
-	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
-	lmu::PrimitiveSetGABasedOnPrimitiveSet::Parameters paramsGA2(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+	lmu::PrimitiveSetGA::Parameters paramsGA1(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+	lmu::PrimitiveSetGABasedOnPrimitiveSet::Parameters paramsGA2(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
 
 	// Initialize polytope creator.
 	initializePolytopeCreator();
@@ -254,35 +261,49 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 		[](const ManifoldPtr m){return m->pc; });
 	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
 
+	auto mesh = createFromPointCloud(non_static_pointcloud);
+	double surface_area = computeMeshArea(mesh);
+	std::cout << "Approximated surface area: " << surface_area << std::endl;
+
 	// Add "ghost planes". 
 	//manifoldsForCreator = generateGhostPlanes(ransacRes.pc, manifoldsForCreator, distT, angleT);
 	// TODO: add plane merge here.
 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(200, 0.00001, 200);
+	PrimitiveSetIterationStopCriterion criterion(50, PrimitiveSetRank(0.00001), 50);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
-	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, geoWeightGA1, areaWeightGA1, sizeWeightGA1);
+	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area);
+	PrimitiveSetPopMan popMan(ranker, geoWeightGA1, areaWeightGA1, sizeWeightGA1);
 	PrimitiveSetGA ga;
-	ga.run(paramsGA1, selector, creator, ranker, criterion);	
-	auto primitives = postprocessPrimitiveSet(ranker.bestPrimitiveSet(), ranker, 0.3);
+	auto res = ga.run(paramsGA1, selector, creator, ranker, criterion, popMan);	
+	auto primitives = postprocessPrimitiveSet(res.population[0].creature, ranker, 0.4);
+	
+	std::cout << "SCORE: " << std::endl;
+	auto r = ranker.rank(primitives);
+	for (int i = 0; i < r.per_primitive_area_scores.size(); ++i)
+		std::cout << (r.per_primitive_area_scores[i].point_area / r.per_primitive_area_scores[i].area )<< std::endl;
+	
+	//GAResult result;
+	//result.primitives = primitives;
+	//result.manifolds = ransacRes.manifolds;
 	
 	// Second GA for best candidate box selection.
 	PrimitiveSetCreatorBasedOnPrimitiveSet creator2(primitives, { 0.4, 0.2, 0.2, 0.2}, 1, 1);
-	PrimitiveSetRanker ranker2(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, geoWeightGA2, areaWeightGA2, sizeWeightGA2);
+	PrimitiveSetRanker ranker2(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area);
 	PrimitiveSetTournamentSelector selector2(2);
-	PrimitiveSetIterationStopCriterion criterion2(200, 0.00001, 200);
+	PrimitiveSetIterationStopCriterion criterion2(50, PrimitiveSetRank(0.00001), 50);
+	PrimitiveSetPopMan popMan2(ranker2, geoWeightGA2, areaWeightGA2, sizeWeightGA2);
 	PrimitiveSetGABasedOnPrimitiveSet ga2;
-	ga2.run(paramsGA2, selector2, creator2, ranker2, criterion2);
+	auto res2 = ga2.run(paramsGA2, selector2, creator2, ranker2, criterion2, popMan2);
 
 	GAResult result;
-	result.primitives = ranker2.bestPrimitiveSet(), ranker2;
+	result.primitives = res2.population[0].creature;
 	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 	
-	std::cout << "BEST RANK: " << ranker.rank(ranker.bestPrimitiveSet()) << std::endl;
-	
 	return result;
+	
 }
 
 // ==================== CREATOR ====================
@@ -740,16 +761,13 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 // ==================== RANKER ====================
 
 lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize,
-	double geoWeight, double areaWeight, double sizeWeight) :
+	double surface_area) :
 	pc(pc),
 	ms(ms),
 	staticPrimitives(staticPrims),
 	distanceEpsilon(distanceEpsilon),
-	bestRank(-std::numeric_limits<double>::max()),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
-	geoWeight(geoWeight),
-	areaWeight(areaWeight),
-	sizeWeight(sizeWeight)
+	surface_area(surface_area)
 {
 }
 
@@ -783,8 +801,6 @@ void debug_visualize(lmu::Mesh& mesh, const lmu::ManifoldSet& planes, const std:
 	igl::opengl::glfw::Viewer viewer;
 	std::vector<Eigen::MatrixXd> lines;
 
-	std::cout << "HERE" << std::endl;
-
 	std::cout << "Planes: " << planes.size() << " Hulls: " << hulls.size() << " Pts in Triangles: " << points_in_triangles.size() << std::endl;
 	
 	if (points_in_triangles.size() == planes.size())
@@ -803,6 +819,7 @@ void debug_visualize(lmu::Mesh& mesh, const lmu::ManifoldSet& planes, const std:
 
 				lines.push_back(linesPerPlane);
 			}
+
 
 			if (!points_in_triangles[i].empty())
 			{
@@ -1121,14 +1138,14 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 
 		//std::cout << "SIZE: " << get_optimal_rectangle_size(points_in_triangle_2d) << std::endl;
 
+		std::vector<Point_2> rectangles_per_triangle;
 		double hull_area = 0.0;
 		if (!points_in_triangle_2d.empty())
 		{
 			double rectangle_edge_length = std::min(std::max(get_optimal_rectangle_size(points_in_triangle_2d), 0.01), 0.03);
-			std::vector<Point_2> rectangles_per_triangle;
 			hull_area = get_rasterized_area(rectangle_edge_length, points_in_triangle_2d, triangle_points_2d, rectangles_per_triangle);
-			rectangles.push_back(rectangles_per_triangle);
 		}
+		rectangles.push_back(rectangles_per_triangle); // We need to add also empty lists since the visualization code relies on [rectangles set| == |planes|
 
 		double triangle_area = triangle_polygon.area();
 
@@ -1136,8 +1153,8 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 		area_score.point_area += hull_area;
 	}
 
-	//std::cout << "AREA COEFF: " << (area_score.point_area / area_score.area) << std::endl;
-	//if (area_score.point_area / area_score.area >= 0.4)
+	//std::cout << "AREA COEFF: " << (area_score.point_area / area_score.area) << " " << (area_score.point_area / surface_area) << std::endl;
+	//if (area_score.point_area / area_score.area >= 0.5)
 	//	debug_visualize(mesh, selected_planes, hulls, points_in_triangles, pc, rectangles);
 
 	{
@@ -1166,7 +1183,7 @@ lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::Primitiv
 		for (const auto& p : ps)
 		{
 			auto dg = p.imFunc->signedDistanceAndGradient(point);
-			double d = std::abs(dg[0]);
+			double d = dg[0];
 
 			Eigen::Vector3d g = dg.bottomRows(3);
 			//if (p.cutout)
@@ -1179,7 +1196,7 @@ lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::Primitiv
 			}
 		}
 
-		if (min_d < delta && n.dot(min_normal) > 0.9) validPoints++;
+		if (std::abs(min_d) < delta && n.dot(min_normal) > 0.9) validPoints++;
 
 		checkedPoints++;
 	}
@@ -1190,35 +1207,18 @@ lmu::GeometryScore lmu::PrimitiveSetRanker::getGeometryScore(const lmu::Primitiv
 
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
 {
-	/*static int iteration_counter = 0;
-	static int score_mode = 0;
-
-	if (iteration_counter > 1 * 50)
-	{
-		iteration_counter = 0; 
-		std::cout << "................................................... Score Mode Switch" << std::endl;
-		score_mode = score_mode == 1 ? 0 : 1;
-		bestRank = -std::numeric_limits<double>::max();
-		bestPrimitives = {};
-		primitiveAreaScoreLookup.clear();
-	}
-	iteration_counter++;
-	*/
-
-	if (ps.empty()) 	
-		return -std::numeric_limits<double>::max();
-
-	AreaScore summed_area_score(0.0, 0.0);
-	GeometryScore gs(0, 0);
-
-	double geo_score = 0.0;
-	double area_score = 0.0;
-
+	if (ps.empty())
+		return PrimitiveSetRank::Invalid;
+	
+	// Area score
 	int pa_cache_hits = 0;
-		
-	for (const auto& p : ps)
+	AreaScore summed_area_score(0.0, 0.0);
+	std::vector<AreaScore> per_primitive_area_scores;
+	per_primitive_area_scores.reserve(ps.size());
+	bool invalid_area_score_detected = false;
+	for (int i = 0; i < ps.size(); ++i)
 	{
-		auto per_primitive_area_score = getAreaScore(p, pa_cache_hits);
+		auto per_primitive_area_score = getAreaScore(ps[i], pa_cache_hits);
 		if (per_primitive_area_score != AreaScore::Invalid)
 		{
 			summed_area_score += per_primitive_area_score;
@@ -1226,30 +1226,24 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) cons
 		else
 		{
 			std::cout << "Warning: Area score for primitive is invalid" << std::endl;
+			invalid_area_score_detected = true;
+
 		}
+		per_primitive_area_scores.push_back(per_primitive_area_score);
 	}
-	//std::cout << "Primitive Area Cache Hit Rate: " << (((double)pa_cache_hits / (double)ps.size()) * 100.0) << "%." << std::endl;
+	if (invalid_area_score_detected)
+		return PrimitiveSetRank::Invalid;
 
-	area_score = summed_area_score.point_area / summed_area_score.area;
+	double relative_area_score = summed_area_score.point_area / summed_area_score.area;
+	double total_area_score = summed_area_score.point_area / surface_area;
 
-	gs = getGeometryScore(ps);
-	geo_score = ((double)gs.valid_points / (double)gs.checked_points);
+	// Geometry score
+	//GeometryScore gs(0, 0);
+	//gs = getGeometryScore(ps);
+	double geo_score = 0.0;//(double)gs.valid_points / (double)gs.checked_points;
 	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
-
-	double r = areaWeight * area_score + geoWeight * geo_score - sizeWeight * size_score;
-
-	{
-		std::lock_guard<std::mutex> lk(bestMutex);
-
-		if (bestRank < r)
-		{
-			bestRank = r;
-			bestPrimitives = ps;
-			std::cout << "GEO SCORE: " << geo_score << " AREA SCORE: " << area_score << " SIZE SCORE: " << size_score << std::endl;
-		}
-	}
-
-	return r;
+	
+	return PrimitiveSetRank(geo_score, total_area_score, relative_area_score, size_score, 0.0 /*computed later*/, per_primitive_area_scores);
 }
 
 double lmu::PrimitiveSetRanker::getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const
@@ -1266,11 +1260,6 @@ double lmu::PrimitiveSetRanker::getCompleteUseScore(const ManifoldSet& ms, const
 std::string lmu::PrimitiveSetRanker::info() const
 {
 	return std::string();
-}
-
-lmu::PrimitiveSet lmu::PrimitiveSetRanker::bestPrimitiveSet() const
-{
-	return bestPrimitives;
 }
 
 lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
@@ -1631,6 +1620,121 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::create() const
 }
 
 std::string lmu::PrimitiveSetCreatorBasedOnPrimitiveSet::info() const
+{
+	return std::string();
+}
+
+lmu::PrimitiveSetPopMan::PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, double geoWeight, double areaWeight, double sizeWeight) :
+	ranker(&ranker),
+	geoWeight(geoWeight),
+	areaWeight(areaWeight),
+	sizeWeight(sizeWeight)
+{
+}
+
+void lmu::PrimitiveSetPopMan::manipulateBeforeRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
+{
+	
+}
+
+void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
+{
+	// Add a primitive set consisting of primitives with best area score.
+
+	int max_primitives = 75;
+	std::unordered_map<double, std::pair<const Primitive*, AreaScore>> all_primitives_map;
+	for (const auto& ps : population)
+	{
+		if (ps.rank.per_primitive_area_scores.size() != ps.creature.size())
+			continue;
+
+		for (int i = 0; i < ps.creature.size(); ++i)
+		{
+			auto area_score = ps.rank.per_primitive_area_scores[i];
+			all_primitives_map[area_score.point_area / area_score.area] = std::make_pair(&(ps.creature[i]), area_score);
+		}
+	}
+
+	std::vector<std::pair<const Primitive*, AreaScore>> all_primitives;
+	all_primitives.reserve(all_primitives_map.size());
+	for (const auto& p : all_primitives_map)
+		all_primitives.push_back(p.second);
+
+	if (!all_primitives.empty())
+	{
+		std::vector<std::pair<const Primitive*, AreaScore>> n_best_primitives(std::min(all_primitives.size(), (size_t)max_primitives));
+		std::partial_sort_copy(all_primitives.begin(), all_primitives.end(), n_best_primitives.begin(), n_best_primitives.end(),
+			[](const std::pair<const Primitive*, AreaScore>& a, const std::pair<const Primitive*, AreaScore>& b)
+		{
+			return (a.second.point_area / a.second.area) > (b.second.point_area / b.second.area);
+		});
+
+		PrimitiveSet best_primitives;
+		for (const auto& p : n_best_primitives)
+			best_primitives.push_back(*p.first);
+
+		auto rank = ranker->rank(best_primitives);
+
+		std::cout << "ELITE: " << std::endl;
+		for (int i = 0; i < rank.per_primitive_area_scores.size();++i)
+		{			
+			std::cout << (rank.per_primitive_area_scores[i].point_area / rank.per_primitive_area_scores[i].area) << std::endl;
+		}
+
+		population.push_back(RankedCreature<PrimitiveSet, PrimitiveSetRank>(best_primitives, rank));
+	}
+
+
+	// Re-normalize scores and compute combined score. 
+
+	PrimitiveSetRank max_r(-std::numeric_limits<double>::max()), min_r(std::numeric_limits<double>::max());
+	for (auto& ps : population)
+	{
+		if (ps.rank.total_area < 0.0 || ps.rank.relative_area < 0.0 || ps.rank.geo < 0.0|| ps.rank.size < 0.0)
+			continue;
+
+		max_r.total_area = max_r.total_area < ps.rank.total_area ? ps.rank.total_area : max_r.total_area;
+		max_r.relative_area = max_r.relative_area < ps.rank.relative_area ? ps.rank.relative_area : max_r.relative_area;
+		max_r.geo = max_r.geo < ps.rank.geo ? ps.rank.geo : max_r.geo;
+		max_r.size = max_r.size < ps.rank.size ? ps.rank.size : max_r.size;
+
+		min_r.total_area = min_r.total_area > ps.rank.total_area ? ps.rank.total_area : min_r.total_area;
+		min_r.relative_area = min_r.relative_area > ps.rank.relative_area ? ps.rank.relative_area : min_r.relative_area;
+		min_r.geo = min_r.geo > ps.rank.geo ? ps.rank.geo : min_r.geo;
+		min_r.size = min_r.size > ps.rank.size ? ps.rank.size : min_r.size;
+	}
+	auto diff_r = max_r - min_r;
+
+	//std::cout << "DIFF: " << diff_r << std::endl;
+	//std::cout << "MAX: " << max_r << std::endl;
+	//std::cout << "MIN: " << min_r << std::endl;
+
+	int i = 0;
+	for (auto& ps : population)
+	{
+		//std::cout << "Rank Before: " << ps.rank << std::endl;
+
+		ps.rank.total_area = (ps.rank.total_area - min_r.total_area) / diff_r.total_area;
+		ps.rank.relative_area = (ps.rank.relative_area - min_r.relative_area) / diff_r.relative_area;
+
+		ps.rank.geo = (ps.rank.geo - min_r.geo) / diff_r.geo;
+		ps.rank.size = (ps.rank.size - min_r.size) / diff_r.size;
+
+		if (ps.rank.total_area < 0.0 || ps.rank.relative_area < 0.0 || ps.rank.geo < 0.0 || ps.rank.size < 0.0)
+		{
+			ps.rank.combined = 0.0;
+		}
+		else
+		{
+			ps.rank.combined = ps.rank.relative_area * 1.0 + ps.rank.total_area * 1.0 - ps.rank.size * sizeWeight;// + ps.rank.relative_area * 1.0 + ps.rank.geo * /*geoWeight*/0.0 - ps.rank.size * 0.0;// sizeWeight;
+			//std::cout << "R" << i << ": " << ps.rank << std::endl;
+			//std::cout << "RC: " << ps.rank.combined << std::endl;
+		}
+		i++;
+	}	
+}
+
+std::string lmu::PrimitiveSetPopMan::info() const
 {
 	return std::string();
 }

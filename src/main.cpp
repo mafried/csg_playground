@@ -192,8 +192,9 @@ int main(int argc, char *argv[])
 	{
 		// Primitive estimation based on clusters.
 
-		auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
+		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Downloads/clusters_high.txt", 1.0);
 
 		//auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
 		

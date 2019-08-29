@@ -332,9 +332,6 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-
-
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/convex_hull_3.h>
 
@@ -344,6 +341,9 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 
 #include <CGAL/boost/graph/named_params_helper.h>
 #include <CGAL/boost/graph/named_function_params.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Advancing_front_surface_reconstruction.h>
+#include <CGAL/tuple.h>
 
 
 #include <CGAL/Polyhedron_3.h>
@@ -358,8 +358,12 @@ typedef CGAL::Polyhedron_3<K>                     Polyhedron_3;
 typedef K::Point_3                                Point_3;
 typedef K::Segment_3                              Segment_3;
 typedef K::Triangle_3                             Triangle_3;
+typedef K::Vector_3								  Vector_3;
+typedef CGAL::cpp11::array<std::size_t, 3> Facet;
 
-
+typedef CGAL::Advancing_front_surface_reconstruction<> Reconstruction;
+typedef Reconstruction::Triangulation_3 Triangulation_3;
+typedef Reconstruction::Triangulation_data_structure_2 TDS_2;
 
 void lmu::initializePolytopeCreator()
 {
@@ -492,6 +496,56 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	return Mesh(vertices, indices);*/
 
 	return Mesh(verts, indices);
+}
+
+#include <igl/writeOBJ.h>
+
+Mesh lmu::createFromPointCloud(const PointCloud & pc)
+{
+	std::vector<Facet> facets;
+
+	std::vector<Point_3> points;
+	points.reserve(pc.rows());
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::RowVector3d p = pc.row(i).leftCols(3);
+		points.push_back(Point_3(p.x(), p.y(), p.z()));
+	}
+	CGAL::advancing_front_surface_reconstruction(points.begin(), points.end(),std::back_inserter(facets));
+	
+	Eigen::MatrixXd vertices(points.size(), 3);
+	for (int i = 0; i < points.size(); ++i)
+		vertices.row(i) << points[i].x(), points[i].y(), points[i].z();
+
+	std::cout << "Facets: " << facets.size() << std::endl;
+	Eigen::MatrixXi indices(facets.size(), 3);
+	for (int i = 0; i < facets.size(); ++i)
+		indices.row(i) << facets[i][0], facets[i][1], facets[i][2];
+
+	
+	igl::writeOBJ("mesh_out.obj", vertices, indices);
+
+	
+	return Mesh(vertices, indices);
+}
+
+double lmu::computeMeshArea(const Mesh & m)
+{
+	double area = 0.0;
+	for (int i = 0; i < m.indices.rows(); ++i)
+	{
+		Eigen::RowVector3d v0 = m.vertices.row(m.indices.row(i).x());
+		Eigen::RowVector3d v1 = m.vertices.row(m.indices.row(i).y());
+		Eigen::RowVector3d v2 = m.vertices.row(m.indices.row(i).z());
+
+		Triangle_3 tr(Point_3(v0.x(), v0.y(), v0.z()), Point_3(v1.x(), v1.y(), v1.z()), Point_3(v2.x(), v2.y(), v2.z()));
+
+		//std::cout << tr << std::endl;
+
+		area += std::sqrt(tr.squared_area());
+	}
+
+	return area;
 }
 
 Mesh lmu::fromOBJFile(const std::string & file)

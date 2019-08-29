@@ -11,7 +11,7 @@
 #include <boost/algorithm/string.hpp>
 
 
-#define WITH_VIEWER_GUI
+//#define WITH_VIEWER_GUI
 
 std::vector<lmu::ImplicitFunctionPtr> splitCylinder(const lmu::ImplicitFunctionPtr& cyl)
 {
