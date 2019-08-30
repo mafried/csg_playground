@@ -215,7 +215,66 @@ lmu::ManifoldSet lmu::generateGhostPlanes(const PointCloud& pc, const lmu::Manif
 	return filterClosePlanes(res, distanceThreshold * lmu::computeAABBLength(pc), angleThreshold);
 }
 
-lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, const lmu::PrimitiveSetRanker& ranker, double areaThreshold)
+lmu::PrimitiveSet filter_primitives(const lmu::PrimitiveSet& ps, double distanceThreshold)
+{
+	lmu::PrimitiveSet remaining_primitives;
+	std::set<int> removed_primitives;
+
+	for (int i = 0; i < ps.size(); ++i)
+	{
+		bool needs_to_be_added = true;
+		for (int j = 0; j < ps.size(); ++j)
+		{
+			if (i == j || removed_primitives.count(j)) continue;
+
+			const auto& mesh = ps[i].imFunc->meshCRef();
+
+			//Don't add degenerated boxes.
+			if (mesh.vertices.rows() != 8)
+			{
+				needs_to_be_added = false;
+				break;
+			}
+
+			// Check if mesh vertices of primitive i are fully inside j.
+			int num_contained = 0;
+
+			for (int k = 0; k < mesh.vertices.rows(); ++k)
+			{
+				Eigen::Vector3d p = mesh.vertices.row(k).transpose();
+
+				double d = ps[j].imFunc->signedDistance(p);
+
+				if (d < distanceThreshold)
+					num_contained++;
+				else
+					break;
+			}
+			// All mesh vertices are inside primitive i? => Primitive i does not have to be in the resulting set.
+			if (num_contained == mesh.vertices.rows())
+			{
+				needs_to_be_added = false;
+				break;
+			}
+		}
+
+		// Primitive i needs to be part of the set since no other primitive fully contains it.
+		if (needs_to_be_added)
+		{
+			remaining_primitives.push_back(ps[i]);
+		}
+		// In case primitive i does not have to be added, add it to the list of removed primitives.
+		// Removed primitives won't be considered in further tests.
+		else
+		{
+			removed_primitives.insert(i);
+		}
+	}
+
+	return remaining_primitives;
+}
+
+lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, const lmu::PrimitiveSetRanker& ranker, double areaThreshold, double distanceThreshold)
 {
 	lmu::PrimitiveSet res; 
 	int cache_hits = 0;
@@ -229,7 +288,7 @@ lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, const lmu
 			std::cout << "Filtered primitive with ratio: " << ratio << std::endl;
 	}
 
-	return res;
+	return filter_primitives(res, distanceThreshold);
 }
 
 lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
@@ -271,23 +330,24 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(50, PrimitiveSetRank(0.00001), 50);
+	PrimitiveSetIterationStopCriterion criterion(100, PrimitiveSetRank(0.00001), 100);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area);
 	PrimitiveSetPopMan popMan(ranker, geoWeightGA1, areaWeightGA1, sizeWeightGA1);
 	PrimitiveSetGA ga;
 	auto res = ga.run(paramsGA1, selector, creator, ranker, criterion, popMan);	
-	auto primitives = postprocessPrimitiveSet(res.population[0].creature, ranker, 0.4);
+	auto primitives = postprocessPrimitiveSet(res.population[0].creature, ranker, 0.5, 0.001);
 	
 	std::cout << "SCORE: " << std::endl;
 	auto r = ranker.rank(primitives);
 	for (int i = 0; i < r.per_primitive_area_scores.size(); ++i)
 		std::cout << (r.per_primitive_area_scores[i].point_area / r.per_primitive_area_scores[i].area )<< std::endl;
 	
-	//GAResult result;
-	//result.primitives = primitives;
-	//result.manifolds = ransacRes.manifolds;
-	
+	GAResult result;
+	result.primitives = primitives;
+	result.manifolds = ransacRes.manifolds;
+	return result;
+
 	// Second GA for best candidate box selection.
 	PrimitiveSetCreatorBasedOnPrimitiveSet creator2(primitives, { 0.4, 0.2, 0.2, 0.2}, 1, 1);
 	PrimitiveSetRanker ranker2(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area);
@@ -297,12 +357,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	PrimitiveSetGABasedOnPrimitiveSet ga2;
 	auto res2 = ga2.run(paramsGA2, selector2, creator2, ranker2, criterion2, popMan2);
 
-	GAResult result;
-	result.primitives = res2.population[0].creature;
-	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
-	result.manifolds = ransacRes.manifolds;
+	//GAResult result;
+	//result.primitives = res2.population[0].creature;
+	//result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
+	//result.manifolds = ransacRes.manifolds;
 	
-	return result;
+	//return result;
 	
 }
 
@@ -1067,6 +1127,11 @@ lmu::AreaScore lmu::PrimitiveSetRanker::getAreaScore(const lmu::Primitive& p, in
 		return AreaScore::Invalid;
 	}
 
+	// Ugly hack to make the primitive mesh available in the population manipulator.
+	auto& p_with_mesh = const_cast<Primitive&>(p);
+	p_with_mesh.imFunc->meshRef() = mesh;
+
+	// Proceed with area computation.
 	ManifoldSet selected_planes;
 	std::vector<std::vector<Point_2>> hulls;
 	std::vector<std::vector<Point_2>> points_in_triangles;
