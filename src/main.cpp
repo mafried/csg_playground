@@ -83,7 +83,6 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	case '+':
 		viewer.core.camera_dnear += 0.1;
 		return true;
-
 	case '1':
 		g_manifoldIdx++;
 		if (g_manifoldSet.size() <= g_manifoldIdx)
@@ -110,6 +109,17 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		break;
 	case '6': 
 		g_prim_idx = -1;
+		break;
+	case '7':
+		std::cout << "Serialize meshes" << std::endl;
+		std::string basename = "out_mesh";
+		for (int i = 0; i < g_primitiveSet.size(); ++i) {
+			auto mesh = computeMeshFromPrimitives(g_primitiveSet, i);
+			if (!mesh.empty()) {
+				std::string mesh_name = basename + std::to_string(i) + ".obj";
+				igl::writeOBJ(mesh_name, mesh.vertices, mesh.indices);
+			}
+		}
 		break;
 	}
 
@@ -194,7 +204,8 @@ int main(int argc, char *argv[])
 
 		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
-		auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Downloads/clusters_high.txt", 1.0);
+		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Downloads/clusters_high.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Projekte/visigrapp2020/data/test1/clusters.txt", 1.0);
 
 		//auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
 		
