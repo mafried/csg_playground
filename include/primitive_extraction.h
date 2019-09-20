@@ -218,11 +218,27 @@ namespace lmu
 		mutable std::default_random_engine rndEngine;
 		mutable std::random_device rndDevice;
 	};
+	
+	enum class RankAttributes
+	{
+		GEOMETRY = 1,
+		AREA = 2
+	};
+	inline RankAttributes operator & (RankAttributes lhs, RankAttributes rhs)
+	{
+		using T = std::underlying_type_t <RankAttributes>;
+		return static_cast<RankAttributes>(static_cast<T>(lhs) & static_cast<T>(rhs));
+	}
+	inline RankAttributes operator | (RankAttributes lhs, RankAttributes rhs)
+	{
+		using T = std::underlying_type_t <RankAttributes>;
+		return static_cast<RankAttributes>(static_cast<T>(lhs) | static_cast<T>(rhs));
+	}
 
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, double distanceEpsilon, int maxPrimitiveSetSize, 
-			double surface_area);
+		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims, 
+			double distanceEpsilon, int maxPrimitiveSetSize, double surface_area, RankAttributes rank_attributes);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 
@@ -234,9 +250,12 @@ namespace lmu
 		double getCompleteUseScore(const ManifoldSet& ms, const PrimitiveSet& ps) const;
 
 	private: 
+
 		double surface_area;
 
 		PrimitiveSet staticPrimitives;
+
+		RankAttributes rank_attributes;
 
 		PointCloud pc;
 		ManifoldSet ms;
@@ -256,15 +275,20 @@ namespace lmu
 
 	struct PrimitiveSetPopMan
 	{
-		PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, double geoWeight, double areaWeight, double sizeWeight);
+		PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, int maxPrimitiveSetSize, 
+			double geoWeight, double relAreaWeight, double totalAreaWeight, double sizeWeight,
+			bool do_elite_optimization);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const;
 		void manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const;
 		std::string info() const;
 		
 		double geoWeight;
-		double areaWeight;
+		double relAreaWeight;
+		double totalAreaWeight;
 		double sizeWeight;
+		bool do_elite_optimization;
+		int maxPrimitiveSetSize;
 
 		const PrimitiveSetRanker* ranker;
 	};

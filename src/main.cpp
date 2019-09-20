@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
 		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Downloads/clusters_high.txt", 1.0);
-		auto clusters = lmu::readClusterFromFile("C:/Projekte/visigrapp2020/data/test1/clusters.txt", 1.0);
+		auto clusters = lmu::readClusterFromFile("C:/Projekte/visigrapp2020/data/test2/clusters.txt", 1.0);
 
 		//auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
 		
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 500);
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
 		}
 				
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);

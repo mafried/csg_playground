@@ -390,14 +390,14 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	poly = dd_DDMatrix2Poly(A, &err);  /* compute the second (generator) representation */
 	if (err != dd_NoError)
 	{
-		std::cout << "Error: " << (int)err << std::endl;
+		//std::cout << "Error: " << (int)err << std::endl;
 		return Mesh();
 	}
 		
 	G = dd_CopyGenerators(poly);
 	if (G->rowsize == 0)
 	{
-		std::cout << "Error: Row size is 0" << std::endl;
+		//std::cout << "Error: Row size is 0" << std::endl;
 		return Mesh();
 	}
 	
@@ -435,7 +435,7 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	const Polyhedron_3* ph = CGAL::object_cast<Polyhedron_3>(&obj);
 	if (!ph) 
 	{
-		std::cout << "Error: Polyhedron object is null." << std::endl;
+		//std::cout << "Error: Polyhedron object is null." << std::endl;
 		return Mesh();
 	}
 	
