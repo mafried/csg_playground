@@ -289,7 +289,7 @@ bool primitivesEqual(const lmu::Primitive& p1, const lmu::Primitive& p2, double 
 	return true;
 }
 
-lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, double distanceThreshold)
+lmu::PrimitiveSet filterSimilar(const lmu::PrimitiveSet& ps, double distanceThreshold)
 {
 	lmu::PrimitiveSet res;
 	int cache_hits = 0;
@@ -312,6 +312,24 @@ lmu::PrimitiveSet postprocessPrimitiveSet(const lmu::PrimitiveSet& ps, double di
 
 	return res;
 }
+
+lmu::PrimitiveSet filterUnderAreaThreshold(const lmu::PrimitiveSet& ps, const lmu::PrimitiveSetRanker& ranker, double areaThreshold)
+{
+	lmu::PrimitiveSet res;
+	int cache_hits = 0;
+	for (const auto& p : ps)
+	{
+		auto area_score = ranker.getAreaScore(p, cache_hits);
+		double ratio = area_score.point_area / area_score.area;
+		if (area_score != lmu::AreaScore::Invalid && ratio > areaThreshold)
+			res.push_back(p);
+		else
+			std::cout << "Filtered primitive with ratio: " << ratio << std::endl;
+	}
+
+	return res;
+}
+
 
 lmu::Mesh computeMeshFromPrimitives2(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
@@ -370,10 +388,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 	double relAreaWeightGA1 = 1.0;
 	double totalAreaWeightGA1 = 1.0;
 
-	double sizeWeightGA2 = 0.2;
+	double sizeWeightGA2 = 0.1;
 	double geoWeightGA2 = 1.0;
 	double relAreaWeightGA2 = 1.0;
 	double totalAreaWeightGA2 = 1.0;
+
+	double areaThreshold = 0.3;
 
 	lmu::PrimitiveSetGA::Parameters paramsGA1(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
 	lmu::PrimitiveSetGABasedOnPrimitiveSet::Parameters paramsGA2(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
@@ -402,13 +422,13 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(20, PrimitiveSetRank(0.00001), 20);
+	PrimitiveSetIterationStopCriterion criterion(30, PrimitiveSetRank(0.00001), 30);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.4, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	PrimitiveSetRanker ranker(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area, RankAttributes::AREA);
 	PrimitiveSetPopMan popMan(ranker, maxPrimitiveSetSize, geoWeightGA1, relAreaWeightGA1, totalAreaWeightGA1, sizeWeightGA1, true);
 	PrimitiveSetGA ga;
 	auto res = ga.run(paramsGA1, selector, creator, ranker, criterion, popMan);	
-	auto primitives = postprocessPrimitiveSet(res.population[0].creature, 0.001);
+	auto primitives = filterSimilar(filterUnderAreaThreshold(res.population[0].creature, ranker, areaThreshold), 0.001);
 	
 	// ================ TMP ================
 	std::cout << "Serialize meshes" << std::endl;
@@ -437,19 +457,18 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes)
 
 	return result;
 	*/
-
 	
 	// Second GA for best candidate box selection.
 	PrimitiveSetCreatorBasedOnPrimitiveSet creator2(primitives, { 0.4, 0.2, 0.2, 0.2}, 1, 1);
 	PrimitiveSetRanker ranker2(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, 0.2, maxPrimitiveSetSize, surface_area, RankAttributes::GEOMETRY | RankAttributes::AREA);
 	PrimitiveSetTournamentSelector selector2(2);
-	PrimitiveSetIterationStopCriterion criterion2(10, PrimitiveSetRank(0.00001), 10);
+	PrimitiveSetIterationStopCriterion criterion2(20, PrimitiveSetRank(0.00001), 20);
 	PrimitiveSetPopMan popMan2(ranker2, maxPrimitiveSetSize, geoWeightGA2, relAreaWeightGA2, totalAreaWeightGA2, sizeWeightGA2, false);
 	PrimitiveSetGABasedOnPrimitiveSet ga2;
 	auto res2 = ga2.run(paramsGA2, selector2, creator2, ranker2, criterion2, popMan2);
 
 	GAResult result;
-	result.primitives = res2.population[0].creature;
+	result.primitives = filterSimilar(filterUnderAreaThreshold(res2.population[0].creature, ranker2, areaThreshold), 0.001);
 	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 	
@@ -1888,9 +1907,9 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 	}
 	auto diff_r = max_r - min_r;
 
-	//std::cout << "DIFF: " << diff_r << std::endl;
-	//std::cout << "MAX: " << max_r << std::endl;
-	//std::cout << "MIN: " << min_r << std::endl;
+	std::cout << "DIFF: " << diff_r << std::endl;
+	std::cout << "MAX: " << max_r << std::endl;
+	std::cout << "MIN: " << min_r << std::endl;
 
 	for (auto& ps : population)
 	{
@@ -1899,7 +1918,7 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		ps.rank.total_area    = ps.rank.total_area < 0.0 || diff_r.total_area == 0.0 ? 0.0 : (ps.rank.total_area - min_r.total_area) / diff_r.total_area;
 		ps.rank.relative_area = ps.rank.relative_area < 0.0 || diff_r.relative_area == 0.0 ? 0.0 : (ps.rank.relative_area - min_r.relative_area) / diff_r.relative_area;
 		ps.rank.geo           = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
-		ps.rank.size          = diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
+		ps.rank.size          = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
 		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.relative_area * relAreaWeight + ps.rank.total_area * totalAreaWeight - ps.rank.size * sizeWeight;
 

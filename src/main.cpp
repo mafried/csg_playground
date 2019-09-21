@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			m->pc = lmu::farthestPointSampling(m->pc, 200);
 		}
 				
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);
