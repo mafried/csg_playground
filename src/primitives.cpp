@@ -345,6 +345,8 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>
 	std::copy_if(clusters.begin(), clusters.end(), std::back_inserter(filtered_clusters),
 		[&params](const Cluster& c) { return c.pc.rows() > params.min_points; });
 
+	lmu::TimeTicker t;
+
 	for (const auto& cluster : filtered_clusters)
 	{
 		// Convert point cloud.
@@ -413,10 +415,16 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>
 	std::vector<::Primitive> mergedShapes;
 	std::vector<::PointCloud> mergedPointclouds;
 
+	t.tick();
+	std::cout << "RANSAC: " << t.current << "ms" << std::endl;
+
 	// std::cout << "Merge" << std::endl;
 	MergeSimilarPrimitives(primitives, pointClouds, 
 		rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold, mergedShapes, mergedPointclouds);
-	
+
+	t.tick();
+	std::cout << "MERGE: " << t.current << "ms" << std::endl;
+
 	// Convert to manifolds.
 	ManifoldSet manifolds;
 	for (auto& shape : mergedShapes)

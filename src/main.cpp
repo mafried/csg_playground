@@ -253,7 +253,6 @@ int main(int argc, char *argv[])
 		}
 
 		//auto clusters = lmu::readClusterFromFile("C:/work/code/csg_playground/seg4csg/data/test.txt", 1.0);
-		lmu::TimeTicker t;
 		
 		auto params = lmu::RansacParams();
 		params.probability = 0.05;//0.1;
@@ -292,20 +291,26 @@ int main(int argc, char *argv[])
 		
 		auto ransacRes = lmu::mergeRansacResults(ransacResCol);
 		*/
-
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
+				
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
 				
 		//goto _LAUNCH;
 
 		
+		lmu::TimeTicker t;
+
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 200);
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
 		}
-				
+
+		t.tick();
+
+		std::cout << "FPS: " << t.current << "ms" << std::endl;
+
 		auto res = lmu::extractPrimitivesWithGA(ransacRes);
 		lmu::PrimitiveSet primitives = res.primitives;
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
