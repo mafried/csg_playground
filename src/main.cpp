@@ -138,14 +138,14 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	{
 		for (int i = 0; i < g_manifoldSet.size(); ++i)
 		{
-			if (i != g_manifoldIdx)
-			{
-				Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
-				cm.setZero();
-				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-			}
-			else
-			{
+			//if (i != g_manifoldIdx)
+			//{
+			//	Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+			//	cm.setZero();
+			//	viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			//}
+			//else
+			//{
 				Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
 
 				for (int j = 0; j < cm.rows(); ++j)
@@ -173,7 +173,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				}
 
 				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-			}
+			//}
 		}
 	}
 	
@@ -198,130 +198,62 @@ int main(int argc, char *argv[])
 	// Initialize
 	update(viewer);
 
+	bool use_clusters = false;
+	int iterations = 5; 
+
+	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
+	
+	ofstream f;
+	f.open("ransac_info.txt");
+
 	try
 	{
-		// Primitive estimation based on clusters.
-
-		//auto clusters = lmu::readClusterFromFile("C:/Projekte/labeling-primitives-with-point2net/predict/clusters.txt", 1.0);
-		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Desktop/test.txt", 1.0);
-		//auto clusters = lmu::readClusterFromFile("C:/Users/friedrich/Downloads/clusters_high.txt", 1.0);
-		auto clusters = lmu::readClusterFromFile("C:/Projekte/visigrapp2020/data/test2/clusters.txt", 1.0);
-
-		//auto clusters = lmu::readClusterFromFile("C:/Projekte/csg-fitter/csg-fitter/models/0/clusters.txt", 1.0);
-		
-		int i = 0;
-		for (auto& cluster : clusters)
+		for (const auto& m : models)
 		{
-			Eigen::Matrix<double, -1, 3> cm(cluster.pc.rows(), 3);
+			f << m << std::endl;
 
-			for (int j = 0; j < cm.rows(); ++j)
+			std::string path = "C:/Projekte/visigrapp2020/data/" + m;
+
+			for (int it = 0; it < iterations; ++it)
 			{
-				Eigen::Vector3d c;
-				switch (i % 8)
+
+				// Primitive estimation based on clusters.
+				std::vector<lmu::Cluster> clusters;
+				if (use_clusters)
 				{
-				case 0:
-					c = Eigen::Vector3d(1, 0, 0);
-					break;
-				case 1:
-					c = Eigen::Vector3d(1, 1, 0);
-					break;
-				case 2:
-					c = Eigen::Vector3d(1, 0, 1);
-					break;
-				case 3:
-					c = Eigen::Vector3d(0, 0, 1);
-					break;
-				case 4:
-					c = Eigen::Vector3d(0, 1, 1);
-					break;
-				case 5:
-					c = Eigen::Vector3d(0, 1, 0);
-					break;
-				case 6:
-					c = Eigen::Vector3d(1, 1, 1);
-					break;
-				case 7:
-					c = Eigen::Vector3d(0, 0, 0);
-					break;
+					clusters = lmu::readClusterFromFile(path + "/clusters.txt", 1.0);
 				}
-				cm.row(j) << c.transpose();
-			}
-
-			i++;
-
-			//viewer.data().add_points(cluster.pc.leftCols(3), cm);
-		}
-
-		//auto clusters = lmu::readClusterFromFile("C:/work/code/csg_playground/seg4csg/data/test.txt", 1.0);
-		
-		auto params = lmu::RansacParams();
-		params.probability = 0.05;//0.1;
-		params.min_points = 20;
-		params.normal_threshold = 0.9;
-		params.cluster_epsilon = 0.1;// 0.2;
-		params.epsilon = 0.002;// 0.2;
+				else
+				{
+					auto pc = lmu::readPointCloud(path + "/pc.txt");
+					lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
+					clusters = { cl };
+				}
 					
-		//auto ransacRes = lmu::extractManifoldsWithOrigRansac(
-		//		clusters, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
-			
-		// HELPER for analysis - to REMOVE LATER
-		//std::cout << "Press a key to continue" << std::endl;
-		//char key;
-		//std::cin >> key;
-		// END OF HELPER
+				auto params = lmu::RansacParams();
+				params.probability = 0.05;//0.1;
+				params.min_points = 200;
+				params.normal_threshold = 0.9;
+				params.cluster_epsilon = 0.1;// 0.2;
+				params.epsilon = 0.01;// 0.2;
+					
+				auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
+				g_manifoldSet = ransacRes.manifolds;
 
-		//auto plane = ransacResults.back().manifolds[0];
-		//if(plane->type == lmu::ManifoldType::Plane)
-		//	lmu::generateGhostPlanes({plane}, 0.0, 0.0);
+				f << ransacRes.manifolds.size() << " ";
 
-		/*std::vector<lmu::RansacResult> ransacResCol;
-		for (const auto& c : clusters)
-		{
-			auto rr = lmu::extractManifoldsWithOrigRansac(
-			{ c }, params, true, 1, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
-			for (const auto& m : rr.manifolds)
-			{
-				viewer.data().add_points(m->pc.leftCols(3), m->pc.rightCols(3));
+				lmu::TimeTicker t;
+
+				t.tick();
 			}
-			ransacResCol.push_back(rr);
-			//viewer.data().add_points(c.pc.leftCols(3), c.pc.rightCols(3));
 
-		}
-		
-		auto ransacRes = lmu::mergeRansacResults(ransacResCol);
-		*/
-				
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
-
-		g_manifoldSet = ransacRes.manifolds;
-				
-		//goto _LAUNCH;
-
-		
-		lmu::TimeTicker t;
-
-		// Farthest point sampling applied to all manifolds.
-		for (const auto& m : ransacRes.manifolds)
-		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			f << std::endl;
 		}
 
-		t.tick();
+		f.close();
 
-		std::cout << "FPS: " << t.current << "ms" << std::endl;
-
-		auto res = lmu::extractPrimitivesWithGA(ransacRes);
-		lmu::PrimitiveSet primitives = res.primitives;
-		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
-		
-		for(const auto& p : primitives)
-			std::cout << "Primitive: " << p << std::endl;
-
-
-		g_primitiveSet = primitives;
-
-		//g_res_pc = m;
+		goto _LAUNCH;		
 	}
 	catch (const std::exception& ex)
 	{
