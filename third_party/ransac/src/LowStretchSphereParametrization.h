@@ -136,6 +136,9 @@ void LowStretchSphereParametrization::Optimize(IteratorT begin, IteratorT end,
 			&& uangle * m_sphere->Radius() > float(-M_PI) * m_sphere->Radius() + 2 * epsilon)
 			vangles.push_back(std::atan2(l[1], l[0]));
 	}
+	if (vangles.empty())
+		return;
+
 	std::sort(vangles.begin(), vangles.end());
 	// try to find a large gap
 	float maxGap = vangles.front() + 2 * float(M_PI) - vangles.back();
