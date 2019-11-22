@@ -81,9 +81,9 @@ bool has_all_marker(const lmu::CSGNode& n)
 	return n.operationType() == lmu::CSGNodeOperationType::Noop && n.name() == "1";
 }
 
-bool is_op(const lmu::CSGNode& n)
+bool is_valid_op(const lmu::CSGNode& n)
 {
-	return n.type() == lmu::CSGNodeType::Operation;
+	return n.type() == lmu::CSGNodeType::Operation && n.operationType() != lmu::CSGNodeOperationType::Noop;
 }
 
 bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
@@ -91,9 +91,9 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
 	static auto const all = lmu::CSGNode(std::make_shared<lmu::NoOperation>("1"));
 
-	if (!is_op(n)) return false;
+	if (!is_valid_op(n)) return false;
 
-	const auto& op1 = n.childs()[0];
+	const auto& op1 = n.childsCRef()[0];
 	bool something_has_changed = true;
 
 	switch (n.operationType())
@@ -101,7 +101,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	// Intersection 
 	case lmu::CSGNodeOperationType::Intersection:
 	{
-		const auto& op2 = n.childs()[1];
+		const auto& op2 = n.childsCRef()[1];
 
 		if (has_empty_marker(op1) || has_empty_marker(op2)) n = empty_set;
 
@@ -120,11 +120,11 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	// Union 
 	case lmu::CSGNodeOperationType::Union:
 	{
-		const auto& op2 = n.childs()[1];
+		const auto& op2 = n.childsCRef()[1];
 
 		if (has_empty_marker(op1) && has_empty_marker(op2)) n = empty_set;
 
-		else if (has_empty_marker(op1)) n = op2;
+		else if (has_empty_marker(op1)) n = op2; 
 
 		else if (has_empty_marker(op2)) n = op1;
 
@@ -141,7 +141,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	// Difference 
 	case lmu::CSGNodeOperationType::Difference:
 	{
-		const auto& op2 = n.childs()[1];
+		const auto& op2 = n.childsCRef()[1];
 
 		if (are_same(op1, op2, sampling_grid_size, esLookup)) n = empty_set;
 
@@ -162,7 +162,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		if (op1.operationType() == lmu::CSGNodeOperationType::Complement)
 		{
-			n = op1.childs()[0];
+			n = op1.childsCRef()[0];
 		}
 		else 
 			something_has_changed = false;

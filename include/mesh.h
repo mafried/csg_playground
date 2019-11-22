@@ -128,6 +128,22 @@ namespace lmu
 			return AABB(cinter, sinter);
 		}
 
+		AABB setunion(const AABB& b)
+		{
+			Eigen::Vector3d min1 = c - s;
+			Eigen::Vector3d min2 = b.c - b.s;
+			Eigen::Vector3d max1 = c + s;
+			Eigen::Vector3d max2 = b.c + b.s;
+
+			Eigen::Vector3d min(std::min(min1.x(), min2.x()), std::min(min1.y(), min2.y()), std::min(min1.z(), min2.z()));
+			Eigen::Vector3d max(std::max(max1.x(), max2.x()), std::max(max1.y(), max2.y()), std::max(max1.z(), max2.z()));
+
+			Eigen::Vector3d sunion = 0.5 * (max - min);
+			Eigen::Vector3d cunion = min + sunion;
+
+			return AABB(cunion, sunion);
+		}
+
 		Eigen::Vector3d c; 
 		Eigen::Vector3d s;
 	};

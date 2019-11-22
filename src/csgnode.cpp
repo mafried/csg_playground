@@ -292,7 +292,7 @@ double NoOperation::signedDistance(const Eigen::Vector3d& p) const
 }
 CSGNodeOperationType NoOperation::operationType() const
 {
-	return CSGNodeOperationType::Identity;
+	return CSGNodeOperationType::Noop;
 }
 std::tuple<int, int> NoOperation::numAllowedChilds() const
 {
