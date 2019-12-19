@@ -48,9 +48,6 @@ include_directories(${PROJECT_SOURCE_DIR}/third_party/inih)
 #CONCAVEMAN
 include_directories(${PROJECT_SOURCE_DIR}/third_party/concaveman/src/main/cpp) 
 
-
-#find_package(Boost COMPONENTS system filesystem REQUIRED)
-
 #PCL
 find_package(PCL 1.8 COMPONENTS common io features search kdtree keypoints surface ml)
 include_directories(${PCL_INCLUDE_DIRS})
@@ -65,13 +62,20 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+#Python
+find_package(PythonLibs 3 REQUIRED)
+include_directories(${PYTHON_INCLUDE_DIRS})
+link_directories(${PYTHON_LIBRARIES})
+message("Python includes: ", ${PYTHON_INCLUDE_DIRS})
+message("Python libs: ", ${PYTHON_LIBRARIES})
+
 # Add your project files
 #file(GLOB SRCFILES *.cpp)
 
 FILE(GLOB_RECURSE CSG_LIB_HEADERS "include/*.h")
 message("Lib Headers: " ${CSG_LIB_HEADERS})
 
-FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp" "src/cluster.cpp" "src/optimizer_red.cpp")
+FILE(GLOB CSG_LIB_SOURCES "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp" "src/cluster.cpp" "src/optimizer_red.cpp" "src/optimizer_clustering.cpp" "src/optimizer_ga.cpp" "src/cit.cpp")
 message("Lib Sources: " ${CSG_LIB_SOURCES})
 
 if(MSVC)
@@ -87,7 +91,7 @@ endif()
 
 # Compile the lib
 add_library(csg_playground_lib STATIC ${CSG_LIB_HEADERS} ${CSG_LIB_SOURCES})
-target_link_libraries(csg_playground_lib igl::core igl::cgal igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES}  ${PCL_SURFACE_LIBRARIES}  ${PCL_ML_LIBRARIES} cddlib orig_ransac)
+target_link_libraries(csg_playground_lib igl::core igl::cgal igl::opengl_glfw ${PCL_COMMON_LIBRARIES} ${PCL_IO_LIBRARIES} ${PCL_FEATURES_LIBRARIES} ${PCL_SEARCH_LIBRARIES} ${PCL_KDTREE_LIBRARIES}  ${PCL_SURFACE_LIBRARIES}  ${PCL_ML_LIBRARIES} ${PYTHON_LIBRARIES} cddlib orig_ransac)
 
 add_library(csg_c SHARED "include/c.h" "src/c.cpp")
 target_link_libraries(csg_c csg_playground_lib igl::core igl::cgal)

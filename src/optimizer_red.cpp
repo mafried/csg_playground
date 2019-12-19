@@ -2,61 +2,22 @@
 #include "csgnode.h"
 #include "csgnode_helper.h"
 
-
-lmu::AABB aabb_from_node(const lmu::CSGNode& n)
-{
-	lmu::AABB aabb; 
-	auto prims = lmu::allDistinctFunctions(n);
-	for (const auto& p : prims)	
-		aabb = aabb.setunion(p->aabb());
-	
-	return aabb;
-}
-
-bool _is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
-	const Eigen::Vector3d& min, const Eigen::Vector3d& max)
-{
-	if ((max - min).cwiseAbs().minCoeff() <= sampling_grid_size)
-		return true;
-
-	const Eigen::Vector3d s = (max - min);
-	const Eigen::Vector3d p = min + s * 0.5;
-	const double d = n.signedDistance(p);
-	if (d < 0.0)
-		return false;
-
-	if (4.0 * d * d > s.squaredNorm())
-		return true;
-
-	const Eigen::Vector3d sh = s * 0.5;
-	return
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, 0, 0),                min + sh) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), 0, 0),           min + Eigen::Vector3d(s.x(), sh.y(), sh.z())) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), 0, sh.z()),      max) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, 0, sh.z()),           min + Eigen::Vector3d(sh.x(), sh.y(), s.z())) &&
-
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, sh.y(), 0),           min + Eigen::Vector3d(sh.x(), s.y(), s.z())) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), sh.y(), 0),      min + Eigen::Vector3d(s.x(), s.y(), sh.z())) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), sh.y(), sh.z()), max) &&
-		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, sh.y(), sh.z()),      min + Eigen::Vector3d(sh.x(), s.y(), s.z()));
-}
-
 bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLookup& esLookup)
 {
 	// Check if lookup contains value for node already.
-	size_t node_hash = n.hash(0);
-	auto it = esLookup.find(node_hash);
-	if (it != esLookup.end())
-		return it->second;
+	//size_t node_hash = n.hash(0);
+	//auto it = esLookup.find(node_hash);
+	//if (it != esLookup.end())
+	//	return it->second;
 
 	lmu::AABB aabb = aabb_from_node(n);
-	Eigen::Vector3d min = aabb.c - (aabb.s * 0.5); 
-	Eigen::Vector3d max = aabb.c + (aabb.s * 0.5);
+	Eigen::Vector3d min = aabb.c - aabb.s; 
+	Eigen::Vector3d max = aabb.c + aabb.s;
 
 	bool is_empty = _is_empty_set(n, sampling_grid_size, min, max);
 
 	// Store in lookup table.
-	esLookup[node_hash] = is_empty;
+	//esLookup[node_hash] = is_empty;
 
 	return is_empty; 
 }
@@ -83,7 +44,8 @@ bool has_all_marker(const lmu::CSGNode& n)
 
 bool is_valid_op(const lmu::CSGNode& n)
 {
-	return n.type() == lmu::CSGNodeType::Operation && n.operationType() != lmu::CSGNodeOperationType::Noop;
+	return n.isValid() && n.type() == lmu::CSGNodeType::Operation && n.operationType() != lmu::CSGNodeOperationType::Noop &&
+		n.childsCRef().size() >= std::get<0>(n.numAllowedChilds()) && n.childsCRef().size() <= std::get<1>(n.numAllowedChilds());
 }
 
 bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLookup& esLookup)

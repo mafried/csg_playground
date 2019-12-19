@@ -65,7 +65,7 @@ CSGNodeOperationType UnionOperation::operationType() const
 }
 std::tuple<int, int> UnionOperation::numAllowedChilds() const
 {
-	return std::make_tuple(1, std::numeric_limits<int>::max());
+	return std::make_tuple(2, std::numeric_limits<int>::max());
 }
 Mesh lmu::UnionOperation::mesh() const
 {
@@ -129,7 +129,7 @@ CSGNodeOperationType IntersectionOperation::operationType() const
 }
 std::tuple<int, int> IntersectionOperation::numAllowedChilds() const
 {
-	return std::make_tuple(1, std::numeric_limits<int>::max());
+	return std::make_tuple(2, std::numeric_limits<int>::max());
 }
 Mesh lmu::IntersectionOperation::mesh() const
 {
@@ -1541,6 +1541,16 @@ size_t lmu::CSGNodeGeometry::hash(size_t seed) const
 {
 	boost::hash_combine(seed, reinterpret_cast<std::uintptr_t>(_function.get()));
 	return seed;
+}
+
+lmu::CSGNodeSamplingParams::CSGNodeSamplingParams() :
+	samplingStepSize(0.0),
+	maxDistance(0.0),
+	maxAngleDistance(0.0),
+	errorSigma(0.0),
+	minDim(Eigen::Vector3d(0,0,0)),
+	maxDim(Eigen::Vector3d(0, 0, 0))
+{
 }
 
 lmu::CSGNodeSamplingParams::CSGNodeSamplingParams(double maxDistance, double maxAngleDistance, double errorSigma, double samplingStepSize, const Eigen::Vector3d & min, const Eigen::Vector3d & max) :

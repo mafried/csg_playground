@@ -739,8 +739,6 @@ void lmu::CSGNodePopMan::manipulateBeforeRanking(std::vector<RankedCreature<CSGN
 					if (childs.size() == 2 && childs[0].type() == CSGNodeType::Geometry && childs[1].type() == CSGNodeType::Geometry)
 					{
 						std::vector<ImplicitFunctionPtr> suitableFuncs = getSuitableFunctions({ childs[0].function(), childs[1].function() });
-						//std::cout << "traverse "<< funcs.size() << std::endl;
-
 						n = getOptimizedTree(suitableFuncs);
 					}
 				});
@@ -900,7 +898,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 		auto res = task.get();
 
-		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
+		//res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
 
 		std::cout << "get best " << std::endl;
 
@@ -910,7 +908,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	{
 		auto res = ga.run(params, s, c, r, gsc, popMan);
 
-		res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
+		//res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
 
 		std::cout << "get best " << std::endl;
 		return ps->getBest(); //res.population[0].creature;

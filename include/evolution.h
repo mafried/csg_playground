@@ -354,38 +354,43 @@ namespace lmu
 				std::cout << "Score Best: " << bestScore << " Worst: " << worstScore << std::endl;				
 			}
 
+			void save(std::ostream& stream, const Creature* bestCreature = nullptr)
+			{			
+				auto end = std::chrono::system_clock::now();
+				std::time_t end_time = std::chrono::system_clock::to_time_t(end);
+				stream << "# Time: " << std::ctime(&end_time);
+
+				std::istringstream iss(info);
+				std::string line;
+				while (std::getline(iss, line))
+				{
+					stream << "# " << line << std::endl;
+				}
+				
+				stream << "# Duration: " << totalDuration.current << std::endl;
+
+				if (bestCreature)
+				{
+					stream << "# Best Candidate: " << std::endl;
+
+					stream << bestCreature->info() << std::endl;
+
+					stream << "# iteration    best candidate score    worst candidate score    optimization durations    ranking durations    sorting durations    scm durations" << std::endl;
+				}
+
+				for (int i = 0; i < bestCandidateScores.size(); ++i)
+				{
+					stream << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << optDurations[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
+				}
+			}
+
 			void save(const std::string& file, const Creature* bestCreature = nullptr)
 			{
 				std::cout << "Save statistics to file " << file << "." << std::endl;
 
 				std::ofstream fs(file);
 
-				auto end = std::chrono::system_clock::now();
-				std::time_t end_time = std::chrono::system_clock::to_time_t(end);
-				fs << "# Time: " << std::ctime(&end_time);
-
-				std::istringstream iss(info);
-				std::string line;
-				while (std::getline(iss, line))
-				{
-					fs << "# " << line << std::endl;
-				}
-				
-				fs << "# Duration: " << totalDuration.current << std::endl;
-
-				if (bestCreature)
-				{
-					fs << "# Best Candidate: " << std::endl;
-
-					fs << bestCreature->info() << std::endl;
-
-					fs << "# iteration    best candidate score    worst candidate score    optimization durations    ranking durations    sorting durations    scm durations" << std::endl;
-				}
-
-				for (int i = 0; i < bestCandidateScores.size(); ++i)
-				{
-					fs << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << optDurations[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
-				}
+				save(fs, bestCreature);
 
 				fs.close();
 

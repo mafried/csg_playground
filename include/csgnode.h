@@ -606,6 +606,8 @@ namespace lmu
 
 	struct CSGNodeSamplingParams
 	{
+		CSGNodeSamplingParams();
+		
 		CSGNodeSamplingParams(double maxDistance, double maxAngleDistance, double errorSigma, double samplingStepSize = 0.0,
 			const Eigen::Vector3d& min = Eigen::Vector3d(0.0, 0.0, 0.0), const Eigen::Vector3d& max = Eigen::Vector3d(0.0, 0.0, 0.0));
 

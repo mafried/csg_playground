@@ -40,6 +40,12 @@ namespace lmu
 
 	CSGNode fromJSON(const json& json);
 	CSGNode fromJSONFile(const std::string& file);
+
+	lmu::AABB aabb_from_node(const lmu::CSGNode& n);
+
+	bool _is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
+		const Eigen::Vector3d& min, const Eigen::Vector3d& max);
+
 }
 
 #endif

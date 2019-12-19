@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(OptimizerRedundancyTest);
+	RUN_TEST(Cluster_Optimizer);
 
 	return 0; 
 }

@@ -18,6 +18,34 @@ Eigen::MatrixXd lmu::g_testPoints;
 lmu::Clause lmu::g_clause;
 
 
+// NOT TESTED
+void DNFtoCSGNodeRec(const lmu::DNF& dnf, int pos, lmu::CSGNode& n)
+{
+	int clauses_left = dnf.clauses.size() - pos;
+	int num_childs = n.childsCRef().size();
+	int max_allowed_childs = std::get<1>(n.numAllowedChilds());
+	int allowed_childs_left = max_allowed_childs - num_childs;
+	
+	if (allowed_childs_left >= clauses_left)
+	{
+		for (const auto& clause : dnf.clauses)
+			n.addChild(clauseToCSGNode(clause, dnf.functions));
+
+		return;
+	}
+	else
+	{
+		int num_clauses_to_add = clauses_left - allowed_childs_left - 1;
+		for( int i = 0; i < num_clauses_to_add; ++i)
+			n.addChild(clauseToCSGNode(dnf.clauses[pos+i], dnf.functions));
+
+		lmu::CSGNode child_node = lmu::opUnion();
+		n.addChild(child_node);
+
+		DNFtoCSGNodeRec(dnf, pos + num_clauses_to_add, child_node);
+	}
+}
+
 lmu::CSGNode lmu::DNFtoCSGNode(const DNF& dnf)
 {
 	CSGNode node = opUnion();
@@ -26,6 +54,10 @@ lmu::CSGNode lmu::DNFtoCSGNode(const DNF& dnf)
 		node.addChild(clauseToCSGNode(clause, dnf.functions));
 
 	return node;
+
+	//CSGNode node = opUnion();
+	//DNFtoCSGNodeRec(dnf, 0, node);
+	//return node;
 }
 
 lmu::CSGNode lmu::clauseToCSGNode(const Clause& clause, const std::vector<ImplicitFunctionPtr>& functions)
@@ -58,16 +90,31 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::Clause& c)
 	return stream;
 }
 
-void print (std::ostream& stream, const lmu::Clause& c, const std::vector<lmu::ImplicitFunctionPtr>& functions, bool printNonSetLiterals)
+bool operator==(const lmu::Clause& lhs, const lmu::Clause& rhs)
 {
-	for (int i = 0; i < c.literals.size(); ++i)
-	{
-		if (c.negated[i])
-			stream << "!";
+	if (lhs.size() != rhs.size()) return false;
 
-		if(printNonSetLiterals || c.literals[i])
-			stream << functions[i]->name();
+	for (int i = 0; i < lhs.size(); ++i)
+		if (lhs.literals[i] != rhs.literals[i] || lhs.negated[i] != rhs.negated[i])
+			return false;
+
+	return true;
+}
+
+void lmu::print_clause(std::ostream& stream, const lmu::Clause& c, const std::vector<lmu::ImplicitFunctionPtr>& functions, bool printNonSetLiterals)
+{
+	stream << "( ";
+	for (int i = 0; i < c.literals.size(); ++i)
+	{	
+		if (printNonSetLiterals || c.literals[i])
+		{
+			if (c.negated[i])
+				stream << "!";
+
+			stream << functions[i]->name() << " ";
+		}
 	}
+	stream << ")";
 }
 
 inline double median(std::vector<double> v)
@@ -217,7 +264,7 @@ std::tuple<lmu::Clause, double, double> lmu::scoreClause(const Clause& clause, c
 	double correctSamplesPointCheck = std::numeric_limits<double>::max();
 
 	std::cout << "Clause: ";
-	print(std::cout, clause, functions, false);
+	print_clause(std::cout, clause, functions, false);
 	std::cout << std::endl;
 
 	int numConsideredFunctions = 0;
@@ -535,7 +582,7 @@ std::string lmu::espressoExpression(const DNF& dnf)
 {
 	std::stringstream ss;
 
-	std::stringstream literalsS;
+	/*std::stringstream literalsS;
 	for (const auto& func : dnf.functions)
 	{
 		literalsS << func->name() << ",";
@@ -545,21 +592,23 @@ std::string lmu::espressoExpression(const DNF& dnf)
 
 	ss << literals << "= map(exprvar, '" << literals << "'.split(','))" << std::endl;
 
-	ss << "expr = ";
+	ss << "expr = ";*/
 
 	bool firstClause = true;
 
 	for (const auto& clause : dnf.clauses)
-	{
-		
+	{		
 		if (!firstClause)
 		{
-			ss << "| ";
+			ss << "|";
 		}
 		else
 		{
 			firstClause = false;
 		}
+
+		ss << "(";
+
 
 		bool firstLiteral = true;
 
@@ -583,10 +632,12 @@ std::string lmu::espressoExpression(const DNF& dnf)
 				ss << dnf.functions[i]->name() << " ";
 			}
 		}
+
+		ss << ")";
 	}
 
-	ss << std::endl;
-	ss << "dnf = expr.to_dnf()";
+	//ss << std::endl;
+	//ss << "dnf = expr.to_dnf()";
 	
 	return ss.str();
 }

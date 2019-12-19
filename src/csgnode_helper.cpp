@@ -113,3 +113,46 @@ CSGNode lmu::fromJSONFile(const std::string& file)
 
 	return fromJSON(json);
 }
+
+lmu::AABB lmu::aabb_from_node(const lmu::CSGNode & n)
+{
+	lmu::AABB aabb;
+	auto prims = lmu::allDistinctFunctions(n);
+	for (const auto& p : prims)
+	{	
+		aabb = aabb.setunion(p->aabb());
+	}
+	
+
+	return aabb;
+}
+
+bool lmu::_is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
+	const Eigen::Vector3d& min, const Eigen::Vector3d& max)
+{
+	if ((max - min).cwiseAbs().minCoeff() <= sampling_grid_size)
+		return true;
+
+	//std::cout << max.transpose() << " " << min.transpose() << std::endl;
+	
+	const Eigen::Vector3d s = (max - min);
+	const Eigen::Vector3d p = min + s * 0.5;
+	const double d = n.signedDistance(p);
+	if (d < 0.0)
+		return false;
+
+	//if (4.0 * d * d > s.squaredNorm())
+	//	return true;
+
+	const Eigen::Vector3d sh = s * 0.5;
+	return
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, 0, 0), min + sh) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), 0, 0), min + Eigen::Vector3d(s.x(), sh.y(), sh.z())) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), 0, sh.z()), max) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, 0, sh.z()), min + Eigen::Vector3d(sh.x(), sh.y(), s.z())) &&
+
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, sh.y(), 0), min + Eigen::Vector3d(sh.x(), s.y(), s.z())) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), sh.y(), 0), min + Eigen::Vector3d(s.x(), s.y(), sh.z())) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(sh.x(), sh.y(), sh.z()), max) &&
+		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, sh.y(), sh.z()), min + Eigen::Vector3d(sh.x(), s.y(), s.z()));
+}
