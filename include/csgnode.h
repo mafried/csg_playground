@@ -252,7 +252,7 @@ namespace lmu
 	class CSGNode;
 
 	int depth(const CSGNode& node, int curDepth = 0);
-	int numNodes(const CSGNode& node);
+	int numNodes(const CSGNode& node, bool ignore_leaves = false);
 	int numPoints(const CSGNode& node);
 	CSGNode* nodePtrAt(CSGNode& node, int idx);
 	int depthAt(const CSGNode& node, int idx);

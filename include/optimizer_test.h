@@ -22,6 +22,8 @@ OptimizerGAParams get_std_ga_params()
 
 	params.ranker_params.geo_score_weight = 10.0;
 	params.ranker_params.size_score_weight = 1.0;
+	params.ranker_params.prox_score_weight = 2.0;
+
 	params.ranker_params.gradient_step_size = 0.0001;
 	params.ranker_params.position_tolerance = 0.1;
 	params.ranker_params.sampling_params.errorSigma = 0.00000001;
@@ -132,8 +134,21 @@ TEST(Cluster_Optimizer)
 		union_merge
 	);
 
-	writeNode(remove_redundancies(node, sampling_grid_size) , "opt_cluster.gv");
+	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size);
+	
+	writeNode(red_opt_node, "red_opt_cluster.gv");
+}
 
+TEST(Proximity_Score)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(3, 0, 0, 1, "s3");
+	
+	const double sampling_grid_size = 0.1;
+
+	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s2 }), sampling_grid_size) == 1.0);
+	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s3 }), sampling_grid_size) == 0.0);
 }
 
 #endif

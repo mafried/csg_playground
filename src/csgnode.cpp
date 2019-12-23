@@ -613,12 +613,12 @@ double lmu::computeRawDistanceScore(const CSGNode & node, const Eigen::MatrixXd 
 	return d;
 }
 
-int lmu::numNodes(const CSGNode & node)
+int lmu::numNodes(const CSGNode& node, bool ignore_leaves)
 {
-	int num = 1;
+	int num = ignore_leaves && node.childsCRef().size() == 0 ? 0 : 1;
 	for (const auto& child : node.childsCRef())
 	{
-		num += numNodes(child);
+		num += numNodes(child, ignore_leaves);
 	}
 
 	return num;

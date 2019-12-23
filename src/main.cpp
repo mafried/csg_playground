@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(Cluster_Optimizer);
+	RUN_TEST(OptimizerGA);
 
 	return 0; 
 }

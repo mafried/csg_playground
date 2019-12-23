@@ -1,4 +1,5 @@
 #include "optimizer_ga.h"
+#include "optimizer_red.h"
 #include "evolution.h"
 #include "pointcloud.h"
 #include "csgnode_helper.h"
@@ -31,11 +32,16 @@ struct CSGNodeRanker
 	{
 		auto geo_score = compute_geo_score(node) / input_node_geo_score;
 
+		auto prox_score = compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
+
 		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
+		
+		std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
 
-		std::cout << "GEO: " << geo_score << " SIZE: " << size_score << std::endl;
-
-		return Rank(params.geo_score_weight * geo_score + params.size_score_weight * size_score);
+		return Rank(
+			params.geo_score_weight * geo_score + 
+			params.prox_score_weight * prox_score + 
+			params.size_score_weight * size_score);
 	}
 
 	std::string info() const
@@ -252,4 +258,48 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	ranker.rank(opt_res.node);
 
 	return opt_res;
+}
+
+void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid_size, double& score, EmptySetLookup& esLookup)
+{
+	auto n = node.childsCRef().size();
+
+	if (score == invalid_proximity_score || n == 0)
+	{
+		return;
+	}	
+	else if (n > 2)
+	{
+		score = invalid_proximity_score;
+		std::cerr << "Proximity score computation: No more than 2 children allowed." << std::endl;
+		return;
+	}
+	else if (n == 1)
+	{
+		score += 1.0;
+		compute_local_proximity_score_rec(node.childsCRef()[0], sampling_grid_size, score, esLookup);
+	}
+	else if (n == 2)
+	{
+		const auto& left = node.childsCRef()[0];
+		const auto& right = node.childsCRef()[1];
+
+		score += is_empty_set(opInter({ left, right }), sampling_grid_size, esLookup) ? 0.0 : 1.0;
+		
+		compute_local_proximity_score_rec(left, sampling_grid_size, score, esLookup);
+		compute_local_proximity_score_rec(right, sampling_grid_size, score, esLookup);
+	}
+}
+
+double lmu::compute_local_proximity_score(const CSGNode& node, double sampling_grid_size)
+{
+	EmptySetLookup esLookup;
+	double score = 0.0;
+
+	compute_local_proximity_score_rec(node, sampling_grid_size, score, esLookup);
+
+	//std::cout << "NUM: " << (double)numNodes(node, true) << std::endl;
+	//std::cout << "SCORE: " << score;
+
+	return score == invalid_proximity_score ? score : score / (double)numNodes(node, true);
 }

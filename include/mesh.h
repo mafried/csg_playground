@@ -140,9 +140,6 @@ namespace lmu
 			Eigen::Vector3d min(std::min(min1.x(), min2.x()), std::min(min1.y(), min2.y()), std::min(min1.z(), min2.z()));
 			Eigen::Vector3d max(std::max(max1.x(), max2.x()), std::max(max1.y(), max2.y()), std::max(max1.z(), max2.z()));
 
-			std::cout << "min: " << min.transpose() << " max: " << max.transpose() << std::endl;
-
-
 			Eigen::Vector3d sunion = 0.5 * (max - min);
 			Eigen::Vector3d cunion = min + sunion;
 

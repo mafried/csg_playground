@@ -13,6 +13,7 @@ namespace lmu
 		double position_tolerance;
 
 		double geo_score_weight; 
+		double prox_score_weight;
 		double size_score_weight; 
 
 		int max_sampling_points;
@@ -54,6 +55,10 @@ namespace lmu
 	};
 
 	OptimizerGAResult optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream);
+
+	const double invalid_proximity_score = -1.0;
+
+	double compute_local_proximity_score(const CSGNode& node, double sampling_grid_size);
 }
 
 #endif
