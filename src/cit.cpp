@@ -69,13 +69,14 @@ struct ClauseAndPointEqual
 	}
 };
 
-lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs)
+lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vector<ImplicitFunctionPtr>& primitives)
 {
-	lmu::AABB aabb = aabb_from_node(n);
+	auto prims = primitives.empty() ? lmu::allDistinctFunctions(n) : primitives;
+
+	lmu::AABB aabb = aabb_from_primitives(prims);
 	Eigen::Vector3d min = aabb.c - aabb.s;
 	Eigen::Vector3d max = aabb.c + aabb.s;
 
-	auto prims = allDistinctFunctions(n);
 	std::unordered_set<ClauseAndPoint, ClauseAndPointHash, ClauseAndPointEqual> clauses;
 
 	//std::cout << "C: " << aabb.c.transpose() << " S: " << aabb.s.transpose() << std::endl;
@@ -93,23 +94,27 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs)
 				if (nd >= 0.0) continue;
 
 				lmu::Clause clause(prims.size());
+				int num_negations = 0;
 				for (int i = 0; i < prims.size(); ++i)
 				{
 					double pd = prims[i]->signedDistance(p);
 					clause.literals[i] = true;
 					clause.negated[i] = pd > 0.0;
+					num_negations += clause.negated[i] ? 1 : 0;
 				}
-				clauses.insert(ClauseAndPoint(clause, p));
+
+				// In cases where the input node does contain more primitives than the considered primitive set. 
+				if(num_negations < prims.size())
+					clauses.insert(ClauseAndPoint(clause, p));
 			}
 
 	CITS cits;
-
 	cits.dnf.functions = prims;
 	std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
 	std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.dnf.clauses), [](const ClauseAndPoint& cap) { return cap.clause; });
 
 	//std::cout << "CLAUSES: " << cits.dnf.clauses.size() << std::endl;
-	//lmu::writeNode(lmu::DNFtoCSGNode(cits.dnf), "dnf2.dot");
+	//lmu::writeNode(lmu::DNFtoCSGNode(cits.dnf), "dnf2.gv");
 
 	return cits;
 }
@@ -210,11 +215,11 @@ std::vector<std::unordered_set<int>> lmu::convert_pis_to_cit_indices(const DNF& 
 	return cit_indices_vec;
 }
 
-lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size)
+lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	CITSets sets;
 
-	sets.cits = generate_cits(n, sampling_grid_size);
+	sets.cits = generate_cits(n, sampling_grid_size, primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
 	sets.prime_implicants = extract_prime_implicants(sets.cits, sampling_grid_size);
 	sets.pis_as_cit_indices = convert_pis_to_cit_indices(sets.prime_implicants, sets.cits);
 	
@@ -263,9 +268,15 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
 	return stream;
 }
 
-lmu::CSGNode lmu::optimize_pi_set_cover(CSGNode node, double sampling_grid_size)
+lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
 {
-	auto cit_sets = generate_cit_sets(node, sampling_grid_size);
+	// Simple case.
+	if (primitives.size() == 1)
+	{
+		return geometry(primitives[0]);
+	}
+
+	auto cit_sets = generate_cit_sets(node, sampling_grid_size, primitives);
 
 	//TODO: do set cover on prime implicants.
 

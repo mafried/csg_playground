@@ -85,8 +85,8 @@ private:
 
 struct CSGNodeCreator
 {
-	CSGNodeCreator(const CSGNode& input_node, const CreatorParams& params) :
-		primitives(lmu::allDistinctFunctions(input_node)),
+	CSGNodeCreator(const CSGNode& input_node, const std::vector<ImplicitFunctionPtr>& primitives, const CreatorParams& params) :
+		primitives(primitives.empty() ? lmu::allDistinctFunctions(input_node) : primitives),
 		params(params),
 		max_tree_depth(depth(input_node))
 	{
@@ -224,23 +224,16 @@ private:
 	mutable std::random_device _rndDevice;
 };
 
-bool is_simple_case(const CSGNode& node)
-{
-	return node.childsCRef().empty();
-}
-
-CSGNode simply_optimize(const CSGNode& node)
-{
-	return node;
-}
-
-OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream)
+OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream, const std::vector<ImplicitFunctionPtr>& primitives)
 {	
-	if (is_simple_case(node))
-		return simply_optimize(node);
+	if (node.childsCRef().empty())
+		return node;
+
+	if (primitives.size() == 1)
+		return geometry(primitives[0]);
 
 	CSGNodeRanker ranker(node, params.ranker_params);
-	CSGNodeCreator creator(node, params.creator_params);
+	CSGNodeCreator creator(node, primitives, params.creator_params);
 	CSGNodeIterationStopCriterion stop_criterion(params.ga_params.max_iterations);
 	CSGNodeTournamentSelector t_selector(params.ga_params.tournament_k);
 

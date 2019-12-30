@@ -7,6 +7,7 @@
 #include "optimizer_red.h"
 #include "optimizer_ga.h"
 #include "optimizer_clustering.h"
+#include "optimizer_py.h"
 #include "cit.h"
 
 using namespace lmu;
@@ -139,6 +140,40 @@ TEST(Cluster_Optimizer)
 	writeNode(red_opt_node, "red_opt_cluster.gv");
 }
 
+TEST(Primitive_Cluster_Optimizer)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(0.5, 1, 0, 1, "s3");
+	auto s4 = sphere(0.5, -1, 0, 1, "s4");
+	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+
+	auto node = opUnion({ opDiff({ opInter({ opUnion({ s1, s2 }),opUnion({ s1, s2 }) }), opUnion({ s3, s4 }) }), s5 });
+
+	const double sampling_grid_size = 0.1;
+
+	auto dom_prims = find_dominating_prims(node, sampling_grid_size);
+	for (const auto& dp : dom_prims)
+		std::cout << "DP: " << dp->name() << std::endl;
+
+	auto opt_node = apply_per_cluster_optimization
+	(
+		cluster_with_dominating_prims(node, dom_prims),
+
+		/*[sampling_grid_size, &node](const PrimitiveCluster& c) { return optimize_pi_set_cover(node, sampling_grid_size, c); },*/
+		[&node](const PrimitiveCluster& c) { return optimize_with_ga(node, get_std_ga_params(), std::cout, c).node; },
+
+		union_merge
+	);
+
+	// TODO: GA: count only those points for ranking that are close to one of the primitives. 
+
+	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size);
+
+	writeNode(red_opt_node, "red_opt_cluster.gv");
+}
+
+
 TEST(Proximity_Score)
 {
 	auto s1 = sphere(0, 0, 0, 1, "s1");
@@ -149,6 +184,29 @@ TEST(Proximity_Score)
 
 	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s2 }), sampling_grid_size) == 1.0);
 	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s3 }), sampling_grid_size) == 0.0);
+}
+
+TEST(Python_Parser)
+{
+	std::string str = "Symbol('s5')";//"Or(Symbol('s5'), And(Symbol('s1'), Not(Symbol('s3')), Not(Symbol('s4'))), And(Not(Symbol('s3')), Not(Symbol('s4')), Symbol('s2')))";
+
+	auto res_tokenize = tokenize_py_string(str);
+	for (const auto t : res_tokenize.tokens)
+	{
+		std::cout << (int)t.type << " " << t.value << std::endl;
+	}
+
+	try
+	{
+		auto node = parse_py_string(str, { std::make_shared<IFNull>("s1"), std::make_shared<IFNull>("s2"), std::make_shared<IFNull>("s3") , std::make_shared<IFNull>("s4") ,
+			std::make_shared<IFNull>("s5") });
+
+		writeNode(node, "parsed_node.gv");
+	}
+	catch (const CSGNodeParseException& ex)
+	{
+		std::cout << ex.msg << " token pos: " << ex.error_pos << std::endl;
+	}
 }
 
 #endif

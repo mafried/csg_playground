@@ -19,17 +19,19 @@ namespace lmu
 		std::vector<std::unordered_set<int>> pis_as_cit_indices;
 	};
 
-	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size);
+	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives);
 
 	DNF extract_prime_implicants(const CITS& cits, double sampling_grid_size);
 
 	std::vector<std::unordered_set<int>> convert_pis_to_cit_indices(const DNF& prime_implicants, const CITS& cits);
 	
-	CITSets generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size);
+	CITSets generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 	std::ostream& operator <<(std::ostream& stream, const CITSets& c);
 
-	CSGNode optimize_pi_set_cover(CSGNode node, double sampling_grid_size);
+	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives = {});
+
+
 }
 
 #endif

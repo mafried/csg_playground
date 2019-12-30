@@ -54,7 +54,7 @@ namespace lmu
 		CSGNode node; 
 	};
 
-	OptimizerGAResult optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream);
+	OptimizerGAResult optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream, const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 	const double invalid_proximity_score = -1.0;
 
