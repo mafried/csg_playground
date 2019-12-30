@@ -75,6 +75,17 @@ namespace lmu
 	TokenizeResult tokenize_py_string(const std::string& str);
 
 	CSGNode parse_py_string(const std::string& str, const std::vector<ImplicitFunctionPtr>& primitives);
+
+	enum class SimplifierMethod
+	{
+		ESPRESSO,
+		SIMPY_SIMPLIFY_LOGIC,
+		SIMPY_TO_DNF
+	};
+
+	std::string espressoExpression(const CSGNode& n);
+
+	CSGNode optimize_with_python(const CSGNode& node, SimplifierMethod method);
 }
 
 #endif

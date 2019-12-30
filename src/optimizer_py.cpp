@@ -211,3 +211,55 @@ lmu::CSGNode lmu::parse_py_string(const std::string& str, const std::vector<Impl
 
 	return node.childsCRef()[0];
 }
+
+std::string lmu::espresso_expression(const CSGNode& n)
+{
+	if (n.type() == CSGNodeType::Geometry)
+		return n.name();
+
+	std::stringstream ss;
+	
+	std::string op;
+	std::string prefix;
+	switch (n.operationType())
+	{
+	case CSGNodeOperationType::Intersection:
+		op = "&";
+		break;
+	case CSGNodeOperationType::Union:
+		op = "|";
+		break;
+	case CSGNodeOperationType::Complement:
+		prefix = "~";
+	}
+
+	ss << prefix;
+	ss << "(";
+	for (int i = 0; i < n.childsCRef().size(); ++i)
+	{
+		ss << espresso_expression(n.childsCRef()[i]);
+		if (i < n.childsCRef().size() - 1)
+			ss << " " << op << " ";
+	}
+	ss << ")";
+
+	return ss.str();
+}
+
+
+CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method)
+{
+	std::string python_input_expr = espresso_expression(node);
+
+	std::string python_output_expr;
+
+	try
+	{
+		return parse_py_string(python_output_expr, allDistinctFunctions(node));
+	}
+	catch(const CSGNodeParseException& ex)
+	{
+		std::cerr << "Could not parse python expression. Reason: " << ex.msg << " Index: " << ex.error_pos << std::endl;
+		return opNo();
+	}
+}

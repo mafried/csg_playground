@@ -188,7 +188,7 @@ TEST(Proximity_Score)
 
 TEST(Python_Parser)
 {
-	std::string str = "Symbol('s5')";//"Or(Symbol('s5'), And(Symbol('s1'), Not(Symbol('s3')), Not(Symbol('s4'))), And(Not(Symbol('s3')), Not(Symbol('s4')), Symbol('s2')))";
+	std::string str = "Or(Symbol('s5'), And(Symbol('s1'), Not(Symbol('s3')), Not(Symbol('s4'))), And(Not(Symbol('s3')), Not(Symbol('s4')), Symbol('s2')))";
 
 	auto res_tokenize = tokenize_py_string(str);
 	for (const auto t : res_tokenize.tokens)
@@ -200,6 +200,8 @@ TEST(Python_Parser)
 	{
 		auto node = parse_py_string(str, { std::make_shared<IFNull>("s1"), std::make_shared<IFNull>("s2"), std::make_shared<IFNull>("s3") , std::make_shared<IFNull>("s4") ,
 			std::make_shared<IFNull>("s5") });
+
+		std::cout << espressoExpression(node) << std::endl;
 
 		writeNode(node, "parsed_node.gv");
 	}
