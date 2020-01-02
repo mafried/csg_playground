@@ -3,6 +3,8 @@
 
 #include "csgnode.h"
 
+typedef struct _object PyObject;
+
 namespace lmu 
 {
 	enum class TokenType
@@ -83,9 +85,21 @@ namespace lmu
 		SIMPY_TO_DNF
 	};
 
-	std::string espressoExpression(const CSGNode& n);
+	struct PythonInterpreter
+	{
+		PythonInterpreter(const std::string& simplifier_module_path);
+		~PythonInterpreter();
 
-	CSGNode optimize_with_python(const CSGNode& node, SimplifierMethod method);
+		std::string simplify(const std::string& expression, SimplifierMethod method) const;
+
+	private:
+		PyObject *simp_method_name, *simp_module, *simp_dict, *simp_method;
+
+	};
+
+	std::string espresso_expression(const CSGNode& n);
+
+	CSGNode optimize_with_python(const CSGNode& node, SimplifierMethod method, const lmu::PythonInterpreter& py_interpreter);
 }
 
 #endif

@@ -246,12 +246,59 @@ std::string lmu::espresso_expression(const CSGNode& n)
 	return ss.str();
 }
 
+#include "Python.h"
 
-CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method)
+CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method, const lmu::PythonInterpreter& py_interpreter)
 {
 	std::string python_input_expr = espresso_expression(node);
 
-	std::string python_output_expr;
+	std::string python_output_expr = py_interpreter.simplify(python_input_expr, method);
+
+	/*PyObject *pName, *pModule, *pDict, *pFunc, *pValue, *presult;
+
+	// Initialize the Python Interpreter
+	Py_Initialize();
+	
+	// Build the name object
+	pName = PyUnicode_FromString((char*)"simplifier");
+
+	PyRun_SimpleString("import sys\nsys.path.append('C:/Users/friedrich/PycharmProjects/dnf_minimizer')");
+
+	// Load the module object
+	pModule = PyImport_Import(pName);
+
+	std::cout << "Module:" << (pModule == nullptr) << std::endl;
+
+	// pDict is a borrowed reference 
+	pDict = PyModule_GetDict(pModule);
+	
+	// pFunc is also a borrowed reference 
+	pFunc = PyDict_GetItemString(pDict, (char*)"simplify");
+
+	if (PyCallable_Check(pFunc))
+	{
+		pValue = Py_BuildValue("(z, z)", (char*)"(s5 | (s1 & ~(s3) & ~(s4)) | (~(s3) & ~(s4) & s2))", (char*)"espresso");
+		PyErr_Print();
+		presult = PyObject_CallObject(pFunc, pValue);
+		PyErr_Print();
+	}
+	else
+	{
+		PyErr_Print();
+	}
+
+	std::string ret = PyUnicode_AsUTF8(presult);
+
+	std::cout << "RET: " << ret << std::endl;
+
+	Py_DECREF(pValue);
+
+	// Clean up
+	Py_DECREF(pModule);
+	Py_DECREF(pName);
+
+	// Finish the Python Interpreter
+	Py_Finalize();*/
 
 	try
 	{
@@ -262,4 +309,69 @@ CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method)
 		std::cerr << "Could not parse python expression. Reason: " << ex.msg << " Index: " << ex.error_pos << std::endl;
 		return opNo();
 	}
+}
+
+lmu::PythonInterpreter::PythonInterpreter(const std::string & simplifier_module_path)
+{	
+	Py_Initialize();
+
+	simp_method_name = PyUnicode_FromString((char*)"simplifier");
+
+	PyRun_SimpleString(("import sys\nsys.path.append('" + simplifier_module_path + "')").c_str());
+
+	// Load the module object
+	simp_module = PyImport_Import(simp_method_name);
+
+	// pDict is a borrowed reference 
+	simp_dict = PyModule_GetDict(simp_module);
+
+	// pFunc is also a borrowed reference 
+	simp_method = PyDict_GetItemString(simp_dict, (char*)"simplify");
+
+}
+
+lmu::PythonInterpreter::~PythonInterpreter()
+{
+	// Clean up
+	Py_DECREF(simp_module);
+	Py_DECREF(simp_method_name);
+
+	// Finish the Python Interpreter
+	Py_Finalize();
+}
+
+std::string lmu::PythonInterpreter::simplify(const std::string & expression, SimplifierMethod method) const 
+{
+	PyObject *arg, *res;
+
+	std::string method_str;
+	switch (method)
+	{
+	case SimplifierMethod::ESPRESSO:
+		method_str = "espresso";
+		break;
+	case SimplifierMethod::SIMPY_TO_DNF:
+		method_str = "sympy_todnf";
+		break;
+	case SimplifierMethod::SIMPY_SIMPLIFY_LOGIC:
+		method_str = "sympy_symplifylogic";
+	}
+
+	if (PyCallable_Check(simp_method))
+	{
+		arg = Py_BuildValue("(z, z)", (char*)expression.c_str(), (char*)method_str.c_str());
+		PyErr_Print();
+		res = PyObject_CallObject(simp_method, arg);
+		PyErr_Print();
+	}
+	else
+	{
+		PyErr_Print();
+	}
+
+	std::string res_str = PyUnicode_AsUTF8(res);
+
+	Py_DECREF(res);
+
+	return res_str;
 }

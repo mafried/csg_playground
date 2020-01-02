@@ -201,7 +201,13 @@ TEST(Python_Parser)
 		auto node = parse_py_string(str, { std::make_shared<IFNull>("s1"), std::make_shared<IFNull>("s2"), std::make_shared<IFNull>("s3") , std::make_shared<IFNull>("s4") ,
 			std::make_shared<IFNull>("s5") });
 
-		std::cout << espressoExpression(node) << std::endl;
+		PythonInterpreter interpreter("C:/Projekte/dnf_opt/dnf_opt");
+
+		auto opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_TO_DNF, interpreter);
+		
+		std::cout << espresso_expression(node) << std::endl;
+
+		std::cout << espresso_expression(opt_node) << std::endl;
 
 		writeNode(node, "parsed_node.gv");
 	}
