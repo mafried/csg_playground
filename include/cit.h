@@ -10,6 +10,10 @@ namespace lmu
 	{
 		DNF dnf;
 		std::vector<Eigen::Vector3d> points;
+		int size() const
+		{
+			return points.size();
+		}
 	};
 
 	struct CITSets
@@ -29,7 +33,10 @@ namespace lmu
 
 	std::ostream& operator <<(std::ostream& stream, const CITSets& c);
 
-	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives = {});
+	struct PythonInterpreter;
+
+	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, 
+		const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 
 }

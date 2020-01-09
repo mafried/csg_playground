@@ -8,7 +8,10 @@
 #include "optimizer_ga.h"
 #include "optimizer_clustering.h"
 #include "optimizer_py.h"
+#include "red_inserter.h"
 #include "cit.h"
+
+const std::string py_module_path = "C:/Projekte/dnf_opt/dnf_opt";
 
 using namespace lmu;
 
@@ -84,7 +87,9 @@ TEST(OptimizerPISetTest)
 	auto s3 = sphere(0.5, 1, 0, 1, "s3");
 	auto s4 = sphere(0.5, -1, 0, 1, "s4");
 	auto s5 = sphere(2.5, 0, 0, 1, "s5");
-	CITSets sets = generate_cit_sets(opUnion({opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 }), 0.05);
+	auto s6 = sphere(0, 0, 0, 0.05, "s6");
+
+	CITSets sets = generate_cit_sets(opUnion({ s6, opUnion({opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 }) }), 0.02);
 
 	std::cout << sets;
 }
@@ -96,19 +101,24 @@ TEST(OptimizerGA)
 	auto s3 = sphere(0.5, 1, 0, 1, "s3");
 	auto s4 = sphere(0.5, -1, 0, 1, "s4");
 	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+	auto s6 = sphere(0, 0, 0, 0.2, "s6");
 
-	auto node = opUnion({ opDiff({ opInter({opUnion({ s1, s2 }),opUnion({ s1, s2 })}), opUnion({ s3, s4 }) }), s5 });
+	auto node = opUnion({s6, opUnion({ opDiff({ opInter({opUnion({ s1, s2 }),opUnion({ s1, s2 })}), opUnion({ s3, s4 }) }), s5 }) });
 
 	OptimizerGAParams params = get_std_ga_params(); 
 		
-	auto opt_node_ga = optimize_with_ga(node, params, std::cout).node;
+	//auto opt_node_ga = optimize_with_ga(node, params, std::cout).node;
 	
 	auto opt_node_rr = remove_redundancies(node, params.ranker_params.sampling_params.samplingStepSize);
+	
+	PythonInterpreter interpreter(py_module_path);
 
-	auto opt_node_sc = optimize_pi_set_cover(node, params.ranker_params.sampling_params.samplingStepSize);
+	auto opt_node_sc = optimize_pi_set_cover(opt_node_rr, params.ranker_params.sampling_params.samplingStepSize, interpreter);
+	
+	std::cout << "Node: " << numNodes(node) << " red: " << numNodes(opt_node_rr) << " sc: " << numNodes(opt_node_sc) << std::endl;
 
 	writeNode(node, "n.gv");
-	writeNode(opt_node_ga, "opt_ga.gv");
+	//writeNode(opt_node_ga, "opt_ga.gv");
 	writeNode(opt_node_rr, "opt_rr.gv");
 	writeNode(opt_node_sc, "opt_sc.gv");
 }
@@ -125,11 +135,13 @@ TEST(Cluster_Optimizer)
 
 	const double sampling_grid_size = 0.1;
 
+	PythonInterpreter interpreter(py_module_path);
+
 	auto opt_node = apply_per_cluster_optimization
 	(
 		cluster_union_paths(node), 
 
-		[sampling_grid_size](const CSGNode& n) { return optimize_pi_set_cover(n, sampling_grid_size); },
+		[sampling_grid_size, &interpreter](const CSGNode& n) { return optimize_pi_set_cover(n, sampling_grid_size, interpreter); },
 		/*[](const CSGNode& n) { return optimize_with_ga(n, get_std_ga_params(), std::cout).node; },*/
 
 		union_merge
@@ -201,7 +213,7 @@ TEST(Python_Parser)
 		auto node = parse_py_string(str, { std::make_shared<IFNull>("s1"), std::make_shared<IFNull>("s2"), std::make_shared<IFNull>("s3") , std::make_shared<IFNull>("s4") ,
 			std::make_shared<IFNull>("s5") });
 
-		PythonInterpreter interpreter("C:/Projekte/dnf_opt/dnf_opt");
+		PythonInterpreter interpreter(py_module_path);
 
 		auto opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_TO_DNF, interpreter);
 		
@@ -215,6 +227,26 @@ TEST(Python_Parser)
 	{
 		std::cout << ex.msg << " token pos: " << ex.error_pos << std::endl;
 	}
+}
+
+TEST(RedInserter)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(0.5, 1, 0, 1, "s3");
+	auto s4 = sphere(0.5, -1, 0, 1, "s4");
+	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+
+	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
+
+	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
+
+	writeNode(inflated_node, "inflated_node.gv");
+	
+	const double sampling = 0.01;
+	EmptySetLookup esl;
+
+	ASSERT_TRUE(is_empty_set(opDiff({ node, inflated_node }),sampling, esl) && is_empty_set(opDiff({ inflated_node, node }), sampling, esl));
 }
 
 #endif

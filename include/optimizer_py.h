@@ -92,9 +92,11 @@ namespace lmu
 
 		std::string simplify(const std::string& expression, SimplifierMethod method) const;
 
+		std::vector<std::unordered_set<int>> set_cover(const std::vector<std::unordered_set<int>>& sets, const std::unordered_set<int>& set_to_cover) const;
+		
 	private:
 		PyObject *simp_method_name, *simp_module, *simp_dict, *simp_method;
-
+		PyObject *set_cover_method_name, *set_cover_module, *set_cover_dict, *set_cover_method;
 	};
 
 	std::string espresso_expression(const CSGNode& n);

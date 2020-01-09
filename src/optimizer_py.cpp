@@ -246,7 +246,13 @@ std::string lmu::espresso_expression(const CSGNode& n)
 	return ss.str();
 }
 
-#include "Python.h"
+#ifdef _DEBUG
+#undef _DEBUG
+#include <python.h>
+#define _DEBUG
+#else
+#include <python.h>
+#endif
 
 CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method, const lmu::PythonInterpreter& py_interpreter)
 {
@@ -316,27 +322,27 @@ lmu::PythonInterpreter::PythonInterpreter(const std::string & simplifier_module_
 	Py_Initialize();
 
 	simp_method_name = PyUnicode_FromString((char*)"simplifier");
+	set_cover_method_name = PyUnicode_FromString((char*)"set_cover");
 
 	PyRun_SimpleString(("import sys\nsys.path.append('" + simplifier_module_path + "')").c_str());
 
-	// Load the module object
 	simp_module = PyImport_Import(simp_method_name);
-
-	// pDict is a borrowed reference 
 	simp_dict = PyModule_GetDict(simp_module);
-
-	// pFunc is also a borrowed reference 
 	simp_method = PyDict_GetItemString(simp_dict, (char*)"simplify");
+
+	set_cover_module = PyImport_Import(set_cover_method_name);
+	set_cover_dict = PyModule_GetDict(set_cover_module);
+	set_cover_method = PyDict_GetItemString(set_cover_dict, (char*)"solve_specialized_set_cover_str");
 
 }
 
 lmu::PythonInterpreter::~PythonInterpreter()
 {
-	// Clean up
 	Py_DECREF(simp_module);
 	Py_DECREF(simp_method_name);
+	Py_DECREF(set_cover_module);
+	Py_DECREF(set_cover_method_name);
 
-	// Finish the Python Interpreter
 	Py_Finalize();
 }
 
@@ -374,4 +380,79 @@ std::string lmu::PythonInterpreter::simplify(const std::string & expression, Sim
 	Py_DECREF(res);
 
 	return res_str;
+}
+
+#include <boost/algorithm/string.hpp>
+
+std::vector<std::unordered_set<int>> from_str(const std::string& str)
+{
+	std::vector<std::unordered_set<int>> res;
+	
+	std::vector<std::string> sets_str;
+	boost::algorithm::split(sets_str, str, boost::is_any_of("|"));
+
+	for (const auto& set_str : sets_str)
+	{
+		std::vector<std::string> elements_str;
+		std::unordered_set<int> set;
+		boost::algorithm::split(elements_str, set_str, boost::is_any_of(" "));
+		for (const auto& element_str : elements_str)
+		{
+			if (element_str.empty())
+				continue;
+			try
+			{
+				set.insert(std::stoi(element_str));
+			}
+			catch (const std::invalid_argument& ex)
+			{
+				std::cout << ex.what() << std::endl;
+			}
+		}
+		res.push_back(set);
+	}
+	return res;
+}
+
+std::string to_str(const std::vector<std::unordered_set<int>>& sets)
+{
+	std::stringstream ss; 
+	for (const auto& set : sets)
+	{
+		for (const auto& element : set)
+		{
+			ss << element << " ";
+		}
+		ss << "|";
+	}
+
+	auto res = ss.str();
+	res.pop_back();
+	return res;
+}
+
+std::vector<std::unordered_set<int>> lmu::PythonInterpreter::set_cover(const std::vector<std::unordered_set<int>>& sets, const std::unordered_set<int>& set_to_cover) const
+{
+	PyObject *arg, *res;
+
+	auto sets_str = to_str(sets);
+	auto set_to_cover_str = to_str({ set_to_cover });
+
+	if (PyCallable_Check(set_cover_method))
+	{
+		arg = Py_BuildValue("(z, z)", (char*)sets_str.c_str(), (char*)set_to_cover_str.c_str());
+		PyErr_Print();
+		res = PyObject_CallObject(set_cover_method, arg);
+		PyErr_Print();
+	}
+	else
+	{
+		PyErr_Print();
+	}
+
+	std::string res_str = PyUnicode_AsUTF8(res);
+
+	Py_DECREF(res);
+	
+	return from_str(res_str);
 }

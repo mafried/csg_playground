@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(Python_Parser);
+	RUN_TEST(RedInserter);
 
 	return 0; 
 }

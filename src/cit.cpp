@@ -110,8 +110,33 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vecto
 
 	CITS cits;
 	cits.dnf.functions = prims;
-	std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
-	std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.dnf.clauses), [](const ClauseAndPoint& cap) { return cap.clause; });
+
+	//Remove geometrically redundant cits.
+	int i = 0;
+	for (const auto& cl : clauses)
+	{
+		int j = 0;
+		bool is_redundant = false;
+		for (const auto& cr : clauses)
+		{
+			if (i != j && cl.clause.signedDistance(cr.p, prims) <= 0.0)
+			{
+				is_redundant = true;
+				std::cout << j << " REDU" << std::endl;
+				break;
+			}
+			j++;
+		}
+		if (!is_redundant)
+		{
+			cits.points.push_back(cl.p);
+			cits.dnf.clauses.push_back(cl.clause);
+		}
+		i++;
+	}
+	
+	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
+	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.dnf.clauses), [](const ClauseAndPoint& cap) { return cap.clause; });
 
 	//std::cout << "CLAUSES: " << cits.dnf.clauses.size() << std::endl;
 	//lmu::writeNode(lmu::DNFtoCSGNode(cits.dnf), "dnf2.gv");
@@ -268,7 +293,9 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
 	return stream;
 }
 
-lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
+#include "optimizer_py.h"
+
+lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	// Simple case.
 	if (primitives.size() == 1)
@@ -277,11 +304,34 @@ lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_gri
 	}
 
 	auto cit_sets = generate_cit_sets(node, sampling_grid_size, primitives);
+	
+	//Set to cover is {0,..., #sits-1}
+	std::unordered_set<int> cit_indices_to_cover;
+	for (int i = 0; i < cit_sets.cits.size(); ++i)
+		cit_indices_to_cover.insert(i);
 
-	//TODO: do set cover on prime implicants.
+	auto selected_cit_index_sets = interpreter.set_cover(cit_sets.pis_as_cit_indices, cit_indices_to_cover);
 
-	std::cout << "SET" << std::endl;
-	std::cout << cit_sets << std::endl;
+	std::cout << "PI:" << std::endl;
+	for (const auto indices : selected_cit_index_sets)
+	{
+		std::cout << "{ ";
+		for (auto index : indices) std::cout << index << " ";
+		std::cout << "} ";
+	}
 
-	return DNFtoCSGNode(cit_sets.prime_implicants);
+	DNF selected_prime_implicants;
+	selected_prime_implicants.functions = cit_sets.prime_implicants.functions;
+	for (const auto& index_set : selected_cit_index_sets)
+	{
+		for (int i = 0; i < cit_sets.prime_implicants.clauses.size(); ++i)
+		{
+			if (index_set == cit_sets.pis_as_cit_indices[i])
+			{
+				selected_prime_implicants.clauses.push_back(cit_sets.prime_implicants.clauses[i]);
+			}
+		}
+	}
+
+	return DNFtoCSGNode(selected_prime_implicants);
 }
