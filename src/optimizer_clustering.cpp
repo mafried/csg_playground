@@ -1,6 +1,6 @@
 #include "optimizer_clustering.h"
-#include "csgnode.h"
 #include "csgnode_helper.h"
+#include <boost/optional.hpp>
 
 void cluster_rec(const lmu::CSGNode& n, std::vector<lmu::CSGNode>& clusters)
 {
@@ -44,6 +44,11 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_dominating_prims(const CSGNode& 
 	}
 
 	return dps;
+}
+
+std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const CSGNode& node, double sampling_grid_size)
+{
+	return find_dominating_prims(opComp({ node }), sampling_grid_size);
 }
 
 std::vector<lmu::PrimitiveCluster> lmu::cluster_with_dominating_prims(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& dom_prims)
@@ -102,6 +107,8 @@ std::vector<lmu::PrimitiveCluster> lmu::cluster_with_dominating_prims(const CSGN
 	return clusters;
 }
 
+
+
 lmu::CSGNode lmu::apply_per_cluster_optimization(std::vector<CSGNode> nodes, 
 	const std::function<CSGNode(const CSGNode&)>& optimizer, 
 	const std::function<CSGNode(const std::vector<CSGNode>&)>& merger)
@@ -137,4 +144,106 @@ lmu::CSGNode lmu::union_merge(const std::vector<CSGNode>& nodes)
 	if (nodes.size() == 1) return nodes[0];
 
 	return lmu::opUnion(nodes);
+}
+
+lmu::PrimitiveCluster get_rest_prims(const lmu::PrimitiveCluster& base, 
+	const lmu::PrimitiveCluster& minus)
+{	
+	lmu::PrimitiveCluster rest;
+
+	std::set_difference(base.begin(), base.end(), minus.begin(), minus.end(),
+		std::inserter(rest, rest.begin()));
+
+	return rest;
+}
+
+using DominantPrim = std::pair<lmu::ImplicitFunctionPtr, bool>;
+using DominantPrims = std::vector<DominantPrim>;
+
+boost::optional<DominantPrim> select_next_from(DominantPrims& dom_prims)
+{
+	if (dom_prims.empty())
+		return boost::none;
+
+	auto res = dom_prims.back();
+	dom_prims.pop_back();
+
+	return boost::optional<DominantPrim>(res);
+}
+
+lmu::CSGNode compute_decomposed_expression(const lmu::PrimitiveCluster& dom_prims,
+	const lmu::PrimitiveCluster& neg_dom_prims, bool use_diff_op)
+{
+	DominantPrims combined_dom_prims;
+	std::transform(dom_prims.begin(), dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, true); });
+	std::transform(neg_dom_prims.begin(), neg_dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, false); });
+
+	auto node = lmu::opNo();
+	while(auto dom_prim = select_next_from(combined_dom_prims))
+	{			
+		if (dom_prim->second)
+		{ /*union*/
+			node = lmu::opUnion({ geometry(dom_prim->first), node });
+		}
+		else
+		{ /*negated => intersection*/
+			node = use_diff_op ? lmu::opDiff({ node, geometry(dom_prim->first) }) : 
+				lmu::opInter({ node, lmu::opComp({geometry(dom_prim->first)}) });
+		}
+	} 
+
+	//TODO: find a replacement for select_next_from() which takes proximity into account.
+
+	return node;
+}
+
+lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op)
+{
+	auto dom_prims = find_dominating_prims(node, sampling_grid_size);
+	auto neg_dom_prims = find_negated_dominating_prims(node, sampling_grid_size);
+
+	auto rest_prims = get_rest_prims(
+		get_rest_prims(allDistinctFunctions(node), dom_prims), neg_dom_prims);
+
+	DecompositionResult res;
+	res.node = compute_decomposed_expression(dom_prims, neg_dom_prims, use_diff_op);
+
+	if (rest_prims.empty())
+	{
+		lmu::visit(res.node, [&rest_prims](lmu::CSGNode& n)
+		{
+			if (n.childsCRef().size() == 2)
+			{
+				if (n.childsCRef()[0].operationType() == CSGNodeOperationType::Noop) 
+					n = n.childsCRef()[1];
+				else if (n.childsCRef()[1].operationType() == CSGNodeOperationType::Noop) 
+					n = n.childsCRef()[0];
+			}
+		});
+	}
+	else if (rest_prims.size() == 1)
+	{
+		lmu::visit(res.node, [&rest_prims](lmu::CSGNode& n)
+		{
+			if (n.operationType() == CSGNodeOperationType::Noop)
+				n = geometry(rest_prims.back());			
+		});
+	}
+	else
+	{
+		int idx = 0;
+		lmu::visit(res.node, [&res, &idx](const lmu::CSGNode& n)
+		{
+			if (n.operationType() == CSGNodeOperationType::Noop)
+			{
+				res.noop_node_idx = idx;
+			}
+
+			idx++;
+		});
+
+		res.rest_prims = rest_prims;	
+	}
+
+	return res;
 }

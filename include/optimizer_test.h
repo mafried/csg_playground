@@ -191,7 +191,7 @@ TEST(Proximity_Score)
 	auto s1 = sphere(0, 0, 0, 1, "s1");
 	auto s2 = sphere(1, 0, 0, 1, "s2");
 	auto s3 = sphere(3, 0, 0, 1, "s3");
-	
+
 	const double sampling_grid_size = 0.1;
 
 	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s2 }), sampling_grid_size) == 1.0);
@@ -216,7 +216,7 @@ TEST(Python_Parser)
 		PythonInterpreter interpreter(py_module_path);
 
 		auto opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_TO_DNF, interpreter);
-		
+
 		std::cout << espresso_expression(node) << std::endl;
 
 		std::cout << espresso_expression(opt_node) << std::endl;
@@ -242,11 +242,45 @@ TEST(RedInserter)
 	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
 
 	writeNode(inflated_node, "inflated_node.gv");
-	
+
 	const double sampling = 0.01;
 	EmptySetLookup esl;
 
-	ASSERT_TRUE(is_empty_set(opDiff({ node, inflated_node }),sampling, esl) && is_empty_set(opDiff({ inflated_node, node }), sampling, esl));
+	ASSERT_TRUE(is_empty_set(opDiff({ node, inflated_node }), sampling, esl) && is_empty_set(opDiff({ inflated_node, node }), sampling, esl));
+}
+
+TEST(DominantPrimDecomposer)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(0.5, 1, 0, 1, "s3");
+	auto s4 = sphere(0.5, -1, 0, 1, "s4");
+	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+
+	auto node_0 = s1;
+	auto node_1 = opUnion({ s1, s2 });
+	auto node_2 = opDiff({ s1, s2 });
+	auto node_3 = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
+	
+	const double sampling = 0.01;
+	const bool use_diff_op = true;
+
+	auto res_0 = dom_prim_decomposition(node_0, sampling, use_diff_op);
+	auto res_1 = dom_prim_decomposition(node_1, sampling, use_diff_op);
+	auto res_2 = dom_prim_decomposition(node_2, sampling, use_diff_op);
+	auto res_3 = dom_prim_decomposition(node_3, sampling, use_diff_op);
+
+	ASSERT_TRUE(res_0.already_complete());
+	ASSERT_TRUE(res_1.already_complete());
+	ASSERT_TRUE(res_2.already_complete());
+
+	ASSERT_FALSE(res_3.already_complete());
+	ASSERT_TRUE(nodePtrAt(res_3.node, res_3.noop_node_idx)->operationType() == CSGNodeOperationType::Noop);
+
+	writeNode(res_0.node, "decomp_node_0.gv");
+	writeNode(res_1.node, "decomp_node_1.gv");
+	writeNode(res_2.node, "decomp_node_2.gv");
+	writeNode(res_3.node, "decomp_node_3.gv");
 }
 
 #endif

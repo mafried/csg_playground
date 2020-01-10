@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(RedInserter);
+	RUN_TEST(DominantPrimDecomposer);
 
 	return 0; 
 }

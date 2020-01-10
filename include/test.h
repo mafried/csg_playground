@@ -27,6 +27,8 @@ namespace lmu
 	}
 
 #define ASSERT_TRUE(EX) (void)((EX) || (lmu::report (#EX, __FILE__, __LINE__),0))
+#define ASSERT_FALSE(EX) (void)(!(EX) || (lmu::report (#EX, __FILE__, __LINE__),0))
+
 #define ASSERT_EQ(V1, V2) (void)(lmu::testEq(V1,V2) || (lmu::reportEqError (#V1, #V2, V1, V2, __FILE__, __LINE__),0))
 
 #define TEST(TestCase) void test_ ## TestCase ## ()
