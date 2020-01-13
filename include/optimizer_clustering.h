@@ -35,6 +35,7 @@ namespace lmu
 		}
 
 		PrimitiveCluster rest_prims;
+		PrimitiveCluster used_prims;
 		CSGNode node; 
 
 		// If the tree is not already complete, the position in the tree
@@ -50,6 +51,9 @@ namespace lmu
 	};
 
 	DecompositionResult dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op);
+
+	CSGNode optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
+		const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer);
 
 }
 

@@ -283,4 +283,30 @@ TEST(DominantPrimDecomposer)
 	writeNode(res_3.node, "decomp_node_3.gv");
 }
 
+TEST(DominantPrimOptimizer)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(0.5, 1, 0, 1, "s3");
+	auto s4 = sphere(0.5, -1, 0, 1, "s4");
+	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+	
+	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
+
+	const double sampling = 0.01;
+	const bool use_diff_op = true;
+
+	auto params = get_std_ga_params();
+
+	auto opt_node = optimize_with_decomposition(node, sampling, use_diff_op,
+		[&params](const CSGNode& node, const PrimitiveCluster& prims)
+	{
+		return optimize_with_ga(node, params, std::cout, prims).node;
+	});
+
+	writeNode(node, "node.gv");
+	writeNode(opt_node, "decomp_node_1.gv");	
+}
+
+
 #endif

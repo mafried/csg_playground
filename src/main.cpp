@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(DominantPrimDecomposer);
+	RUN_TEST(DominantPrimOptimizer);
 
 	return 0; 
 }

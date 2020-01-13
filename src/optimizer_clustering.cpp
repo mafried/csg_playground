@@ -245,5 +245,65 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 		res.rest_prims = rest_prims;	
 	}
 
+	res.used_prims = allDistinctFunctions(res.node);
+
 	return res;
+}
+
+#include "optimizer_red.h"
+
+lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, 
+	bool use_diff_op, const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer)
+{
+	std::cout << "Decompose node." << std::endl;
+
+	auto dec = dom_prim_decomposition(node, sampling_grid_size, use_diff_op);
+
+	if (!dec.already_complete())
+	{
+		auto opt_node = node;
+
+		std::cout << "Replace decomposed prims with empty set marker." << std::endl;
+
+		// Replace primitives used in the decomposition node part with empty set marker. 
+		bool prim_replaced = false;
+		visit(opt_node, [&dec, &prim_replaced](CSGNode& n)
+		{
+			static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
+
+			if (n.type() == CSGNodeType::Geometry &&
+				std::find(dec.used_prims.begin(), dec.used_prims.end(), n.function()) != dec.used_prims.end())
+			{
+				n = empty_set;
+				prim_replaced = true;
+			}
+		});
+
+		// Simplify.
+		if (prim_replaced)
+		{
+			std::cout << "Remove redundancies." << std::endl;
+
+			opt_node = remove_redundancies(opt_node, sampling_grid_size);
+
+			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, optimizer);
+		}
+		else
+		{
+			std::cout << "Use external optimizer." << std::endl;
+
+			// Use different technique to optimize opt_node.
+			opt_node = optimizer(opt_node, dec.rest_prims);
+		}
+
+		// Combine rest node with decomposed part. 
+		CSGNode* node_ptr = nodePtrAt(dec.node, dec.noop_node_idx);
+		*node_ptr = opt_node;		
+	}	
+	else
+	{
+		std::cout << "Decomposition already complete." << std::endl;
+	}
+
+	return dec.node;
 }
