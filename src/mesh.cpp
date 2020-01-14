@@ -30,6 +30,8 @@
 #include <setoper.h>
 #include <cdd.h>
 
+#include "helper.h"
+
 //typedef CGAL::Simple_cartesian<double> K;
 //typedef K::Point_3  Point;
 //typedef CGAL::cpp11::array<std::size_t, 3> Facet;
@@ -1022,4 +1024,65 @@ double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 
 	return -d;
 
+}
+
+inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d & transform, double radius, double height, const std::string & name) :
+	ImplicitFunction(transform, Mesh(), name),
+	_radius(radius),
+	_height(height)
+{
+	//std::cout << "POS: " << _pos << std::endl;
+
+	Eigen::Vector3d min(-radius, -height / 2.0, -radius);
+	Eigen::Vector3d max(radius, height / 2.0, radius);
+
+	//Eigen::Vector3d min(-1.5, -5.0, -1.5);
+	//Eigen::Vector3d max(1.5, 5.0, 1.5);
+
+
+	//std::cout << "MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+
+	//std::cout << "TRANSFORM: " << transform.matrix() << std::endl;
+
+	min = transform * min;
+	max = transform * max;
+	
+	//std::cout << "=> MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+
+	Eigen::Vector3d _min(std::min(min.x(), max.x()), std::min(min.y(), max.y()), std::min(min.z(), max.z()));
+	Eigen::Vector3d _max(std::max(min.x(), max.x()), std::max(min.y(), max.y()), std::max(min.z(), max.z()));
+
+	//std::cout << "MIN: " << _min.transpose() << " MAX: " << _max.transpose() << std::endl;
+
+	_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(_max.x() - _min.x(), _max.y() - _min.y(), _max.z() - _min.z()));
+	std::cout << "AABB: " << _aabb.s.transpose() << std::endl;
+	if (almost_equal(_aabb.s.x(),0.0,2) || almost_equal(_aabb.s.y(), 0.0, 2) || almost_equal(_aabb.s.z(), 0.0, 2))
+		std::cout << "ATTENTION: An AABB dimension is close to zero!" << std::endl;
+
+}
+
+inline lmu::IFBox::IFBox(const Eigen::Affine3d & transform, const Eigen::Vector3d & size, int numSubdivisions, const std::string & name, double displacement) :
+	ImplicitFunction(transform, Mesh(), name),
+	_size(size),
+	_displacement(displacement),
+	_numSubdivisions(numSubdivisions)
+{
+	//std::cout << "TRANSFORM: " << transform.matrix() << std::endl;
+
+	Eigen::Vector3d min = -size * 0.5;
+	Eigen::Vector3d max = size * 0.5;
+	//std::cout << "BOX: MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+
+
+	min = transform * min;
+	max = transform * max;
+
+	//std::cout << "=> BOX: MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+
+	Eigen::Vector3d _min(std::min(min.x(), max.x()), std::min(min.y(), max.y()), std::min(min.z(), max.z()));
+	Eigen::Vector3d _max(std::max(min.x(), max.x()), std::max(min.y(), max.y()), std::max(min.z(), max.z()));
+
+	_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(_max.x() - _min.x(), _max.y() - _min.y(), _max.z() - _min.z()));
+
+	//std::cout << "BOX: AABB: " << (_aabb.s) << std::endl;
 }

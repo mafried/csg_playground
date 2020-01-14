@@ -1,6 +1,7 @@
 #include "optimizer_clustering.h"
 #include "csgnode_helper.h"
 #include <boost/optional.hpp>
+#include "optimizer_red.h"
 
 void cluster_rec(const lmu::CSGNode& n, std::vector<lmu::CSGNode>& clusters)
 {
@@ -30,6 +31,7 @@ bool is_fully_contained_in(const lmu::ImplicitFunctionPtr& primitive, const lmu:
 	Eigen::Vector3d min = aabb.c - aabb.s;
 	Eigen::Vector3d max = aabb.c + aabb.s;
 
+
 	return _is_in(primitive, node, sampling_grid_size, min, max);
 }
 
@@ -40,7 +42,10 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_dominating_prims(const CSGNode& 
 	for (const auto& primitive : allDistinctFunctions(node))
 	{
 		if (is_fully_contained_in(primitive, node, sampling_grid_size))
+		{
+			std::cout << "FULLY CONTAINED: " << primitive->name() << std::endl;
 			dps.push_back(primitive);
+		}
 	}
 
 	return dps;
@@ -48,6 +53,7 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_dominating_prims(const CSGNode& 
 
 std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const CSGNode& node, double sampling_grid_size)
 {
+	std::cout << "NEGATED" << std::endl;
 	return find_dominating_prims(opComp({ node }), sampling_grid_size);
 }
 
@@ -160,11 +166,27 @@ lmu::PrimitiveCluster get_rest_prims(const lmu::PrimitiveCluster& base,
 using DominantPrim = std::pair<lmu::ImplicitFunctionPtr, bool>;
 using DominantPrims = std::vector<DominantPrim>;
 
-boost::optional<DominantPrim> select_next_from(DominantPrims& dom_prims)
+boost::optional<DominantPrim> select_next_from(const lmu::CSGNode& node, DominantPrims& dom_prims, 
+	double sampling_grid_size, lmu::EmptySetLookup& esl)
 {
 	if (dom_prims.empty())
 		return boost::none;
 
+	if (node.operationType() != lmu::CSGNodeOperationType::Noop)
+	{
+		// Try to select a dominant primitive that is spatially connected to the existing node.
+		for (int i = 0; i < dom_prims.size(); ++i)
+		{
+			if (!is_empty_set(lmu::opInter({ node, lmu::geometry(dom_prims[i].first) }), sampling_grid_size, esl))
+			{
+				auto res = dom_prims[i];
+				dom_prims.erase(dom_prims.begin() + i);
+
+				return res;
+			}
+		}
+	}
+	
 	auto res = dom_prims.back();
 	dom_prims.pop_back();
 
@@ -172,14 +194,18 @@ boost::optional<DominantPrim> select_next_from(DominantPrims& dom_prims)
 }
 
 lmu::CSGNode compute_decomposed_expression(const lmu::PrimitiveCluster& dom_prims,
-	const lmu::PrimitiveCluster& neg_dom_prims, bool use_diff_op)
+	const lmu::PrimitiveCluster& neg_dom_prims, bool use_diff_op, double sampling_grid_size)
 {
 	DominantPrims combined_dom_prims;
 	std::transform(dom_prims.begin(), dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, true); });
 	std::transform(neg_dom_prims.begin(), neg_dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, false); });
 
+	std::cout << "# Dominant Prims: " << combined_dom_prims.size() << std::endl;
+
+	lmu::EmptySetLookup esl;
+
 	auto node = lmu::opNo();
-	while(auto dom_prim = select_next_from(combined_dom_prims))
+	while(auto dom_prim = select_next_from(node, combined_dom_prims, sampling_grid_size, esl))
 	{			
 		if (dom_prim->second)
 		{ /*union*/
@@ -206,7 +232,7 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 		get_rest_prims(allDistinctFunctions(node), dom_prims), neg_dom_prims);
 
 	DecompositionResult res;
-	res.node = compute_decomposed_expression(dom_prims, neg_dom_prims, use_diff_op);
+	res.node = compute_decomposed_expression(dom_prims, neg_dom_prims, use_diff_op, sampling_grid_size);
 
 	if (rest_prims.empty())
 	{
@@ -249,8 +275,6 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 
 	return res;
 }
-
-#include "optimizer_red.h"
 
 lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, 
 	bool use_diff_op, const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer)

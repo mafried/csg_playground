@@ -392,20 +392,7 @@ namespace lmu
 
 	struct IFCylinder : ImplicitFunction
 	{
-		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name) :
-			ImplicitFunction(transform, Mesh(), name),
-			_radius(radius),
-			_height(height)
-		{
-			_invTrans = transform.inverse();
-
-			Eigen::Vector3d min(-radius, -height / 2.0, -radius);
-			Eigen::Vector3d max(radius, height / 2.0, radius);
-
-			min = _transform * min;
-			max = _transform * max;
-			_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
-		}
+		IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string& name);
 
 		virtual ImplicitFunctionType type() const override
 		{
@@ -468,19 +455,7 @@ namespace lmu
 
 	struct IFBox : public ImplicitFunction
 	{
-		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name, double displacement = 0.0) :
-			ImplicitFunction(transform, Mesh(), name),
-			_size(size),
-			_displacement(displacement),
-			_numSubdivisions(numSubdivisions)
-		{
-			Eigen::Vector3d min = -size * 0.5;
-			Eigen::Vector3d max = size * 0.5;
-
-			min = _transform * min;
-			max = _transform * max;
-			_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
-		}
+		IFBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions, const std::string& name, double displacement = 0.0);
 
 		virtual ImplicitFunctionType type() const override
 		{

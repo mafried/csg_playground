@@ -11,14 +11,107 @@
 #include "red_inserter.h"
 #include "cit.h"
 
+// To verify CSG expressions
+#include <igl/writeOBJ.h>
+#include <pointcloud.h>
+
 const std::string py_module_path = "C:/Projekte/dnf_opt/dnf_opt";
 
 using namespace lmu;
 
+// Helpers for defining a simple csg expression
 CSGNode sphere(double x, double y, double z, double r, const std::string& name = "")
 {
 	return geo<IFSphere>((Eigen::Affine3d)(Eigen::Translation3d(x, y, z)), r, name);
 }
+
+
+// Helpers for defining a simple csg expression
+CSGNode cys(double radius, double height, double d, double a, double dz, const std::string& name = "")
+{
+	Eigen::Affine3d tz = (Eigen::Affine3d)Eigen::Translation3d(0, 0, dz);
+
+	Eigen::Affine3d td = (Eigen::Affine3d)Eigen::Translation3d(d, 0, 0);
+	Eigen::Affine3d ra = (Eigen::Affine3d)Eigen::AngleAxisd(a*M_PI / 180.0, Eigen::Vector3d::UnitZ());
+	Eigen::Affine3d rot90x = (Eigen::Affine3d)Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitX());
+	Eigen::Affine3d t = tz * ra * td * rot90x;
+	return geo<IFCylinder>(t, radius, height, name);
+}
+
+CSGNode cube1()
+{
+	const std::string name = "cube1";
+	Eigen::Affine3d t = (Eigen::Affine3d)Eigen::Translation3d(0, 0, -1.5);
+	Eigen::Vector3d size(10, 10, 3);
+	return geo<IFBox>(t, size, 1, name);
+}
+
+CSGNode cys1()
+{
+	return cys(3, 3, 0, 0, 0, "cyl1");
+}
+
+CSGNode cys2()
+{
+	return cys(2.5, 1, 0, 0, 1.75, "cyl2");
+}
+
+CSGNode cys3()
+{
+	return cys(3, 0.5, 0, 0, 2.25, "cyl3");
+}
+
+CSGNode cys4()
+{
+	return cys(0.5, 10, 4.5, 30, 0, "cyl4");
+}
+
+CSGNode cys5()
+{
+	return cys(0.5, 10, 4.5, 120, 0, "cyl5");
+}
+
+CSGNode cys6()
+{
+	return cys(0.5, 10, 4.5, 210, 0, "cyl6");
+}
+
+CSGNode cys7()
+{
+	return cys(0.5, 10, 4.5, 300, 0, "cyl7");
+}
+
+CSGNode cys8()
+{
+	return cys(1.5, 10, 6.5, 45, 0, "cyl8");
+}
+
+CSGNode cys9()
+{
+	return cys(1.5, 10, 6.5, 135, 0, "cyl9");
+}
+
+CSGNode cys10()
+{
+	return cys(1.5, 10, 6.5, 225, 0, "cyl10");
+}
+
+CSGNode cys11()
+{
+	return cys(1.5, 10, 6.5, 315, 0, "cyl11");
+}
+
+CSGNode cys12()
+{
+	return cys(1.5, 3, 0, 0, 3, "cyl12");
+}
+
+CSGNode cys13()
+{
+	return cys(1, 6, 0, 0, 4, "cyl13");
+}
+//
+
 
 OptimizerGAParams get_std_ga_params()
 {
@@ -306,6 +399,166 @@ TEST(DominantPrimOptimizer)
 
 	writeNode(node, "node.gv");
 	writeNode(opt_node, "decomp_node_1.gv");	
+}
+
+// Experiments to compare different approach on a simple CSG expression 
+TEST(CSGExpr1)
+{
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(0.5, 1, 0, 1, "s3");
+	auto s4 = sphere(0.5, -1, 0, 1, "s4");
+	auto s5 = sphere(2.5, 0, 0, 1, "s5");
+
+	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
+
+
+	// artificially create a more complex expression
+	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
+	writeNode(inflated_node, "inflated_node.gv");
+
+
+	const double sampling = 0.01;
+	const bool use_diff_op = true;
+
+	auto params = get_std_ga_params();
+
+	auto opt_node = optimize_with_decomposition(inflated_node, sampling, use_diff_op,
+		[&params](const CSGNode& node, const PrimitiveCluster& prims)
+	{
+		return optimize_with_ga(node, params, std::cout, prims).node;
+	});
+
+	writeNode(opt_node, "decomp_optim_node.gv");
+
+
+	// For comparison GA + remove redundancy
+	auto opt_node_ga = optimize_with_ga(inflated_node, params, std::cout).node;
+	auto red_opt_node_ga = remove_redundancies(opt_node_ga, sampling);
+	writeNode(red_opt_node_ga, "ga_optim.gv");
+
+
+	// Clustering + GA 
+	auto dom_prims = find_dominating_prims(inflated_node, sampling);
+	auto opt_node_cluster = apply_per_cluster_optimization
+	(
+		cluster_with_dominating_prims(inflated_node, dom_prims),
+		[&inflated_node](const PrimitiveCluster& c) { return optimize_with_ga(inflated_node, get_std_ga_params(), std::cout, c).node; },
+		union_merge
+	);
+
+	auto red_opt_node = remove_redundancies(opt_node_cluster, sampling);
+	writeNode(red_opt_node, "red_cluster_ga_optim.gv");
+}
+
+
+// Comment to avoid generating the meshes corresponding to each CSG expression
+#define GEN_MESHES 
+
+TEST(CSGExpr2)
+{
+	auto aabb = cys10().function()->aabb();	
+	auto bb = geo<IFBox>(cys10().function()->transform(), Eigen::Vector3d(6,4,2), 1, "");
+	
+	//auto node = opUnion({ bb, cys10() });
+	
+		auto node = opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opUnion({
+		opUnion({ opUnion({ cube1(), cys1() }), cys2() }),
+		cys3() }),
+		cys4() }),
+		cys5() }),
+		cys6() }),
+		cys7() }),
+		cys8() }),
+		cys9() }),
+		cys10() }),
+		cys11() }),
+		cys12() }),
+		cys13() });
+		
+
+#ifdef GEN_MESHES
+	// Verify that the object is correct
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_mesh.obj", mesh.vertices, mesh.indices);
+
+	//writePointCloud("node.xyz", computePointCloud(node, CSGNodeSamplingParams(0.2, 0.5, 0.0)));
+#endif
+
+
+	// Artificially create a more complex expression
+	auto inflated_node = inflate_node(node, 3, { inserter(InserterType::SubtreeCopy, 1.0) });
+	writeNode(inflated_node, "inflated_node.gv");
+
+#ifdef GEN_MESHES
+	//mesh = lmu::computeMesh(inflated_node, Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("csgexpr2_inflated_mesh.obj", mesh.vertices, mesh.indices);
+
+#endif
+
+
+	// Dominant primitive decomposition
+	const double sampling = 0.1;
+	const bool use_diff_op = true;
+
+	auto params = get_std_ga_params();
+
+	auto opt_node = optimize_with_decomposition(inflated_node, sampling, use_diff_op,
+		[&params](const CSGNode& node, const PrimitiveCluster& prims)
+	{
+		return optimize_with_ga(node, params, std::cout, prims).node;
+	});
+
+	writeNode(opt_node, "decomp_optim_node.gv");
+
+#ifdef GEN_MESHES
+	mesh = lmu::computeMesh(opt_node, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_decomp_mesh.obj", mesh.vertices, mesh.indices);
+#endif
+
+/*
+	// GA + remove redundancy
+	auto opt_node_ga = optimize_with_ga(inflated_node, params, std::cout).node;
+	auto red_opt_node_ga = remove_redundancies(opt_node_ga, sampling);
+	writeNode(opt_node_ga, "ga_optim.gv");
+	writeNode(red_opt_node_ga, "red_ga_optim.gv");
+
+#ifdef GEN_MESHES
+	mesh = lmu::computeMesh(opt_node_ga, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_ga_mesh.obj", mesh.vertices, mesh.indices);
+
+	mesh = lmu::computeMesh(red_opt_node_ga, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_red_ga_mesh.obj", mesh.vertices, mesh.indices);
+#endif
+
+
+	// Clustering + GA 
+	auto dom_prims = find_dominating_prims(inflated_node, sampling);
+	auto opt_node_cluster = apply_per_cluster_optimization
+	(
+		cluster_with_dominating_prims(inflated_node, dom_prims),
+		[&inflated_node](const PrimitiveCluster& c) { return optimize_with_ga(inflated_node, get_std_ga_params(), std::cout, c).node; },
+		union_merge
+	);
+
+	auto red_opt_node = remove_redundancies(opt_node_cluster, sampling);
+	writeNode(red_opt_node, "red_cluster_ga_optim.gv");
+
+#ifdef GEN_MESHES
+	mesh = lmu::computeMesh(red_opt_node, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_red_cluster_ga_mesh.obj", mesh.vertices, mesh.indices);
+#endif
+*/
 }
 
 
