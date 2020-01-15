@@ -117,7 +117,7 @@ OptimizerGAParams get_std_ga_params()
 {
 	OptimizerGAParams params;
 
-	params.ranker_params.geo_score_weight = 10.0;
+	params.ranker_params.geo_score_weight = 20.0;
 	params.ranker_params.size_score_weight = 1.0;
 	params.ranker_params.prox_score_weight = 2.0;
 
@@ -126,7 +126,7 @@ OptimizerGAParams get_std_ga_params()
 	params.ranker_params.sampling_params.errorSigma = 0.00000001;
 	params.ranker_params.sampling_params.samplingStepSize = 0.1;
 	params.ranker_params.sampling_params.maxDistance = 0.1;
-	params.ranker_params.max_sampling_points = 500;
+	params.ranker_params.max_sampling_points = 250;
 
 	params.creator_params.create_new_prob = 0.3;
 	params.creator_params.subtree_prob = 0.3;
@@ -489,8 +489,8 @@ TEST(CSGExpr2)
 
 #ifdef GEN_MESHES
 	// Verify that the object is correct
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
-	igl::writeOBJ("csgexpr2_mesh.obj", mesh.vertices, mesh.indices);
+	//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("csgexpr2_mesh.obj", mesh.vertices, mesh.indices);
 
 	//writePointCloud("node.xyz", computePointCloud(node, CSGNodeSamplingParams(0.2, 0.5, 0.0)));
 #endif
@@ -499,19 +499,21 @@ TEST(CSGExpr2)
 	// Artificially create a more complex expression
 	auto inflated_node = inflate_node(node, 3, { inserter(InserterType::SubtreeCopy, 1.0) });
 	writeNode(inflated_node, "inflated_node.gv");
-
+	/*
 #ifdef GEN_MESHES
 	//mesh = lmu::computeMesh(inflated_node, Eigen::Vector3i(200, 200, 200));
 	//igl::writeOBJ("csgexpr2_inflated_mesh.obj", mesh.vertices, mesh.indices);
 
 #endif
 
-
+*/
 	// Dominant primitive decomposition
 	const double sampling = 0.1;
 	const bool use_diff_op = true;
 
 	auto params = get_std_ga_params();
+/*
+
 
 	auto opt_node = optimize_with_decomposition(inflated_node, sampling, use_diff_op,
 		[&params](const CSGNode& node, const PrimitiveCluster& prims)
@@ -524,9 +526,9 @@ TEST(CSGExpr2)
 #ifdef GEN_MESHES
 	mesh = lmu::computeMesh(opt_node, Eigen::Vector3i(200, 200, 200));
 	igl::writeOBJ("csgexpr2_decomp_mesh.obj", mesh.vertices, mesh.indices);
-#endif
+#endif*/
 
-/*
+
 	// GA + remove redundancy
 	auto opt_node_ga = optimize_with_ga(inflated_node, params, std::cout).node;
 	auto red_opt_node_ga = remove_redundancies(opt_node_ga, sampling);
@@ -534,14 +536,14 @@ TEST(CSGExpr2)
 	writeNode(red_opt_node_ga, "red_ga_optim.gv");
 
 #ifdef GEN_MESHES
-	mesh = lmu::computeMesh(opt_node_ga, Eigen::Vector3i(200, 200, 200));
+	auto mesh = lmu::computeMesh(opt_node_ga, Eigen::Vector3i(200, 200, 200));
 	igl::writeOBJ("csgexpr2_ga_mesh.obj", mesh.vertices, mesh.indices);
 
 	mesh = lmu::computeMesh(red_opt_node_ga, Eigen::Vector3i(200, 200, 200));
 	igl::writeOBJ("csgexpr2_red_ga_mesh.obj", mesh.vertices, mesh.indices);
 #endif
 
-
+/*
 	// Clustering + GA 
 	auto dom_prims = find_dominating_prims(inflated_node, sampling);
 	auto opt_node_cluster = apply_per_cluster_optimization

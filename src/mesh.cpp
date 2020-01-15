@@ -1031,33 +1031,50 @@ inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d & transform, double rad
 	_radius(radius),
 	_height(height)
 {
-	//std::cout << "POS: " << _pos << std::endl;
+	// Original (pre-transform) vertices of the AABB
+	Eigen::Vector3d v1(-radius, -height / 2, -radius);
+	Eigen::Vector3d v2(radius, -height / 2, -radius);
+	Eigen::Vector3d v3(-radius, -height / 2, radius);
+	Eigen::Vector3d v4(radius, -height / 2, radius);
+	Eigen::Vector3d v5(-radius, height / 2, -radius);
+	Eigen::Vector3d v6(radius, height / 2, -radius);
+	Eigen::Vector3d v7(-radius, height / 2, radius);
+	Eigen::Vector3d v8(radius, height / 2, radius);
 
-	Eigen::Vector3d min(-radius, -height / 2.0, -radius);
-	Eigen::Vector3d max(radius, height / 2.0, radius);
+	// Transformed vertices of the AABB
+	Eigen::Vector3d tv1 = _transform * v1;
+	Eigen::Vector3d tv2 = _transform * v2;
+	Eigen::Vector3d tv3 = _transform * v3;
+	Eigen::Vector3d tv4 = _transform * v4;
+	Eigen::Vector3d tv5 = _transform * v5;
+	Eigen::Vector3d tv6 = _transform * v6;
+	Eigen::Vector3d tv7 = _transform * v7;
+	Eigen::Vector3d tv8 = _transform * v8;
 
-	//Eigen::Vector3d min(-1.5, -5.0, -1.5);
-	//Eigen::Vector3d max(1.5, 5.0, 1.5);
+	Eigen::Vector3d min = tv1;
+	Eigen::Vector3d max = tv1;
 
+	// Recompute the AABB (approximation)
+	min = min.array().min(tv2.array());
+	min = min.array().min(tv3.array());
+	min = min.array().min(tv4.array());
+	min = min.array().min(tv5.array());
+	min = min.array().min(tv6.array());
+	min = min.array().min(tv7.array());
+	min = min.array().min(tv8.array());
 
-	//std::cout << "MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+	max = max.array().max(tv2.array());
+	max = max.array().max(tv3.array());
+	max = max.array().max(tv4.array());
+	max = max.array().max(tv5.array());
+	max = max.array().max(tv6.array());
+	max = max.array().max(tv7.array());
+	max = max.array().max(tv8.array());
 
-	//std::cout << "TRANSFORM: " << transform.matrix() << std::endl;
+	// Center of the AABB is recomputed
+	Eigen::Vector3d tpos(0.5*(min.x() + max.x()), 0.5*(min.y() + max.y()), 0.5*(min.z() + max.z()));
 
-	min = transform * min;
-	max = transform * max;
-	
-	//std::cout << "=> MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
-
-	Eigen::Vector3d _min(std::min(min.x(), max.x()), std::min(min.y(), max.y()), std::min(min.z(), max.z()));
-	Eigen::Vector3d _max(std::max(min.x(), max.x()), std::max(min.y(), max.y()), std::max(min.z(), max.z()));
-
-	//std::cout << "MIN: " << _min.transpose() << " MAX: " << _max.transpose() << std::endl;
-
-	_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(_max.x() - _min.x(), _max.y() - _min.y(), _max.z() - _min.z()));
-	std::cout << "AABB: " << _aabb.s.transpose() << std::endl;
-	if (almost_equal(_aabb.s.x(),0.0,2) || almost_equal(_aabb.s.y(), 0.0, 2) || almost_equal(_aabb.s.z(), 0.0, 2))
-		std::cout << "ATTENTION: An AABB dimension is close to zero!" << std::endl;
+	_aabb = AABB(tpos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 
 }
 
@@ -1067,22 +1084,49 @@ inline lmu::IFBox::IFBox(const Eigen::Affine3d & transform, const Eigen::Vector3
 	_displacement(displacement),
 	_numSubdivisions(numSubdivisions)
 {
-	//std::cout << "TRANSFORM: " << transform.matrix() << std::endl;
-
 	Eigen::Vector3d min = -size * 0.5;
 	Eigen::Vector3d max = size * 0.5;
-	//std::cout << "BOX: MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
 
+	Eigen::Vector3d v1(min.x(), min.y(), min.z());
+	Eigen::Vector3d v2(max.x(), min.y(), min.z());
+	Eigen::Vector3d v3(min.x(), min.y(), max.z());
+	Eigen::Vector3d v4(max.x(), min.y(), max.z());
+	Eigen::Vector3d v5(min.x(), max.y(), min.z());
+	Eigen::Vector3d v6(max.x(), max.y(), min.z());
+	Eigen::Vector3d v7(min.x(), max.y(), max.z());
+	Eigen::Vector3d v8(max.x(), max.y(), max.z());
 
-	min = transform * min;
-	max = transform * max;
+	// Transformed vertices of the AABB
+	Eigen::Vector3d tv1 = _transform * v1;
+	Eigen::Vector3d tv2 = _transform * v2;
+	Eigen::Vector3d tv3 = _transform * v3;
+	Eigen::Vector3d tv4 = _transform * v4;
+	Eigen::Vector3d tv5 = _transform * v5;
+	Eigen::Vector3d tv6 = _transform * v6;
+	Eigen::Vector3d tv7 = _transform * v7;
+	Eigen::Vector3d tv8 = _transform * v8;
 
-	//std::cout << "=> BOX: MIN: " << min.transpose() << " MAX: " << max.transpose() << std::endl;
+	// Recompute the AABB (approximation)
+	min = tv1;
+	min = min.array().min(tv2.array());
+	min = min.array().min(tv3.array());
+	min = min.array().min(tv4.array());
+	min = min.array().min(tv5.array());
+	min = min.array().min(tv6.array());
+	min = min.array().min(tv7.array());
+	min = min.array().min(tv8.array());
 
-	Eigen::Vector3d _min(std::min(min.x(), max.x()), std::min(min.y(), max.y()), std::min(min.z(), max.z()));
-	Eigen::Vector3d _max(std::max(min.x(), max.x()), std::max(min.y(), max.y()), std::max(min.z(), max.z()));
+	max = tv1;
+	max = max.array().max(tv2.array());
+	max = max.array().max(tv3.array());
+	max = max.array().max(tv4.array());
+	max = max.array().max(tv5.array());
+	max = max.array().max(tv6.array());
+	max = max.array().max(tv7.array());
+	max = max.array().max(tv8.array());
 
-	_aabb = AABB(_pos, 0.5 * Eigen::Vector3d(_max.x() - _min.x(), _max.y() - _min.y(), _max.z() - _min.z()));
+	// Center of the AABB is recomputed
+	Eigen::Vector3d tpos(0.5*(min.x() + max.x()), 0.5*(min.y() + max.y()), 0.5*(min.z() + max.z()));
 
-	//std::cout << "BOX: AABB: " << (_aabb.s) << std::endl;
+	_aabb = AABB(tpos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 }
