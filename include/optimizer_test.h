@@ -132,6 +132,8 @@ OptimizerGAParams get_std_ga_params()
 	params.creator_params.subtree_prob = 0.3;
 	params.creator_params.initial_population_dist = { 0.1,0.8,0.1 };
 
+	params.man_params.max_delta = 0.2;
+
 	params.ga_params.crossover_rate = 0.4;
 	params.ga_params.mutation_rate = 0.3;
 	params.ga_params.in_parallel = true;

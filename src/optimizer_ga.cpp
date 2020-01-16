@@ -9,77 +9,37 @@ using namespace lmu;
 struct CSGNodeCreator;
 struct CSGNodeRanker;
 
-using Rank = double;
-using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode, Rank>>;
-using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
-using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode, Rank>, Rank>;
-using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank, CSGNodeTournamentSelector, CSGNodeIterationStopCriterion>;
-
-//////////////////////////// RANKER ////////////////////////////
-
-struct CSGNodeRanker
+//using Rank = double;
+struct Rank
 {
-	CSGNodeRanker(const CSGNode& input_node, const RankerParams& params) :
-		input_node(input_node),
-		input_node_pc(lmu::farthestPointSampling(lmu::computePointCloud(input_node, params.sampling_params), params.max_sampling_points)),
-		input_node_size(numNodes(input_node)),
-		params(params)
+	Rank(double score, double geo_score) :
+		score(score),
+		geo_score(geo_score)
 	{
-		input_node_geo_score = compute_geo_score(input_node);
 	}
 
-	Rank rank(const CSGNode& node) const
+	Rank(double score = 0.0) :
+		score(score),
+		geo_score(score)
 	{
-		auto geo_score = compute_geo_score(node) / input_node_geo_score;
-
-		auto prox_score = compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
-
-		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
-		
-		std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
-
-		return Rank(
-			params.geo_score_weight * geo_score + 
-			params.prox_score_weight * prox_score + 
-			params.size_score_weight * size_score);
 	}
 
-	std::string info() const
-	{
-		return std::string();
-	}
-
-private:
-
-	double compute_geo_score(const CSGNode& node) const
-	{
-		double numCorrectSamples = 0.0;
-		double numConsideredSamples = (double)input_node_pc.rows();
-
-		for (int i = 0; i < input_node_pc.rows(); ++i)
-		{
-
-			Eigen::Matrix<double, 1, 6> pn = input_node_pc.row(i);
-			Eigen::Vector3d sampleP = pn.leftCols(3);
-			Eigen::Vector3d sampleN = pn.rightCols(3);
-
-			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, params.gradient_step_size);
-			double sampleDistNode = sampleDistGradNode[0];
-			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
-
-			double inc = std::abs(sampleDistNode) <= params.position_tolerance && sampleN.dot(sampleGradNode) >= 0.0;
-			numCorrectSamples += inc;
-		}
-
-		return (numCorrectSamples / numConsideredSamples);
-	}
-
-	CSGNode input_node;
-	int input_node_size;
-	double input_node_geo_score;
-	lmu::PointCloud input_node_pc;
-	RankerParams params;
+	double score;
+	double geo_score; 
+	
+	friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.score < rhs.score; }
+	friend inline bool operator> (const Rank& lhs, const Rank& rhs) { return rhs < lhs; }
+	friend inline bool operator<=(const Rank& lhs, const Rank& rhs) { return !(lhs > rhs); }
+	friend inline bool operator>=(const Rank& lhs, const Rank& rhs) { return !(lhs < rhs); }
+	friend inline bool operator==(const Rank& lhs, const Rank& rhs) { return lhs.score == rhs.score; }
+	friend inline bool operator!=(const Rank& lhs, const Rank& rhs) { return !(lhs == rhs); }
 };
+
+std::ostream& operator<<(std::ostream& out, const Rank& r)
+{
+	out << "score: " << r.score << " geo: " << r.geo_score;
+	return out;
+}
 
 //////////////////////////// CREATOR ////////////////////////////
 
@@ -191,19 +151,19 @@ struct CSGNodeCreator
 	}
 
 private:
-	
+
 	void create(CSGNode& node, int maxDepth, int curDepth) const
 	{
 		static std::bernoulli_distribution db{};
 		using parmb_t = decltype(db)::param_type;
-		
+
 		if (curDepth >= maxDepth)
 		{
 			node = create_rnd_primitive_node();
 		}
 		else
 		{
-			if (db(_rndEngine, parmb_t{ params.subtree_prob}))
+			if (db(_rndEngine, parmb_t{ params.subtree_prob }))
 			{
 				node = create_rnd_operation_node();
 
@@ -240,7 +200,7 @@ private:
 
 		return createOperation(static_cast<CSGNodeOperationType>(op));
 	}
-	
+
 	CreatorParams params;
 	int max_tree_depth;
 	std::vector<ImplicitFunctionPtr> primitives;
@@ -249,6 +209,117 @@ private:
 	mutable std::default_random_engine _rndEngine;
 	mutable std::random_device _rndDevice;
 };
+
+//////////////////////////// RANKER ////////////////////////////
+
+struct CSGNodeRanker
+{
+	CSGNodeRanker(const CSGNode& input_node, const RankerParams& params) :
+		input_node(input_node),
+		input_node_pc(lmu::farthestPointSampling(lmu::computePointCloud(input_node, params.sampling_params), params.max_sampling_points)),
+		input_node_size(numNodes(input_node)),
+		params(params)
+	{
+		input_node_geo_score = compute_geo_score(input_node);
+	}
+
+	Rank rank(const CSGNode& node) const
+	{
+		auto geo_score = compute_geo_score(node) / input_node_geo_score;
+
+		auto prox_score = compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
+
+		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
+		
+		std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
+
+		return Rank(
+			params.geo_score_weight * geo_score + 
+			params.prox_score_weight * prox_score + 
+			params.size_score_weight * size_score, geo_score);
+	}
+
+	std::string info() const
+	{
+		return std::string();
+	}
+
+private:
+
+	double compute_geo_score(const CSGNode& node) const
+	{
+		double numCorrectSamples = 0.0;
+		double numConsideredSamples = (double)input_node_pc.rows();
+
+		for (int i = 0; i < input_node_pc.rows(); ++i)
+		{
+
+			Eigen::Matrix<double, 1, 6> pn = input_node_pc.row(i);
+			Eigen::Vector3d sampleP = pn.leftCols(3);
+			Eigen::Vector3d sampleN = pn.rightCols(3);
+
+			Eigen::Vector4d sampleDistGradNode = node.signedDistanceAndGradient(sampleP, params.gradient_step_size);
+			double sampleDistNode = sampleDistGradNode[0];
+			Eigen::Vector3d sampleGradNode = sampleDistGradNode.bottomRows(3);
+
+			double inc = std::abs(sampleDistNode) <= params.position_tolerance && sampleN.dot(sampleGradNode) >= 0.0;
+			numCorrectSamples += inc;
+		}
+
+		return (numCorrectSamples / numConsideredSamples);
+	}
+
+	CSGNode input_node;
+	int input_node_size;
+	double input_node_geo_score;
+	lmu::PointCloud input_node_pc;
+	RankerParams params;
+};
+
+//////////////////////////// MANIPULATOR ////////////////////////////
+
+struct CSGNodePopulationManipulator
+{
+	CSGNodePopulationManipulator(CSGNodeCreator* creator, CSGNodeRanker* ranker, double max_delta) :
+		max_delta(max_delta),
+		ranker(ranker),
+		creator(creator)
+	{
+	}
+
+	void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
+	{
+	}
+
+	void manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
+	{
+		auto filtered_pop = population;
+
+		for (auto& node : population)
+		{
+			if (1.0 - node.rank.geo_score > max_delta)
+			{
+				node.creature = creator->create();
+				node.rank = ranker->rank(node.creature);
+			}
+		}
+	}
+
+	std::string info() const
+	{
+		return "CSGNode Population Manipulator";
+	}
+
+	double max_delta;
+	CSGNodeCreator* creator;
+	CSGNodeRanker* ranker;
+};
+
+
+using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode, Rank>>;
+using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
+using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode, Rank>, Rank>;
+using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank, CSGNodeTournamentSelector, CSGNodeIterationStopCriterion, CSGNodePopulationManipulator>;
 
 OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream, const std::vector<ImplicitFunctionPtr>& primitives)
 {	
@@ -262,13 +333,14 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	CSGNodeCreator creator(node, primitives, params.creator_params);
 	CSGNodeIterationStopCriterion stop_criterion(params.ga_params.max_iterations);
 	CSGNodeTournamentSelector t_selector(params.ga_params.tournament_k);
+	CSGNodePopulationManipulator manipulator(&creator, &ranker, params.man_params.max_delta);
 
 	CSGNodeGA::Parameters ga_params(params.ga_params.population_size, params.ga_params.num_best_parents,
 		params.ga_params.mutation_rate, params.ga_params.crossover_rate, params.ga_params.in_parallel,
 		Schedule(), Schedule(), params.ga_params.use_caching);
 
 	CSGNodeGA ga;
-	auto res = ga.run(ga_params, t_selector, creator, ranker, stop_criterion);
+	auto res = ga.run(ga_params, t_selector, creator, ranker, stop_criterion, manipulator);
 
 	auto opt_res = OptimizerGAResult(res.population[0].creature);
 
@@ -322,3 +394,4 @@ double lmu::compute_local_proximity_score(const CSGNode& node, double sampling_g
 
 	return score == invalid_proximity_score ? score : score / (double)numNodes(node, true);
 }
+

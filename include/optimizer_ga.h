@@ -26,6 +26,11 @@ namespace lmu
 		std::vector<double> initial_population_dist;
 	};
 
+	struct ManipulatorParams
+	{
+		double max_delta;
+	};
+
 	struct GAParams
 	{
 		int population_size;
@@ -42,6 +47,7 @@ namespace lmu
 	{
 		RankerParams ranker_params;
 		CreatorParams creator_params;
+		ManipulatorParams man_params;
 		GAParams ga_params;
 	};
 
