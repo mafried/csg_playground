@@ -23,6 +23,7 @@ namespace lmu
 	{		
 		double create_new_prob;
 		double subtree_prob;
+		std::vector<double> initial_population_dist;
 	};
 
 	struct GAParams

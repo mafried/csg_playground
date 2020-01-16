@@ -130,13 +130,14 @@ OptimizerGAParams get_std_ga_params()
 
 	params.creator_params.create_new_prob = 0.3;
 	params.creator_params.subtree_prob = 0.3;
+	params.creator_params.initial_population_dist = { 0.1,0.8,0.1 };
 
 	params.ga_params.crossover_rate = 0.4;
 	params.ga_params.mutation_rate = 0.3;
-	params.ga_params.in_parallel = false;
-	params.ga_params.max_iterations = 100;
+	params.ga_params.in_parallel = true;
+	params.ga_params.max_iterations = 50;
 	params.ga_params.num_best_parents = 2;
-	params.ga_params.population_size = 150;
+	params.ga_params.population_size = 100;
 	params.ga_params.tournament_k = 2;
 	params.ga_params.use_caching = true;
 
@@ -462,35 +463,35 @@ TEST(CSGExpr2)
 	
 	//auto node = opUnion({ bb, cys10() });
 	
-		auto node = opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opDiff({
-		opUnion({
-		opUnion({ opUnion({ cube1(), cys1() }), cys2() }),
-		cys3() }),
-		cys4() }),
-		cys5() }),
-		cys6() }),
-		cys7() }),
-		cys8() }),
-		cys9() }),
-		cys10() }),
-		cys11() }),
-		cys12() }),
-		cys13() });
-		
+	auto node = opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opDiff({
+	opUnion({
+	opUnion({ opUnion({ cube1(), cys1() }), cys2() }),
+	cys3() }),
+	cys4() }),
+	cys5() }),
+	cys6() }),
+	cys7() }),
+	cys8() }),
+	cys9() }),
+	cys10() }),
+	cys11() }),
+	cys12() }),
+	cys13() });
+	
 
 #ifdef GEN_MESHES
 	// Verify that the object is correct
-	//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
-	//igl::writeOBJ("csgexpr2_mesh.obj", mesh.vertices, mesh.indices);
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("csgexpr2_mesh.obj", mesh.vertices, mesh.indices);
 
 	//writePointCloud("node.xyz", computePointCloud(node, CSGNodeSamplingParams(0.2, 0.5, 0.0)));
 #endif
@@ -512,6 +513,16 @@ TEST(CSGExpr2)
 	const bool use_diff_op = true;
 
 	auto params = get_std_ga_params();
+
+	auto ga_opt_node = optimize_with_ga(inflated_node, params, std::cout).node;
+	
+	writeNode(ga_opt_node, "ga_opt_node.gv");
+
+#ifdef GEN_MESHES
+	mesh = lmu::computeMesh(ga_opt_node, Eigen::Vector3i(200, 200, 200));
+	igl::writeOBJ("ga_opt_node_mesh.obj", mesh.vertices, mesh.indices);
+
+#endif
 /*
 
 
@@ -526,7 +537,7 @@ TEST(CSGExpr2)
 #ifdef GEN_MESHES
 	mesh = lmu::computeMesh(opt_node, Eigen::Vector3i(200, 200, 200));
 	igl::writeOBJ("csgexpr2_decomp_mesh.obj", mesh.vertices, mesh.indices);
-#endif*/
+#endif
 
 
 	// GA + remove redundancy
@@ -542,25 +553,34 @@ TEST(CSGExpr2)
 	mesh = lmu::computeMesh(red_opt_node_ga, Eigen::Vector3i(200, 200, 200));
 	igl::writeOBJ("csgexpr2_red_ga_mesh.obj", mesh.vertices, mesh.indices);
 #endif
+*/
 
-/*
+
 	// Clustering + GA 
-	auto dom_prims = find_dominating_prims(inflated_node, sampling);
-	auto opt_node_cluster = apply_per_cluster_optimization
-	(
-		cluster_with_dominating_prims(inflated_node, dom_prims),
-		[&inflated_node](const PrimitiveCluster& c) { return optimize_with_ga(inflated_node, get_std_ga_params(), std::cout, c).node; },
-		union_merge
-	);
+/*	auto dom_prims = find_dominating_prims(inflated_node, sampling);
 
-	auto red_opt_node = remove_redundancies(opt_node_cluster, sampling);
-	writeNode(red_opt_node, "red_cluster_ga_optim.gv");
+	std::cout << "DOM PRIMS: " << std::endl;
+	for (const auto& dp : dom_prims)
+	{
+		std::cout << "DP: " << dp->name() << std::endl;
+	}
+*/
+
+	//auto opt_node_cluster = apply_per_cluster_optimization
+	//(
+	//	cluster_with_dominating_prims(inflated_node, dom_prims),
+	//	[&inflated_node](const PrimitiveCluster& c) { return optimize_with_ga(inflated_node, get_std_ga_params(), std::cout, c).node; },
+	//	union_merge
+	//);
+
+	//auto red_opt_node = remove_redundancies(opt_node_cluster, sampling);
+	//writeNode(red_opt_node, "red_cluster_ga_optim.gv");
 
 #ifdef GEN_MESHES
-	mesh = lmu::computeMesh(red_opt_node, Eigen::Vector3i(200, 200, 200));
-	igl::writeOBJ("csgexpr2_red_cluster_ga_mesh.obj", mesh.vertices, mesh.indices);
+	//auto mesh = lmu::computeMesh(red_opt_node, Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("csgexpr2_red_cluster_ga_mesh.obj", mesh.vertices, mesh.indices);
 #endif
-*/
+
 }
 
 

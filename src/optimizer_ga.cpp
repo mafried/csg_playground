@@ -86,10 +86,12 @@ private:
 struct CSGNodeCreator
 {
 	CSGNodeCreator(const CSGNode& input_node, const std::vector<ImplicitFunctionPtr>& primitives, const CreatorParams& params) :
+		input_node(input_node),
 		primitives(primitives.empty() ? lmu::allDistinctFunctions(input_node) : primitives),
 		params(params),
 		max_tree_depth(depth(input_node))
 	{
+		_rndEngine.seed(_rndDevice());
 	}
 
 	CSGNode mutate(const CSGNode& node) const
@@ -151,7 +153,29 @@ struct CSGNodeCreator
 
 	CSGNode create() const
 	{
-		return create(max_tree_depth);
+		auto node = CSGNode::invalidNode;
+
+		std::discrete_distribution<> d(params.initial_population_dist.begin(), params.initial_population_dist.end());
+		switch (d(_rndEngine))
+		{
+		case 0:
+			create(node, max_tree_depth, 0);
+			std::cout << "create" << std::endl;
+			break;
+		case 1:
+			node = input_node;
+			std::cout << "take input node." << std::endl;
+			break;
+		case 2:
+			node = mutate(input_node);
+			std::cout << "take mutated input node." << std::endl;
+			break;
+		default:
+			std::cerr << "Creator: No strategy for CSGNode creation available." << std::endl;
+			break;
+		}
+
+		return node;
 	}
 
 	CSGNode create(int maxDepth) const
@@ -220,6 +244,8 @@ private:
 	CreatorParams params;
 	int max_tree_depth;
 	std::vector<ImplicitFunctionPtr> primitives;
+	CSGNode input_node;
+
 	mutable std::default_random_engine _rndEngine;
 	mutable std::random_device _rndDevice;
 };
