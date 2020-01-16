@@ -1027,7 +1027,7 @@ double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 }
 
 inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d & transform, double radius, double height, const std::string & name) :
-	ImplicitFunction(transform, Mesh(), name),
+	ImplicitFunction(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
 	_radius(radius),
 	_height(height)
 {
@@ -1079,7 +1079,7 @@ inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d & transform, double rad
 }
 
 inline lmu::IFBox::IFBox(const Eigen::Affine3d & transform, const Eigen::Vector3d & size, int numSubdivisions, const std::string & name, double displacement) :
-	ImplicitFunction(transform, Mesh(), name),
+	ImplicitFunction(transform, createBox(transform, size, numSubdivisions), name),
 	_size(size),
 	_displacement(displacement),
 	_numSubdivisions(numSubdivisions)

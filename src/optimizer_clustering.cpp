@@ -81,9 +81,9 @@ std::vector<lmu::PrimitiveCluster> lmu::cluster_with_dominating_prims(const CSGN
 		const Graph* g;
 		const std::vector<lmu::ImplicitFunctionPtr>* pis;
 
-	} predicate{ &graph, &dom_prims };
+	} predicate{ &prunedGraph, &dom_prims };
 
-	boost::filtered_graph<GraphStructure, Predicate, Predicate> fg(graph.structure, predicate, predicate);
+	boost::filtered_graph<GraphStructure, Predicate, Predicate> fg(prunedGraph.structure, predicate, predicate);
 
 	lmu::Graph newGraph;
 	boost::copy_graph(fg, newGraph.structure);
