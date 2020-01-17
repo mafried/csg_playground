@@ -5,10 +5,10 @@
 bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLookup& esLookup)
 {
 	// Check if lookup contains value for node already.
-	//size_t node_hash = n.hash(0);
-	//auto it = esLookup.find(node_hash);
-	//if (it != esLookup.end())
-	//	return it->second;
+	size_t node_hash = n.hash(0);
+	auto it = esLookup.find(node_hash);
+	if (it != esLookup.end())
+		return it->second;
 
 	lmu::AABB aabb = aabb_from_node(n);
 	Eigen::Vector3d min = aabb.c - aabb.s; 
@@ -17,7 +17,7 @@ bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLook
 	bool is_empty = _is_empty_set(n, sampling_grid_size, min, max);
 
 	// Store in lookup table.
-	//esLookup[node_hash] = is_empty;
+	esLookup[node_hash] = is_empty;
 
 	return is_empty; 
 }
@@ -29,7 +29,8 @@ bool do_not_overlap(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampl
 
 bool are_same(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
 {
-	return is_empty_set(lmu::opDiff({ n1,n2 }), sampling_grid_size, esLookup);
+	return is_empty_set(lmu::opDiff({ n1,n2 }), sampling_grid_size, esLookup) &&
+		is_empty_set(lmu::opDiff({ n2,n1 }), sampling_grid_size, esLookup);
 }
 
 bool has_empty_marker(const lmu::CSGNode& n)
@@ -46,6 +47,11 @@ bool is_valid_op(const lmu::CSGNode& n)
 {
 	return n.isValid() && n.type() == lmu::CSGNodeType::Operation && n.operationType() != lmu::CSGNodeOperationType::Noop &&
 		n.childsCRef().size() >= std::get<0>(n.numAllowedChilds()) && n.childsCRef().size() <= std::get<1>(n.numAllowedChilds());
+}
+
+void p(const std::string& str)
+{
+	std::cout << str << std::endl;
 }
 
 bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
@@ -65,17 +71,17 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		const auto& op2 = n.childsCRef()[1];
 
-		if (has_empty_marker(op1) || has_empty_marker(op2)) n = empty_set;
+		if (has_empty_marker(op1) || has_empty_marker(op2)) { p("I:ES"); n = empty_set; }
 
-		else if (has_all_marker(op1)) n = op2;
+		else if (has_all_marker(op1)) { p("I:HAM1"); n = op2; }
 
-		else if (has_all_marker(op2)) n = op1;
+		else if (has_all_marker(op2)) { p("I:HAM2"); n = op1; }
 
-		else if (are_same(op1, op2, sampling_grid_size, esLookup)) n = op1;
+		else if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("I:AS"); n = op1; }
 
-		else if (do_not_overlap(op1, op2, sampling_grid_size, esLookup)) n = empty_set;
+		else if (do_not_overlap(op1, op2, sampling_grid_size, esLookup)) { p("I:DNO"); n = empty_set; }
 
-		else something_has_changed = false;
+		else { p("I:NOTHING");  something_has_changed = false; }
 
 		break;
 	}
@@ -84,19 +90,19 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		const auto& op2 = n.childsCRef()[1];
 
-		if (has_empty_marker(op1) && has_empty_marker(op2)) n = empty_set;
+		if (has_empty_marker(op1) && has_empty_marker(op2)) { p("U:ES"); n = empty_set; }
 
-		else if (has_empty_marker(op1)) n = op2; 
+		else if (has_empty_marker(op1)) { p("U:ES1"); n = op2; }
 
-		else if (has_empty_marker(op2)) n = op1;
+		else if (has_empty_marker(op2)) { p("U:ES2"); n = op1; }
 
-		else if (has_all_marker(op1)) n = all;
+		else if (has_all_marker(op1)) { p("U:HAM1"); n = all; }
 
-		else if (has_all_marker(op2)) n = all;
+		else if (has_all_marker(op2)) { p("U:HAM2"); n = all; }
 
-		else if (are_same(op1, op2, sampling_grid_size, esLookup)) n = op1;
+		else if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("U:AS"); n = op1; }
 
-		else something_has_changed = false;
+		else { p("U:NOTHING");  something_has_changed = false; }
 
 		break;
 	}
@@ -105,17 +111,17 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		const auto& op2 = n.childsCRef()[1];
 
-		if (are_same(op1, op2, sampling_grid_size, esLookup)) n = empty_set;
+		if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("D:AS"); n = empty_set; }
 
-		else if (has_empty_marker(op1)) n = empty_set;
+		else if (has_empty_marker(op1)) { p("D:ES1"); n = empty_set; }
 
-		else if (has_empty_marker(op2)) n = op1;
+		else if (has_empty_marker(op2)) { p("D:ES2");  n = op1; }
 
-		else if (has_all_marker(op1)) n = lmu::opComp({ op2 });
+		else if (has_all_marker(op1)) { p("D:HAM1"); n = lmu::opComp({ op2 }); }
 
-		else if (has_all_marker(op2)) n = empty_set;
+		else if (has_all_marker(op2)) { p("D:HAM2"); n = empty_set; }
 		
-		else something_has_changed = false;
+		else { p("D:NOTHING");  something_has_changed = false; }
 
 		break;
 	}
@@ -124,6 +130,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		if (op1.operationType() == lmu::CSGNodeOperationType::Complement)
 		{
+			p("Complement Reduction");
 			n = op1.childsCRef()[0];
 		}
 		else 

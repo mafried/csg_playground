@@ -2,7 +2,7 @@
 
 int main()
 {
-	RUN_TEST(CSGExpr2);
+	RUN_TEST(OptimizerRedundancyTest);
 
 	return 0; 
 }

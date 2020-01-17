@@ -110,7 +110,33 @@ CSGNode cys13()
 {
 	return cys(1, 6, 0, 0, 4, "cyl13");
 }
-//
+
+CSGNode create_obj_0()
+{
+	return opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opDiff({
+		opUnion({
+		opUnion({ opUnion({ cube1(), cys1() }), cys2() }),
+		cys3() }),
+		cys4() }),
+		cys5() }),
+		cys6() }),
+		cys7() }),
+		cys8() }),
+		cys9() }),
+		cys10() }),
+		cys11() }),
+		cys12() }),
+		cys13() });
+}
 
 
 OptimizerGAParams get_std_ga_params()
@@ -147,14 +173,14 @@ OptimizerGAParams get_std_ga_params()
 }
 
 TEST(OptimizerRedundancyTest)
-{
-	const double sampling = 0.01;
-	EmptySetLookup esl;
-
+{	
 	//s1 does overlap with s2, s3 does neither overlap with s1 nor with s2.
 	auto s1 = sphere(0, 0, 0, 1);
 	auto s2 = sphere(1, 0, 0, 1, "s2");
 	auto s3 = sphere(3, 0, 0, 1);
+
+	const double sampling = 0.1;
+	EmptySetLookup esl;
 
 	ASSERT_TRUE(is_empty_set(opInter({ s1, s3 }), sampling, esl));
 	ASSERT_TRUE(!is_empty_set(opInter({ s1, s2 }), sampling, esl));
@@ -174,6 +200,37 @@ TEST(OptimizerRedundancyTest)
 	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({}), sampling)) == 1);
 	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({ s1 }), sampling)) == 2);
 	ASSERT_TRUE(numNodes(remove_redundancies(opComp({}), sampling)) == 1);
+
+	//=========================
+
+	auto node = create_obj_0();
+	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
+	auto red_opt_node = remove_redundancies(inflated_node, sampling);
+	
+	std::cout << "Node: " << numNodes(node) << std::endl;
+	std::cout << "Inflated Node: " << numNodes(inflated_node) << std::endl;
+	std::cout << "Optimized Node: " << numNodes(red_opt_node) << std::endl;
+
+	ASSERT_TRUE(numNodes(red_opt_node) < numNodes(inflated_node));
+	ASSERT_TRUE(
+		is_empty_set(opDiff({ node, red_opt_node }), sampling, esl) &&
+		is_empty_set(opDiff({ red_opt_node, node }), sampling, esl)
+	);
+
+	//=========================
+
+	node = opUnion({ cys1(), opDiff({opDiff({opUnion({cys1(), opDiff({opUnion({cys1(), opDiff({opUnion({opInter({cube1(), cys7()}),opDiff({opUnion({opInter({cube1(), opComp({cys11()})}), cys3()}), cys10()})}), cys4()})}), cys6()})}),cys5() }),cys8() }) });
+	red_opt_node = remove_redundancies(node, sampling);
+
+	std::cout << "Node: " << numNodes(node) << std::endl;
+	std::cout << "Optimized Node: " << numNodes(red_opt_node) << std::endl;
+	
+	//auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("csg_mesh.obj", mesh.vertices, mesh.indices);
+	
+	//mesh = lmu::computeMesh(red_opt_node, Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("csg_mesh_red.obj", mesh.vertices, mesh.indices);
+
 }
 
 TEST(OptimizerPISetTest)
@@ -465,29 +522,7 @@ TEST(CSGExpr2)
 	
 	//auto node = opUnion({ bb, cys10() });
 	
-	auto node = opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opDiff({
-	opUnion({
-	opUnion({ opUnion({ cube1(), cys1() }), cys2() }),
-	cys3() }),
-	cys4() }),
-	cys5() }),
-	cys6() }),
-	cys7() }),
-	cys8() }),
-	cys9() }),
-	cys10() }),
-	cys11() }),
-	cys12() }),
-	cys13() });
+	auto node = create_obj_0();
 	
 
 #ifdef GEN_MESHES
