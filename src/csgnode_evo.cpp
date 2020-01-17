@@ -24,7 +24,6 @@ double getDepthScore(const CSGNode& node)
 	return depth(node);
 }
 
-
 lmu::ParetoState::ParetoState() : 
 	_currentBestGeoScore(0.0),
 	_currentBestSizeScore(std::numeric_limits<double>::max()),

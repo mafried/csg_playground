@@ -29,6 +29,8 @@ bool do_not_overlap(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampl
 
 bool are_same(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
 {
+	//TODO: implement specific are_same sampling method for better speed.
+
 	return is_empty_set(lmu::opDiff({ n1,n2 }), sampling_grid_size, esLookup) &&
 		is_empty_set(lmu::opDiff({ n2,n1 }), sampling_grid_size, esLookup);
 }
