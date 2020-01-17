@@ -147,7 +147,7 @@ bool process_node_rec(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetL
 		bool something_has_changed = false;
 		for (auto& child : n.childsRef())
 		{
-			something_has_changed = process_node_rec(child, sampling_grid_size, esLookup);
+			something_has_changed |= process_node_rec(child, sampling_grid_size, esLookup);
 		}
 		return something_has_changed;
 	}	
