@@ -172,6 +172,14 @@ OptimizerGAParams get_std_ga_params()
 	return params;
 }
 
+TEST(JSONTest)
+{
+	auto node = create_obj_0();
+
+	toJSONFile(node, "test_node.json");
+
+}
+
 TEST(OptimizerRedundancyTest)
 {	
 	//s1 does overlap with s2, s3 does neither overlap with s1 nor with s2.

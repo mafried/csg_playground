@@ -114,6 +114,78 @@ CSGNode lmu::fromJSONFile(const std::string& file)
 	return fromJSON(json);
 }
 
+void lmu::toJSONFile(const CSGNode& node, const std::string& file)
+{
+	std::ofstream str(file);
+	json json = toJSON(node);
+	str << json;
+	str.close();
+}
+
+lmu::json lmu::toJSON(const lmu::CSGNode& node)
+{
+	lmu::json json;
+
+	switch (node.type())
+	{
+	case CSGNodeType::Geometry:
+	{
+		switch (node.function()->type())
+		{
+		case ImplicitFunctionType::Cylinder:
+			json["geo"] = "cylinder";
+			json["params"]["radius"] = dynamic_cast<IFCylinder*>(node.function().get())->radius();
+			json["params"]["height"] = dynamic_cast<IFCylinder*>(node.function().get())->height();
+
+			break;
+		case ImplicitFunctionType::Sphere:
+			json["geo"] = "sphere";
+			json["params"]["radius"] = dynamic_cast<IFSphere*>(node.function().get())->radius();
+			break;
+		case ImplicitFunctionType::Box:
+			json["geo"] = "cube";
+			json["params"]["radius"] = json::array();
+			json["params"]["radius"].push_back(dynamic_cast<IFBox*>(node.function().get())->size().x() / 2.0);
+			json["params"]["radius"].push_back(dynamic_cast<IFBox*>(node.function().get())->size().y() / 2.0);
+			json["params"]["radius"].push_back(dynamic_cast<IFBox*>(node.function().get())->size().z() / 2.0);
+			break;
+		}
+		
+		json["name"] = node.function()->name();
+
+		auto pos = node.function()->pos();
+		json["params"]["center"] = { pos.x(), pos.y(), pos.z() };
+		
+		auto rot = node.function()->transform().matrix().block<3,3>(0,0).eulerAngles(0, 1, 2);
+		json["params"]["rotation"] = { rot.x(), rot.y(), rot.z() };
+	
+		break;
+	}
+	case CSGNodeType::Operation:
+	{
+		switch (node.operationType())
+		{
+		case CSGNodeOperationType::Union:
+			json["op"] = "union";
+			break;
+		case CSGNodeOperationType::Intersection:
+			json["op"] = "intersect";
+			break;
+		case CSGNodeOperationType::Difference:
+			json["op"] = "subtract";
+			break;
+		}
+
+		for (const auto& c : node.childsCRef())
+			json["childs"].push_back(toJSON(c));
+
+		break;
+	}
+	}
+
+	return json;
+}
+
 lmu::AABB lmu::aabb_from_node(const lmu::CSGNode& n)
 {
 	return aabb_from_primitives(lmu::allDistinctFunctions(n));

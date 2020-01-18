@@ -1,4 +1,4 @@
-//#define TEST
+#define TEST
 
 #ifdef TEST 
 
@@ -6,7 +6,7 @@
 
 int main()
 {
-	RUN_TEST(OptimizerRedundancyTest);
+	RUN_TEST(JSONTest);
 
 	return 0; 
 }

@@ -39,6 +39,10 @@ namespace lmu
 	CSGNode fromJSON(const json& json);
 	CSGNode fromJSONFile(const std::string& file);
 
+	json toJSON(const CSGNode& node);
+	void toJSONFile(const CSGNode& node, const std::string& file);
+
+
 	lmu::AABB aabb_from_node(const lmu::CSGNode& n);
 	lmu::AABB aabb_from_primitives(const std::vector<lmu::ImplicitFunctionPtr>& prims);
 
