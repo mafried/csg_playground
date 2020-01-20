@@ -108,6 +108,10 @@ target_link_libraries(primgen csg_playground_lib  igl::core igl::cgal igl::core 
 add_executable(main_csg "src/main_csg.cpp")
 target_link_libraries(main_csg csg_playground_lib igl::core igl::cgal)
 
+# Program for csg inflation
+add_executable(main_inf "src/main_inf.cpp")
+target_link_libraries(main_inf csg_playground_lib igl::core igl::cgal)
+
 # Program for csg reconstruction with gui
 if(LIBIGL_WITH_VIEWER AND LIBIGL_WITH_OPENGL AND LIBIGL_WITH_OPENGL_GLFW)
 	add_executable(main "src/main.cpp")

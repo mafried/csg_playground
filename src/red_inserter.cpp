@@ -6,12 +6,33 @@
 
 using namespace lmu;
 
+std::ostream& lmu::operator <<(std::ostream& stream, const lmu::InserterType& it)
+{
+	std::string it_str;
+	switch (it)
+	{
+	case InserterType::SubtreeCopy:
+		it_str = "Subtree Copy";
+		break;
+	case InserterType::DoubleNegation:
+		it_str = "Double Negation";
+		break;
+
+	}
+
+	stream << it_str;
+
+	return stream;
+}
+
 Inserter lmu::inserter(InserterType type, double probability)
 {
 	switch (type)
 	{
 	case InserterType::SubtreeCopy:
 		return Inserter(std::make_shared<SubtreeCopyInserter>(), probability);
+	case InserterType::DoubleNegation:
+		return Inserter(std::make_shared<DoubleNegationInserter>(), probability);
 	}
 }
 
@@ -61,5 +82,21 @@ std::shared_ptr<IInserter> lmu::SubtreeCopyInserter::clone() const
 
 InserterType lmu::SubtreeCopyInserter::type() const
 {
-	return InserterType();
+	return InserterType::SubtreeCopy;
+}
+
+
+void lmu::DoubleNegationInserter::inflate(CSGNode & node) const
+{	
+	node = opComp({ opComp({ node }) });
+}
+
+std::shared_ptr<IInserter> lmu::DoubleNegationInserter::clone() const
+{
+	return std::make_shared<DoubleNegationInserter>(*this);
+}
+
+InserterType lmu::DoubleNegationInserter::type() const
+{
+	return InserterType::DoubleNegation;
 }

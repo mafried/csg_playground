@@ -10,9 +10,11 @@ namespace lmu
 
 	enum class InserterType
 	{
-		SubtreeCopy
+		SubtreeCopy,
+		DoubleNegation
 	};
-
+	std::ostream& operator <<(std::ostream& stream, const InserterType& it);
+	
 	struct IInserter
 	{
 		virtual void inflate(CSGNode& node) const = 0;
@@ -74,6 +76,13 @@ namespace lmu
 	};
 
 	struct SubtreeCopyInserter : IInserter
+	{
+		virtual void inflate(CSGNode& node) const override;
+		virtual std::shared_ptr<IInserter> clone() const override;
+		virtual InserterType type() const override;
+	};
+
+	struct DoubleNegationInserter : IInserter
 	{
 		virtual void inflate(CSGNode& node) const override;
 		virtual std::shared_ptr<IInserter> clone() const override;
