@@ -111,11 +111,13 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vecto
 	CITS cits;
 	cits.dnf.functions = prims;
 
+	std::cout << "# Clauses: " << clauses.size() << std::endl;
+
 	//Remove geometrically redundant cits.
 	int i = 0;
 	for (const auto& cl : clauses)
 	{
-		int j = 0;
+		/*int j = 0;
 		bool is_redundant = false;
 		for (const auto& cr : clauses)
 		{
@@ -129,10 +131,10 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vecto
 		}
 		if (!is_redundant)
 		{
-			cits.points.push_back(cl.p);
+		*/	cits.points.push_back(cl.p);
 			cits.dnf.clauses.push_back(cl.clause);
-		}
-		i++;
+		/*}
+		i++;*/
 	}
 	
 	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
@@ -179,9 +181,11 @@ lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, dou
 	int num_removed = 0;
 	int available_literals = std::count_if(c.literals.begin(), c.literals.end(), [](bool available) {return available; });
 
-	//std::cout << "pi clause: " << c << " " << available_literals << std::endl;
+	std::cout << "Clause: " << c << " " << available_literals << std::endl;
 	for (int i = 0; i < c.size(); ++i)
 	{
+		std::cout << (i+1) << " of " << c.size() << std::endl;
+
 		if (!prime_clause.literals[i])
 			continue;
 
@@ -203,12 +207,15 @@ lmu::DNF lmu::extract_prime_implicants(const CITS& cits, double sampling_grid_si
 {
 	DNF prime_implicants;
 
+
 	std::unordered_set<Clause, ClauseHash, ClauseEqual> prime_clauses;
 	lmu::EmptySetLookup esLookup;
 
+	int i = 0;
 	for (const auto& clause : cits.dnf.clauses)
 	{
-		prime_clauses.insert(create_prime_clause(clause, cits, sampling_grid_size, esLookup));
+		std::cout << "Clause " << (++i) << " of " << cits.dnf.clauses.size() << std::endl;
+		prime_clauses.insert(create_prime_clause(clause, cits, sampling_grid_size, esLookup));	
 	}
 
 	prime_implicants.clauses = std::vector<lmu::Clause>(prime_clauses.begin(), prime_clauses.end());
@@ -240,11 +247,21 @@ std::vector<std::unordered_set<int>> lmu::convert_pis_to_cit_indices(const DNF& 
 	return cit_indices_vec;
 }
 
+//#include "mesh.h"
+//#include <igl/writeOBJ.h>
+
 lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	CITSets sets;
 
 	sets.cits = generate_cits(n, sampling_grid_size, primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
+	
+	//writeNode(DNFtoCSGNode(sets.cits.dnf), "test_test_test.gv");
+	//toJSONFile(DNFtoCSGNode(sets.cits.dnf), "test_test_test.json");
+	//auto mesh = lmu::computeMesh(DNFtoCSGNode(sets.cits.dnf), Eigen::Vector3i(200, 200, 200));
+	//igl::writeOBJ("test_test_test.obj", mesh.vertices, mesh.indices);
+	//std::cout << "NOW" << std::endl;
+
 	sets.prime_implicants = extract_prime_implicants(sets.cits, sampling_grid_size);
 	sets.pis_as_cit_indices = convert_pis_to_cit_indices(sets.prime_implicants, sets.cits);
 	

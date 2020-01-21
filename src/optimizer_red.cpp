@@ -213,3 +213,31 @@ lmu::CSGNode lmu::remove_redundancies(const CSGNode& node, double sampling_grid_
 	}
 	return opt_node;
 }
+
+void transform_to_diffs_rec(lmu::CSGNode& node)
+{
+	if (node.operationType() == lmu::CSGNodeOperationType::Intersection)
+	{
+		for (int i = 0; i < node.childsCRef().size(); ++i)
+		{
+			if (node.childsCRef()[i].operationType() == lmu::CSGNodeOperationType::Complement)
+			{
+				node = lmu::opDiff({ node.childsCRef()[1 - i], node.childsCRef()[i].childsCRef()[0] });				
+			}			
+		}
+	}
+
+	for (int i = 0; i < node.childsCRef().size(); ++i)
+	{
+		transform_to_diffs_rec(node.childsRef()[i]);
+	}
+}
+
+lmu::CSGNode lmu::transform_to_diffs(const CSGNode& node)
+{
+	auto opt_node = node;
+
+	transform_to_diffs_rec(opt_node);
+	
+	return opt_node;
+}

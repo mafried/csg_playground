@@ -32,7 +32,7 @@ int lmu::PipelineRunner::run()
 	auto node = opNo();
 
 	// Load CSG tree.
-	std::cout << "Load CSG tree..." << std::endl;
+	std::cout << "Load CSG tree from '" << pp.tree_file << "'..." << std::endl;
 	{
 		try
 		{
@@ -106,18 +106,24 @@ int lmu::PipelineRunner::run()
 				auto sp = read_opt_sampling_params(params);
 				opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size,
 					PythonInterpreter(sp.python_interpreter_path));
+
+				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
 			}
 			else if (pp.optimizer == "Sampling.QuineMcCluskey")
 			{
 				auto sp = read_opt_sampling_params(params);
 				opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_SIMPLIFY_LOGIC,
 					PythonInterpreter(sp.python_interpreter_path));
+
+				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
 			}
 			else if (pp.optimizer == "Sampling.Espresso")
 			{
 				auto sp = read_opt_sampling_params(params);
 				opt_node = optimize_with_python(node, SimplifierMethod::ESPRESSO,
 					PythonInterpreter(sp.python_interpreter_path));
+
+				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
 			}
 			else
 			{

@@ -12,9 +12,11 @@ struct CSGNodeRanker;
 //using Rank = double;
 struct Rank
 {
-	Rank(double score, double geo_score) :
+	Rank(double score, double geo_score, double prox_score, double size_score) :
 		score(score),
-		geo_score(geo_score)
+		geo_score(geo_score),
+		prox_score(prox_score),
+		size_score(size_score)
 	{
 	}
 
@@ -26,6 +28,8 @@ struct Rank
 
 	double score;
 	double geo_score; 
+	double prox_score;
+	double size_score;
 	
 	friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.score < rhs.score; }
 	friend inline bool operator> (const Rank& lhs, const Rank& rhs) { return rhs < lhs; }
@@ -37,7 +41,7 @@ struct Rank
 
 std::ostream& operator<<(std::ostream& out, const Rank& r)
 {
-	out << "score: " << r.score << " geo: " << r.geo_score;
+	out << "score: " << r.score << " geo: " << r.geo_score << " prox: " << r.prox_score << " size: " << r.size_score;
 	return out;
 }
 
@@ -227,16 +231,16 @@ struct CSGNodeRanker
 	{
 		auto geo_score = compute_geo_score(node) / input_node_geo_score;
 
-		auto prox_score = compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
+		auto prox_score = params.prox_score_weight == 0.0 ? 0.0 : compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
 
 		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
 		
-		std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
+		//std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
 
 		return Rank(
 			params.geo_score_weight * geo_score + 
 			params.prox_score_weight * prox_score + 
-			params.size_score_weight * size_score, geo_score);
+			params.size_score_weight * size_score, geo_score, prox_score, size_score);
 	}
 
 	std::string info() const
