@@ -180,6 +180,38 @@ TEST(JSONTest)
 
 }
 
+TEST(DistributiveInserterTest)
+{
+	DistributiveInserter inserter;
+	const double sampling = 0.1;
+	EmptySetLookup esl;
+
+	auto s1 = sphere(0, 0, 0, 1, "s1");
+	auto s2 = sphere(1, 0, 0, 1, "s2");
+	auto s3 = sphere(3, 0, 0, 1, "s3");
+	
+	auto node_1 = opInter({ s1, opUnion({s2,s3}) });
+	auto node_1_pre = node_1;
+	auto node_2 = opUnion({ s1, opInter({ s2,s3 }) });
+	auto node_2_pre = node_2;
+
+	inserter.inflate(node_1);
+	inserter.inflate(node_2);
+
+	ASSERT_TRUE(
+		is_empty_set(opDiff({ node_1, node_1_pre }), sampling, esl) &&
+		is_empty_set(opDiff({ node_1_pre, node_1 }), sampling, esl)
+	);
+
+	ASSERT_TRUE(
+		is_empty_set(opDiff({ node_2, node_2_pre }), sampling, esl) &&
+		is_empty_set(opDiff({ node_2_pre, node_2 }), sampling, esl)
+	);
+
+	writeNode(node_1, "inf_union.gv");
+	writeNode(node_2, "inf_inter.gv");
+}
+
 TEST(OptimizerRedundancyTest)
 {	
 	//s1 does overlap with s2, s3 does neither overlap with s1 nor with s2.
@@ -480,6 +512,7 @@ TEST(CSGExpr1)
 
 	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
 
+	std::cout << "EXP: " << espresso_expression(node) << std::endl;
 
 	// artificially create a more complex expression
 	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });

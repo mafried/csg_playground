@@ -231,6 +231,10 @@ std::string lmu::espresso_expression(const CSGNode& n)
 		break;
 	case CSGNodeOperationType::Complement:
 		prefix = "~";
+		break;
+	case CSGNodeOperationType::Difference:
+		op = "& ~";
+		break;
 	}
 
 	ss << prefix;

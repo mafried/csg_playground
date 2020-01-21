@@ -122,7 +122,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 		else if (has_all_marker(op1)) { p("D:HAM1"); n = lmu::opComp({ op2 }); }
 
 		else if (has_all_marker(op2)) { p("D:HAM2"); n = empty_set; }
-		
+
 		else { p("D:NOTHING");  something_has_changed = false; }
 
 		break;
@@ -135,10 +135,10 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 			p("Complement Reduction");
 			n = op1.childsCRef()[0];
 		}
-		else 
+		else
 			something_has_changed = false;
 	}
-	default: 
+	default:
 		something_has_changed = false;
 	}
 
@@ -159,12 +159,51 @@ bool process_node_rec(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetL
 			something_has_changed |= process_node_rec(child, sampling_grid_size, esLookup);
 		}
 		return something_has_changed;
-	}	
+	}
+}
+
+lmu::CSGNode lmu::to_binary_tree(const CSGNode& node)
+{
+	auto new_node = node;
+
+	//std::cout << "#: " << new_node.childsCRef().size() << std::endl;
+	if (new_node.childsCRef().size() > 2)
+	{
+		if (new_node.operationType() != CSGNodeOperationType::Union &&
+			new_node.operationType() != CSGNodeOperationType::Intersection)
+		{
+			std::cerr << "To binary tree: Only union and intersection are allowed to have more than two children." << std::endl;
+			return new_node;
+		}
+
+		auto split_node =
+			new_node.operationType() == CSGNodeOperationType::Union ? opUnion() : opInter();
+	
+		split_node.childsRef() = std::vector<CSGNode>(
+			new_node.childsRef().begin()+1,
+			new_node.childsRef().end());
+
+		split_node = to_binary_tree(split_node);
+
+		new_node.childsRef() = {new_node.childsCRef()[0], split_node };
+	}
+	else
+	{
+		for (int i = 0; i < new_node.childsCRef().size(); ++i)
+		{
+			new_node.childsRef()[i] = to_binary_tree(new_node.childsRef()[i]);
+		}
+	}
+
+	return new_node;
 }
 
 lmu::CSGNode lmu::remove_redundancies(const CSGNode& node, double sampling_grid_size)
 {
-	auto opt_node = node;
+	auto opt_node = to_binary_tree(node);
+
+	//writeNode(opt_node, "test_test.gv");
+
 	bool something_has_changed = true;
 	EmptySetLookup esLookup;
 

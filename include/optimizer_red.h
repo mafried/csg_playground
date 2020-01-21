@@ -10,6 +10,8 @@ namespace lmu
 
 	using EmptySetLookup = ::std::unordered_map<size_t, bool>;
 
+	CSGNode to_binary_tree(const CSGNode& node);
+
 	CSGNode remove_redundancies(const CSGNode& node, double sampling_grid_size);
 	
 	bool is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLookup& esLookup);

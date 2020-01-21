@@ -11,13 +11,14 @@ namespace lmu
 	enum class InserterType
 	{
 		SubtreeCopy,
-		DoubleNegation
+		DoubleNegation,
+		Distributive
 	};
 	std::ostream& operator <<(std::ostream& stream, const InserterType& it);
 	
 	struct IInserter
 	{
-		virtual void inflate(CSGNode& node) const = 0;
+		virtual bool inflate(CSGNode& node) const = 0;
 		virtual std::shared_ptr<IInserter> clone() const = 0;
 		virtual InserterType type() const = 0;
 	};
@@ -47,9 +48,9 @@ namespace lmu
 			return *this;
 		}
 
-		void inflate(CSGNode& node) const override
+		bool inflate(CSGNode& node) const override
 		{
-			inserter_ptr->inflate(node);
+			return inserter_ptr->inflate(node);
 		}
 		
 		std::shared_ptr<IInserter> clone() const override 
@@ -77,14 +78,21 @@ namespace lmu
 
 	struct SubtreeCopyInserter : IInserter
 	{
-		virtual void inflate(CSGNode& node) const override;
+		virtual bool inflate(CSGNode& node) const override;
 		virtual std::shared_ptr<IInserter> clone() const override;
 		virtual InserterType type() const override;
 	};
 
 	struct DoubleNegationInserter : IInserter
 	{
-		virtual void inflate(CSGNode& node) const override;
+		virtual bool inflate(CSGNode& node) const override;
+		virtual std::shared_ptr<IInserter> clone() const override;
+		virtual InserterType type() const override;
+	};
+
+	struct DistributiveInserter : IInserter
+	{
+		virtual bool inflate(CSGNode& node) const override;
 		virtual std::shared_ptr<IInserter> clone() const override;
 		virtual InserterType type() const override;
 	};

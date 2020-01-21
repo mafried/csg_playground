@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[])
 {
-	const auto num_inserter_types = 2;
+	const auto num_inserter_types = 3;
 
 	if (argc < 7) {
 		return 1;
@@ -67,6 +67,10 @@ int main(int argc, char *argv[])
 			 
 		std::cout << "Write tree to json..." << std::endl;
 		lmu::toJSONFile(out, out_file);
+		std::cout << "Done." << std::endl;
+
+		std::cout << "Write tree to gv..." << std::endl;
+		lmu::writeNode(out, out_file + ".gv");
 		std::cout << "Done." << std::endl;
 				
 		return 0;

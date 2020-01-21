@@ -151,6 +151,7 @@ lmu::json lmu::toJSON(const lmu::CSGNode& node)
 			break;
 		}
 		
+		std::cout << "NAME: " << node.function()->name() << std::endl;
 		json["name"] = node.function()->name();
 
 		auto pos = node.function()->pos();

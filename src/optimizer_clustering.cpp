@@ -157,7 +157,13 @@ lmu::PrimitiveCluster get_rest_prims(const lmu::PrimitiveCluster& base,
 {	
 	lmu::PrimitiveCluster rest;
 
-	std::set_difference(base.begin(), base.end(), minus.begin(), minus.end(),
+	auto sorted_base = base;
+	auto sorted_minus = minus;
+
+	std::sort(sorted_base.begin(), sorted_base.end());
+	std::sort(sorted_minus.begin(), sorted_minus.end());
+
+	std::set_difference(sorted_base.begin(), sorted_base.end(), sorted_minus.begin(), sorted_minus.end(),
 		std::inserter(rest, rest.begin()));
 
 	return rest;
@@ -308,7 +314,10 @@ lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampli
 		{
 			std::cout << "Remove redundancies." << std::endl;
 
+			writeNode(opt_node, "opt_node_" + std::to_string(numNodes(opt_node)) + ".gv");
+
 			opt_node = remove_redundancies(opt_node, sampling_grid_size);
+
 
 			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, optimizer);
 		}
