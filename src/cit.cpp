@@ -157,8 +157,12 @@ bool is_outside(const lmu::Clause& c, const lmu::CITS& cits, double sampling_gri
 	//ss << c << ".dot";
 	//lmu::writeNode(clause_node, ss.str());
 	
-	bool empty_set = lmu::is_empty_set(lmu::opDiff({ clause_node, model_node }), sampling_grid_size, esLookup);
-
+	//bool empty_set = false;
+	//for (int i = 0; i < 100; ++i)
+	//{
+		bool empty_set = lmu::is_empty_set(lmu::opDiff({ clause_node, model_node }), sampling_grid_size, esLookup);
+	//	std::cout << "Empty Set: " << empty_set << std::endl;
+	//}
 	//std::cout << c << " empty set: " << empty_set << std::endl;
 
 	bool outside = !empty_set;
@@ -206,17 +210,43 @@ lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, dou
 lmu::DNF lmu::extract_prime_implicants(const CITS& cits, double sampling_grid_size)
 {
 	DNF prime_implicants;
-
-
+	
 	std::unordered_set<Clause, ClauseHash, ClauseEqual> prime_clauses;
 	lmu::EmptySetLookup esLookup;
+
+	//std::vector<Clause> prims;
 
 	int i = 0;
 	for (const auto& clause : cits.dnf.clauses)
 	{
 		std::cout << "Clause " << (++i) << " of " << cits.dnf.clauses.size() << std::endl;
-		prime_clauses.insert(create_prime_clause(clause, cits, sampling_grid_size, esLookup));	
+		auto prim = create_prime_clause(clause, cits, sampling_grid_size, esLookup);
+		prime_clauses.insert(prim);	
+		//prims.push_back(prim);
 	}
+
+	/*std::cout << prime_clauses.size() << std::endl;
+	i = 0;
+	for (const auto& c : prims)
+	{
+		std::cout << "PRIM: ";
+		print_clause(std::cout, c, cits.dnf.functions, false); 
+		std::cout << " for Clause: ";
+		print_clause(std::cout, cits.dnf.clauses[i], cits.dnf.functions, false);
+		std::cout << std::endl;
+
+		i++;
+	}
+
+	for (const auto& c : prime_clauses)
+	{
+		std::cout << "FILTERED PRIM: ";
+		print_clause(std::cout, c, cits.dnf.functions, false);
+		std::cout << std::endl;
+	}
+	
+	std::cout << prims.size() << std::endl;
+	*/
 
 	prime_implicants.clauses = std::vector<lmu::Clause>(prime_clauses.begin(), prime_clauses.end());
 	prime_implicants.functions = cits.dnf.functions;
@@ -253,14 +283,15 @@ std::vector<std::unordered_set<int>> lmu::convert_pis_to_cit_indices(const DNF& 
 lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	CITSets sets;
-
-	sets.cits = generate_cits(n, sampling_grid_size, primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
 	
+	sets.cits = generate_cits(n, sampling_grid_size, primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
+
 	//writeNode(DNFtoCSGNode(sets.cits.dnf), "test_test_test.gv");
 	//toJSONFile(DNFtoCSGNode(sets.cits.dnf), "test_test_test.json");
 	//auto mesh = lmu::computeMesh(DNFtoCSGNode(sets.cits.dnf), Eigen::Vector3i(200, 200, 200));
 	//igl::writeOBJ("test_test_test.obj", mesh.vertices, mesh.indices);
 	//std::cout << "NOW" << std::endl;
+
 
 	sets.prime_implicants = extract_prime_implicants(sets.cits, sampling_grid_size);
 	sets.pis_as_cit_indices = convert_pis_to_cit_indices(sets.prime_implicants, sets.cits);
@@ -312,7 +343,9 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
 
 #include "optimizer_py.h"
 
-lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives)
+lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, 
+	const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives, 
+	std::ostream& report_stream)
 {
 	// Simple case.
 	if (primitives.size() == 1)
@@ -321,7 +354,8 @@ lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_gri
 	}
 
 	auto cit_sets = generate_cit_sets(node, sampling_grid_size, primitives);
-	
+	report_stream << cit_sets;
+
 	//Set to cover is {0,..., #sits-1}
 	std::unordered_set<int> cit_indices_to_cover;
 	for (int i = 0; i < cit_sets.cits.size(); ++i)
@@ -329,12 +363,12 @@ lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_gri
 
 	auto selected_cit_index_sets = interpreter.set_cover(cit_sets.pis_as_cit_indices, cit_indices_to_cover);
 
-	std::cout << "PI:" << std::endl;
+	report_stream << "Chosen Prime Implicants:" << std::endl;
 	for (const auto indices : selected_cit_index_sets)
 	{
-		std::cout << "{ ";
-		for (auto index : indices) std::cout << index << " ";
-		std::cout << "} ";
+		report_stream << "{ ";
+		for (auto index : indices) report_stream << index << " ";
+		report_stream << "} ";
 	}
 
 	DNF selected_prime_implicants;

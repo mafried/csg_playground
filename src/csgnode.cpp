@@ -470,18 +470,14 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 }
 
 std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode & node)
-{
-	std::unordered_set<ImplicitFunctionPtr> set;
+{	
 	std::vector<ImplicitFunctionPtr> vec;
-	
-	auto allGeomPtrs = allGeometryNodePtrs(node);
-	std::transform(allGeomPtrs.begin(), allGeomPtrs.end(), std::back_inserter(vec), [](const auto& p) { return p->function(); });
 
-	set.insert(vec.begin(), vec.end()); 
-	
-	vec.clear();
-
-	std::copy(set.begin(), set.end(), std::back_inserter(vec));
+	visit(node, [&vec](const CSGNode& n)
+	{
+		if (n.type() == CSGNodeType::Geometry)
+			vec.push_back(n.function());
+	});
 
 	return vec;
 }

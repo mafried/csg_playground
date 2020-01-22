@@ -37,6 +37,8 @@ int lmu::PipelineRunner::run()
 		try
 		{
 			node = fromJSONFile(pp.tree_file);
+
+			node = to_binary_tree(node);
 		}
 		catch (const std::exception& ex)
 		{
@@ -60,6 +62,8 @@ int lmu::PipelineRunner::run()
 	// Create output stat files.
 	std::cout << "Create optimizer stat files..." << std::endl;
 	std::ofstream opt_out(output_folder + "opt_output.txt");
+	opt_out << "Input size: " << numNodes(node) << std::endl;
+
 	std::ofstream timings(output_folder + "timings.txt");
 	TimeTicker ticker;
 	std::cout << "Done." << std::endl;
@@ -87,7 +91,7 @@ int lmu::PipelineRunner::run()
 
 		node = optimize_with_decomposition(node, pp.sampling_grid_size, true,
 			[&pp, this, &opt_out, &timings](const CSGNode& node, const PrimitiveCluster& prims)
-		{
+		{			
 			// Run Optimizer.
 			std::cout << "Optimize..." << std::endl;
 
@@ -105,7 +109,7 @@ int lmu::PipelineRunner::run()
 			{
 				auto sp = read_opt_sampling_params(params);
 				opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size,
-					PythonInterpreter(sp.python_interpreter_path));
+					PythonInterpreter(sp.python_interpreter_path), {}, opt_out);
 
 				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
 			}
@@ -137,6 +141,8 @@ int lmu::PipelineRunner::run()
 		});
 
 		timings << "Decomposition: " << ticker.tick() << std::endl;
+
+		opt_out << "Output size: " << numNodes(node) << std::endl;
 	}
 	catch (const std::exception& ex)
 	{

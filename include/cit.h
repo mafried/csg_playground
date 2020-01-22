@@ -36,7 +36,7 @@ namespace lmu
 	struct PythonInterpreter;
 
 	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, 
-		const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives = {});
+		const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives = {}, std::ostream& report_stream = std::cout);
 
 
 }
