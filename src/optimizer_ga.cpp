@@ -307,12 +307,47 @@ struct CSGNodePopulationManipulator
 				node.rank = ranker->rank(node.creature);
 			}
 		}
+
+		for (auto& node : population)
+		{
+			if (node.rank.geo_score == 1.0)
+			{
+				pareto_nodes.push_back(node);
+			}
+		}
+
+	}
+
+	CSGNode get_best()
+	{
+		CSGNode best = opNo(); 
+		double best_score = 0.0;
+
+		for (auto& node : pareto_nodes)
+		{
+			if (node.rank.score > best_score)
+				best = node.creature;
+		}
+
+		return best;
+	}
+
+	void save_pareto(std::ostream& s)
+	{
+		s << "PARETO" << std::endl;
+
+		for (auto& node : pareto_nodes)
+		{			
+			s << node.rank << std::endl;
+		}
 	}
 
 	std::string info() const
 	{
 		return "CSGNode Population Manipulator";
 	}
+
+	mutable std::vector<RankedCreature<CSGNode, Rank>> pareto_nodes;
 
 	double max_delta;
 	CSGNodeCreator* creator;
@@ -346,11 +381,11 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	CSGNodeGA ga;
 	auto res = ga.run(ga_params, t_selector, creator, ranker, stop_criterion, manipulator);
 
-	auto opt_res = OptimizerGAResult(res.population[0].creature);
-
+	auto opt_res = OptimizerGAResult(manipulator.get_best());
+	
 	res.statistics.save(report_stream, &opt_res.node);
 
-	ranker.rank(opt_res.node);
+	manipulator.save_pareto(report_stream);
 
 	return opt_res;
 }
