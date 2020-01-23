@@ -49,6 +49,8 @@ namespace lmu
 	bool _is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
 		const Eigen::Vector3d& min, const Eigen::Vector3d& max);
 
+	bool _is_empty_set(const lmu::CSGNode& n, const lmu::PointCloud& sampling_points);
+	
 	bool _is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::CSGNode& n, double sampling_grid_size,
 		const Eigen::Vector3d& min, const Eigen::Vector3d& max);
 

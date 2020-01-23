@@ -199,13 +199,13 @@ TEST(DistributiveInserterTest)
 	inserter.inflate(node_2);
 
 	ASSERT_TRUE(
-		is_empty_set(opDiff({ node_1, node_1_pre }), sampling, esl) &&
-		is_empty_set(opDiff({ node_1_pre, node_1 }), sampling, esl)
+		is_empty_set(opDiff({ node_1, node_1_pre }), sampling, empty_pc(), esl) &&
+		is_empty_set(opDiff({ node_1_pre, node_1 }), sampling, empty_pc(), esl)
 	);
 
 	ASSERT_TRUE(
-		is_empty_set(opDiff({ node_2, node_2_pre }), sampling, esl) &&
-		is_empty_set(opDiff({ node_2_pre, node_2 }), sampling, esl)
+		is_empty_set(opDiff({ node_2, node_2_pre }), sampling, empty_pc(), esl) &&
+		is_empty_set(opDiff({ node_2_pre, node_2 }), sampling, empty_pc(), esl)
 	);
 
 	writeNode(node_1, "inf_union.gv");
@@ -222,30 +222,30 @@ TEST(OptimizerRedundancyTest)
 	const double sampling = 0.1;
 	EmptySetLookup esl;
 
-	ASSERT_TRUE(is_empty_set(opInter({ s1, s3 }), sampling, esl));
-	ASSERT_TRUE(!is_empty_set(opInter({ s1, s2 }), sampling, esl));
+	ASSERT_TRUE(is_empty_set(opInter({ s1, s3 }), sampling, empty_pc(), esl));
+	ASSERT_TRUE(!is_empty_set(opInter({ s1, s2 }), sampling, empty_pc(), esl));
 	
 	auto node_with_redun = opUnion({ s2, opInter({ s1, s3 }) });
-	auto node_without_redun = remove_redundancies(node_with_redun, sampling);
+	auto node_without_redun = remove_redundancies(node_with_redun, sampling, empty_pc());
 	ASSERT_TRUE(
 		numNodes(node_without_redun) == 1,
 		node_without_redun.type() == CSGNodeType::Geometry,
 		node_without_redun.name() == "s2"
 	);
 
-	ASSERT_TRUE(numNodes(remove_redundancies(opUnion({}), sampling)) == 1);
-	ASSERT_TRUE(numNodes(remove_redundancies(opUnion({s1}), sampling)) == 2);
-	ASSERT_TRUE(numNodes(remove_redundancies(opInter({}), sampling)) == 1);
-	ASSERT_TRUE(numNodes(remove_redundancies(opInter({s1}), sampling)) == 2);
-	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({}), sampling)) == 1);
-	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({ s1 }), sampling)) == 2);
-	ASSERT_TRUE(numNodes(remove_redundancies(opComp({}), sampling)) == 1);
+	ASSERT_TRUE(numNodes(remove_redundancies(opUnion({}), sampling, empty_pc())) == 1);
+	ASSERT_TRUE(numNodes(remove_redundancies(opUnion({s1}), sampling, empty_pc())) == 2);
+	ASSERT_TRUE(numNodes(remove_redundancies(opInter({}), sampling, empty_pc())) == 1);
+	ASSERT_TRUE(numNodes(remove_redundancies(opInter({s1}), sampling, empty_pc())) == 2);
+	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({}), sampling, empty_pc())) == 1);
+	ASSERT_TRUE(numNodes(remove_redundancies(opDiff({ s1 }), sampling, empty_pc())) == 2);
+	ASSERT_TRUE(numNodes(remove_redundancies(opComp({}), sampling, empty_pc())) == 1);
 
 	//=========================
 
 	auto node = create_obj_0();
 	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
-	auto red_opt_node = remove_redundancies(inflated_node, sampling);
+	auto red_opt_node = remove_redundancies(inflated_node, sampling, empty_pc());
 	
 	std::cout << "Node: " << numNodes(node) << std::endl;
 	std::cout << "Inflated Node: " << numNodes(inflated_node) << std::endl;
@@ -253,14 +253,14 @@ TEST(OptimizerRedundancyTest)
 
 	ASSERT_TRUE(numNodes(red_opt_node) < numNodes(inflated_node));
 	ASSERT_TRUE(
-		is_empty_set(opDiff({ node, red_opt_node }), sampling, esl) &&
-		is_empty_set(opDiff({ red_opt_node, node }), sampling, esl)
+		is_empty_set(opDiff({ node, red_opt_node }), sampling, empty_pc(), esl) &&
+		is_empty_set(opDiff({ red_opt_node, node }), sampling, empty_pc(), esl)
 	);
 
 	//=========================
 
 	node = opUnion({ cys1(), opDiff({opDiff({opUnion({cys1(), opDiff({opUnion({cys1(), opDiff({opUnion({opInter({cube1(), cys7()}),opDiff({opUnion({opInter({cube1(), opComp({cys11()})}), cys3()}), cys10()})}), cys4()})}), cys6()})}),cys5() }),cys8() }) });
-	red_opt_node = remove_redundancies(node, sampling);
+	red_opt_node = remove_redundancies(node, sampling, empty_pc());
 
 	std::cout << "Node: " << numNodes(node) << std::endl;
 	std::cout << "Optimized Node: " << numNodes(red_opt_node) << std::endl;
@@ -282,7 +282,7 @@ TEST(OptimizerPISetTest)
 	auto s5 = sphere(2.5, 0, 0, 1, "s5");
 	auto s6 = sphere(0, 0, 0, 0.05, "s6");
 
-	CITSets sets = generate_cit_sets(opUnion({ s6, opUnion({opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 }) }), 0.02);
+	CITSets sets = generate_cit_sets(opUnion({ s6, opUnion({opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 }) }), 0.02, false);
 
 	std::cout << sets;
 }
@@ -302,11 +302,12 @@ TEST(OptimizerGA)
 		
 	//auto opt_node_ga = optimize_with_ga(node, params, std::cout).node;
 	
-	auto opt_node_rr = remove_redundancies(node, params.ranker_params.sampling_params.samplingStepSize);
+	auto opt_node_rr = remove_redundancies(node, params.ranker_params.sampling_params.samplingStepSize, empty_pc());
 	
 	PythonInterpreter interpreter(py_module_path);
 
-	auto opt_node_sc = optimize_pi_set_cover(opt_node_rr, params.ranker_params.sampling_params.samplingStepSize, interpreter);
+	auto opt_node_sc = optimize_pi_set_cover(opt_node_rr, params.ranker_params.sampling_params.samplingStepSize, 
+		false, interpreter);
 	
 	std::cout << "Node: " << numNodes(node) << " red: " << numNodes(opt_node_rr) << " sc: " << numNodes(opt_node_sc) << std::endl;
 
@@ -334,13 +335,13 @@ TEST(Cluster_Optimizer)
 	(
 		cluster_union_paths(node), 
 
-		[sampling_grid_size, &interpreter](const CSGNode& n) { return optimize_pi_set_cover(n, sampling_grid_size, interpreter); },
+		[sampling_grid_size, &interpreter](const CSGNode& n) { return optimize_pi_set_cover(n, sampling_grid_size, false, interpreter); },
 		/*[](const CSGNode& n) { return optimize_with_ga(n, get_std_ga_params(), std::cout).node; },*/
 
 		union_merge
 	);
 
-	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size);
+	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size, empty_pc());
 	
 	writeNode(red_opt_node, "red_opt_cluster.gv");
 }
@@ -373,7 +374,7 @@ TEST(Primitive_Cluster_Optimizer)
 
 	// TODO: GA: count only those points for ranking that are close to one of the primitives. 
 
-	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size);
+	auto red_opt_node = remove_redundancies(opt_node, sampling_grid_size, empty_pc());
 
 	writeNode(red_opt_node, "red_opt_cluster.gv");
 }
@@ -439,7 +440,7 @@ TEST(RedInserter)
 	const double sampling = 0.01;
 	EmptySetLookup esl;
 
-	ASSERT_TRUE(is_empty_set(opDiff({ node, inflated_node }), sampling, esl) && is_empty_set(opDiff({ inflated_node, node }), sampling, esl));
+	ASSERT_TRUE(is_empty_set(opDiff({ node, inflated_node }), sampling, empty_pc(), esl) && is_empty_set(opDiff({ inflated_node, node }), sampling, empty_pc(), esl));
 }
 
 TEST(DominantPrimDecomposer)
@@ -535,7 +536,7 @@ TEST(CSGExpr1)
 
 	// For comparison GA + remove redundancy
 	auto opt_node_ga = optimize_with_ga(inflated_node, params, std::cout).node;
-	auto red_opt_node_ga = remove_redundancies(opt_node_ga, sampling);
+	auto red_opt_node_ga = remove_redundancies(opt_node_ga, sampling, empty_pc());
 	writeNode(red_opt_node_ga, "ga_optim.gv");
 
 
@@ -548,7 +549,7 @@ TEST(CSGExpr1)
 		union_merge
 	);
 
-	auto red_opt_node = remove_redundancies(opt_node_cluster, sampling);
+	auto red_opt_node = remove_redundancies(opt_node_cluster, sampling, empty_pc());
 	writeNode(red_opt_node, "red_cluster_ga_optim.gv");
 }
 

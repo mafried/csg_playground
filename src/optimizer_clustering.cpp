@@ -183,7 +183,7 @@ boost::optional<DominantPrim> select_next_from(const lmu::CSGNode& node, Dominan
 		// Try to select a dominant primitive that is spatially connected to the existing node.
 		for (int i = 0; i < dom_prims.size(); ++i)
 		{
-			if (!is_empty_set(lmu::opInter({ node, lmu::geometry(dom_prims[i].first) }), sampling_grid_size, esl))
+			if (!is_empty_set(lmu::opInter({ node, lmu::geometry(dom_prims[i].first) }), sampling_grid_size, lmu::empty_pc(), esl))
 			{
 				auto res = dom_prims[i];
 				dom_prims.erase(dom_prims.begin() + i);
@@ -316,7 +316,7 @@ lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampli
 
 			writeNode(opt_node, "opt_node_" + std::to_string(numNodes(opt_node)) + ".gv");
 
-			opt_node = remove_redundancies(opt_node, sampling_grid_size);
+			opt_node = remove_redundancies(opt_node, sampling_grid_size, empty_pc());
 
 
 			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, optimizer);

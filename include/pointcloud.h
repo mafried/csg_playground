@@ -14,6 +14,8 @@ namespace lmu
   using PointCloud = Eigen::Matrix<double, Eigen::Dynamic, 6, Eigen::RowMajor>;
   using PointCloudWithLabels = Eigen::Matrix<double, Eigen::Dynamic, 7, Eigen::RowMajor>;
 
+  PointCloud empty_pc();
+
   PointCloud pointCloudFromVector(const std::vector<Eigen::Matrix<double, 1, 6>>& points);
   PointCloud mergePointClouds(const std::vector<PointCloud>& pointClouds);
 

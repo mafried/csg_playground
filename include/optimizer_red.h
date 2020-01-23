@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <unordered_map>
+#include "pointcloud.h"
 
 namespace lmu 
 {
@@ -12,11 +13,13 @@ namespace lmu
 
 	CSGNode to_binary_tree(const CSGNode& node);
 
-	CSGNode remove_redundancies(const CSGNode& node, double sampling_grid_size);
+	CSGNode remove_redundancies(const CSGNode& node, double sampling_grid_size,
+		const lmu::PointCloud& sampling_points);
 
 	CSGNode transform_to_diffs(const CSGNode& node);
 	
-	bool is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLookup& esLookup);
+	bool is_empty_set(const CSGNode& n, double sampling_grid_size, const lmu::PointCloud& sampling_points, 
+		EmptySetLookup& esLookup);
 }
 
 #endif

@@ -23,19 +23,27 @@ namespace lmu
 		std::vector<std::unordered_set<int>> pis_as_cit_indices;
 	};
 
-	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives);
+	enum class CITSGenerationOptions
+	{
+		INSIDE,
+		OUTSIDE
+	};
 
-	DNF extract_prime_implicants(const CITS& cits, double sampling_grid_size);
+	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size, CITSGenerationOptions options, 
+		const std::vector<ImplicitFunctionPtr>& primitives);
+
+	DNF extract_prime_implicants(const CITS& cits, const lmu::PointCloud& outside_points, double sampling_grid_size);
 
 	std::vector<std::unordered_set<int>> convert_pis_to_cit_indices(const DNF& prime_implicants, const CITS& cits);
 	
-	CITSets generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives = {});
+	CITSets generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size,  
+		bool use_cit_points_for_pi_extraction, const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 	std::ostream& operator <<(std::ostream& stream, const CITSets& c);
 
 	struct PythonInterpreter;
 
-	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, 
+	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, bool use_cit_points_for_pi_extraction,
 		const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives = {}, std::ostream& report_stream = std::cout);
 
 

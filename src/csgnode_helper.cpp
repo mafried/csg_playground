@@ -232,6 +232,17 @@ bool lmu::_is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
 		_is_empty_set(n, sampling_grid_size, min + Eigen::Vector3d(0, sh.y(), sh.z()), min + Eigen::Vector3d(sh.x(), s.y(), s.z()));
 }
 
+bool lmu::_is_empty_set(const lmu::CSGNode & n, const lmu::PointCloud& sp)
+{
+	for (int i = 0; i < sp.rows(); ++i)
+	{
+		Eigen::Vector3d p = sp.row(i).leftCols(3).transpose();
+		if (n.signedDistance(p) < 0.0)
+			return false;
+	}
+	return true;
+}
+
 bool lmu::_is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::CSGNode& n, double sampling_grid_size, const Eigen::Vector3d& min, const Eigen::Vector3d& max)
 {
 	if ((max - min).cwiseAbs().minCoeff() <= sampling_grid_size)

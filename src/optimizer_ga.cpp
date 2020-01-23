@@ -414,7 +414,7 @@ void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid
 		const auto& left = node.childsCRef()[0];
 		const auto& right = node.childsCRef()[1];
 
-		score += is_empty_set(opInter({ left, right }), sampling_grid_size, esLookup) ? 0.0 : 1.0;
+		score += is_empty_set(opInter({ left, right }), sampling_grid_size, lmu::empty_pc(), esLookup) ? 0.0 : 1.0;
 		
 		compute_local_proximity_score_rec(left, sampling_grid_size, score, esLookup);
 		compute_local_proximity_score_rec(right, sampling_grid_size, score, esLookup);

@@ -69,7 +69,8 @@ struct ClauseAndPointEqual
 	}
 };
 
-lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vector<ImplicitFunctionPtr>& primitives)
+lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOptions options, 
+	const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	auto prims = primitives.empty() ? lmu::allDistinctFunctions(n) : primitives;
 
@@ -91,7 +92,9 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vecto
 				Eigen::Vector3d p(x * sgs + min.x(), y * sgs + min.y(), z * sgs + min.z());
 				
 				double nd = n.signedDistance(p);				
-				if (nd >= 0.0) continue;
+				if ((options == CITSGenerationOptions::INSIDE && nd >= 0.0) || 
+					(options == CITSGenerationOptions::OUTSIDE && nd < 0.0)) 
+					continue;
 
 				lmu::Clause clause(prims.size());
 				int num_negations = 0;
@@ -146,40 +149,36 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, const std::vecto
 	return cits;
 }
 
-bool is_outside(const lmu::Clause& c, const lmu::CITS& cits, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+bool is_outside(const lmu::Clause& c, const lmu::CITS& cits, double sampling_grid_size,
+	const lmu::PointCloud& outside_points, lmu::EmptySetLookup& esLookup)
 {
 	auto clause_node = lmu::clauseToCSGNode(c, cits.dnf.functions);
-	auto model_node = lmu::DNFtoCSGNode(cits.dnf);
-	
-	//lmu::writeNode(model_node, "self.dot");
 
-	//std::stringstream ss;
-	//ss << c << ".dot";
-	//lmu::writeNode(clause_node, ss.str());
-	
-	//bool empty_set = false;
-	//for (int i = 0; i < 100; ++i)
-	//{
-		bool empty_set = lmu::is_empty_set(lmu::opDiff({ clause_node, model_node }), sampling_grid_size, esLookup);
-	//	std::cout << "Empty Set: " << empty_set << std::endl;
-	//}
-	//std::cout << c << " empty set: " << empty_set << std::endl;
+	if (outside_points.rows() != 0)
+	{
+		for (int i = 0; i < outside_points.rows(); ++i)
+		{
+			Eigen::Vector3d p = outside_points.row(i).leftCols(3).transpose();
+			std::cout << "P: " << p.transpose() << std::endl;
+			if (clause_node.signedDistance(p) < 0.0)
+				return true;
+		}
 
-	bool outside = !empty_set;
+		return false;
+	}
+	else
+	{
+		auto model_node = lmu::DNFtoCSGNode(cits.dnf);
 
-	
-	return outside;
-	//for (const auto& p : cits.points)
-	//	if (clause_node.signedDistance(p) > 0.0)
-	//	{
-	//		std::cout << c << " is outside." << clause_node.signedDistance(p) << std::endl;
-	//		return true;
-	//	}
+		bool empty_set = lmu::is_empty_set(lmu::opDiff({ clause_node, model_node }), sampling_grid_size,
+			lmu::empty_pc(), esLookup);
 
-	//return false;
+		return !empty_set;
+	}
 }
 
-lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, double sampling_grid_size, 
+	const lmu::PointCloud& outside_points, lmu::EmptySetLookup& esLookup)
 {
 	lmu::Clause prime_clause = c;
 	int num_removed = 0;
@@ -194,7 +193,8 @@ lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, dou
 			continue;
 
 		prime_clause.literals[i] = false;
-		if (is_outside(prime_clause, cits, sampling_grid_size, esLookup) || available_literals == num_removed + 1)
+		if (is_outside(prime_clause, cits, sampling_grid_size, outside_points, esLookup) || 
+			available_literals == num_removed + 1)
 		{
 			prime_clause.literals[i] = true;
 		}
@@ -207,47 +207,22 @@ lmu::Clause create_prime_clause(const lmu::Clause& c, const lmu::CITS& cits, dou
 	return prime_clause;
 }
 
-lmu::DNF lmu::extract_prime_implicants(const CITS& cits, double sampling_grid_size)
+lmu::DNF lmu::extract_prime_implicants(const CITS& cits, const lmu::PointCloud& outside_points, 
+	double sampling_grid_size)
 {
 	DNF prime_implicants;
 	
 	std::unordered_set<Clause, ClauseHash, ClauseEqual> prime_clauses;
 	lmu::EmptySetLookup esLookup;
 
-	//std::vector<Clause> prims;
-
 	int i = 0;
 	for (const auto& clause : cits.dnf.clauses)
 	{
 		std::cout << "Clause " << (++i) << " of " << cits.dnf.clauses.size() << std::endl;
-		auto prim = create_prime_clause(clause, cits, sampling_grid_size, esLookup);
+		auto prim = create_prime_clause(clause, cits, sampling_grid_size, outside_points, esLookup);
 		prime_clauses.insert(prim);	
-		//prims.push_back(prim);
-	}
-
-	/*std::cout << prime_clauses.size() << std::endl;
-	i = 0;
-	for (const auto& c : prims)
-	{
-		std::cout << "PRIM: ";
-		print_clause(std::cout, c, cits.dnf.functions, false); 
-		std::cout << " for Clause: ";
-		print_clause(std::cout, cits.dnf.clauses[i], cits.dnf.functions, false);
-		std::cout << std::endl;
-
-		i++;
-	}
-
-	for (const auto& c : prime_clauses)
-	{
-		std::cout << "FILTERED PRIM: ";
-		print_clause(std::cout, c, cits.dnf.functions, false);
-		std::cout << std::endl;
 	}
 	
-	std::cout << prims.size() << std::endl;
-	*/
-
 	prime_implicants.clauses = std::vector<lmu::Clause>(prime_clauses.begin(), prime_clauses.end());
 	prime_implicants.functions = cits.dnf.functions;
 
@@ -280,11 +255,13 @@ std::vector<std::unordered_set<int>> lmu::convert_pis_to_cit_indices(const DNF& 
 //#include "mesh.h"
 //#include <igl/writeOBJ.h>
 
-lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, const std::vector<ImplicitFunctionPtr>& primitives)
+lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, 
+	bool use_cit_points_for_pi_extraction, const std::vector<ImplicitFunctionPtr>& primitives)
 {
-	CITSets sets;
+	CITSets inside_sets;
 	
-	sets.cits = generate_cits(n, sampling_grid_size, primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
+	inside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::INSIDE,
+		primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
 
 	//writeNode(DNFtoCSGNode(sets.cits.dnf), "test_test_test.gv");
 	//toJSONFile(DNFtoCSGNode(sets.cits.dnf), "test_test_test.json");
@@ -292,11 +269,37 @@ lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_
 	//igl::writeOBJ("test_test_test.obj", mesh.vertices, mesh.indices);
 	//std::cout << "NOW" << std::endl;
 
+	std::cout << "OUTSIDE POINTS" << std::endl;
+	PointCloud outside_points; 
+	if (use_cit_points_for_pi_extraction)
+	{
+		CITSets outside_sets;
+		outside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::OUTSIDE,
+			primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
 
-	sets.prime_implicants = extract_prime_implicants(sets.cits, sampling_grid_size);
-	sets.pis_as_cit_indices = convert_pis_to_cit_indices(sets.prime_implicants, sets.cits);
+		std::vector<Eigen::Matrix<double, 1, 6>> sampling_points;		
+		for (const auto p : outside_sets.cits.points)
+		{
+			Eigen::Matrix<double, 1, 6> m;
+			m.row(0) << p.transpose(), 0, 0, 0;
+			sampling_points.push_back(m);
+		}
+
+		std::cout << "NUM: " << (outside_sets.cits.points.size() + inside_sets.cits.points.size()) << std::endl;
+
+		outside_points = pointCloudFromVector(sampling_points);
+
+		writePointCloudXYZ("test.xyz", outside_points);
+	}
+	else
+	{
+		outside_points = empty_pc();
+	}
 	
-	return sets;
+	inside_sets.prime_implicants = extract_prime_implicants(inside_sets.cits, outside_points, sampling_grid_size);
+	inside_sets.pis_as_cit_indices = convert_pis_to_cit_indices(inside_sets.prime_implicants, inside_sets.cits);
+	
+	return inside_sets;
 }
 
 std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
@@ -344,8 +347,8 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
 #include "optimizer_py.h"
 
 lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, 
-	const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives, 
-	std::ostream& report_stream)
+	bool use_cit_points_for_pi_extraction, const PythonInterpreter& interpreter, 
+	const std::vector<ImplicitFunctionPtr>& primitives, std::ostream& report_stream)
 {
 	// Simple case.
 	if (primitives.size() == 1)
@@ -353,7 +356,7 @@ lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_gri
 		return geometry(primitives[0]);
 	}
 
-	auto cit_sets = generate_cit_sets(node, sampling_grid_size, primitives);
+	auto cit_sets = generate_cit_sets(node, sampling_grid_size, use_cit_points_for_pi_extraction, primitives);
 	report_stream << cit_sets;
 
 	//Set to cover is {0,..., #sits-1}

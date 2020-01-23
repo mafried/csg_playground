@@ -71,7 +71,7 @@ int lmu::PipelineRunner::run()
 	// Remove Redundancies. 
 	std::cout << "Remove Redundancies..." << std::endl;	
 	ticker.tick();
-	node = remove_redundancies(node, pp.sampling_grid_size);
+	node = remove_redundancies(node, pp.sampling_grid_size, empty_pc());
 	timings << "Remove Redundancies: " << ticker.tick() << std::endl;
 	
 	if (pp.save_meshes)
@@ -103,15 +103,17 @@ int lmu::PipelineRunner::run()
 			{
 				opt_node = optimize_with_ga(node, read_opt_ga_params(params), opt_out, prims).node;
 
-				opt_node = remove_redundancies(opt_node, pp.sampling_grid_size);
+				//TODO: It might make sense to use the CIT points also for sampling here. 
+
+				opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
 			}
 			else if (pp.optimizer == "Sampling.SetCover")
 			{
 				auto sp = read_opt_sampling_params(params);
-				opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size,
+				opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size, sp.use_cit_points_for_pi_extraction,
 					PythonInterpreter(sp.python_interpreter_path), {}, opt_out);
 
-				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
+				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
 			}
 			else if (pp.optimizer == "Sampling.QuineMcCluskey")
 			{
@@ -119,7 +121,7 @@ int lmu::PipelineRunner::run()
 				opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_SIMPLIFY_LOGIC,
 					PythonInterpreter(sp.python_interpreter_path));
 
-				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
+				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
 			}
 			else if (pp.optimizer == "Sampling.Espresso")
 			{
@@ -127,7 +129,7 @@ int lmu::PipelineRunner::run()
 				opt_node = optimize_with_python(node, SimplifierMethod::ESPRESSO,
 					PythonInterpreter(sp.python_interpreter_path));
 
-				opt_node = lmu::to_binary_tree(transform_to_diffs(opt_node));
+				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
 			}
 			else
 			{
@@ -188,6 +190,7 @@ lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet
 lmu::SamplingParams lmu::PipelineRunner::read_opt_sampling_params(const ParameterSet & params)
 {
 	SamplingParams p;
+	p.use_cit_points_for_pi_extraction = params.getBool("Sampling", "UseCITPointsForPiExtraction", false);
 	p.sampling_grid_size = params.getDouble("Sampling", "SamplingGridSize", 0.1);
 	p.python_interpreter_path = params.getStr("Sampling", "PythonInterpreterPath", "");
 

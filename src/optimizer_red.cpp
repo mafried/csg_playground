@@ -2,7 +2,8 @@
 #include "csgnode.h"
 #include "csgnode_helper.h"
 
-bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLookup& esLookup)
+bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, const lmu::PointCloud& sampling_points, 
+	EmptySetLookup& esLookup)
 {
 	// Check if lookup contains value for node already.
 	size_t node_hash = n.hash(0);
@@ -14,7 +15,8 @@ bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLook
 	Eigen::Vector3d min = aabb.c - aabb.s; 
 	Eigen::Vector3d max = aabb.c + aabb.s;
 
-	bool is_empty = _is_empty_set(n, sampling_grid_size, min, max);
+	bool is_empty = sampling_points.rows() == 0 ? _is_empty_set(n, sampling_grid_size, min, max) :
+		_is_empty_set(n, sampling_points);
 
 	// Store in lookup table.
 	esLookup[node_hash] = is_empty;
@@ -22,17 +24,19 @@ bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, EmptySetLook
 	return is_empty; 
 }
 
-bool do_not_overlap(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+bool do_not_overlap(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, 
+	const lmu::PointCloud& sampling_points, lmu::EmptySetLookup& esLookup)
 {
-	return is_empty_set(lmu::opInter({ n1,n2 }), sampling_grid_size, esLookup);
+	return is_empty_set(lmu::opInter({ n1,n2 }), sampling_grid_size, sampling_points, esLookup);
 }
 
-bool are_same(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+bool are_same(const lmu::CSGNode& n1, const lmu::CSGNode& n2, double sampling_grid_size, 
+	const lmu::PointCloud& sampling_points, lmu::EmptySetLookup& esLookup)
 {
 	//TODO: implement specific are_same sampling method for better speed.
 
-	return is_empty_set(lmu::opDiff({ n1,n2 }), sampling_grid_size, esLookup) &&
-		is_empty_set(lmu::opDiff({ n2,n1 }), sampling_grid_size, esLookup);
+	return is_empty_set(lmu::opDiff({ n1,n2 }), sampling_grid_size, sampling_points, esLookup) &&
+		is_empty_set(lmu::opDiff({ n2,n1 }), sampling_grid_size, sampling_points, esLookup);
 }
 
 bool has_empty_marker(const lmu::CSGNode& n)
@@ -56,7 +60,8 @@ void p(const std::string& str)
 	std::cout << str << std::endl;
 }
 
-bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+bool process_node(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCloud& sp,
+	lmu::EmptySetLookup& esLookup)
 {
 	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
 	static auto const all = lmu::CSGNode(std::make_shared<lmu::NoOperation>("1"));
@@ -79,9 +84,9 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 
 		else if (has_all_marker(op2)) { p("I:HAM2"); n = op1; }
 
-		else if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("I:AS"); n = op1; }
+		else if (are_same(op1, op2, sampling_grid_size, sp, esLookup)) { p("I:AS"); n = op1; }
 
-		else if (do_not_overlap(op1, op2, sampling_grid_size, esLookup)) { p("I:DNO"); n = empty_set; }
+		else if (do_not_overlap(op1, op2, sampling_grid_size, sp, esLookup)) { p("I:DNO"); n = empty_set; }
 
 		else { p("I:NOTHING");  something_has_changed = false; }
 
@@ -102,7 +107,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 
 		else if (has_all_marker(op2)) { p("U:HAM2"); n = all; }
 
-		else if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("U:AS"); n = op1; }
+		else if (are_same(op1, op2, sampling_grid_size, sp, esLookup)) { p("U:AS"); n = op1; }
 
 		else { p("U:NOTHING");  something_has_changed = false; }
 
@@ -113,7 +118,7 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	{
 		const auto& op2 = n.childsCRef()[1];
 
-		if (are_same(op1, op2, sampling_grid_size, esLookup)) { p("D:AS"); n = empty_set; }
+		if (are_same(op1, op2, sampling_grid_size, sp, esLookup)) { p("D:AS"); n = empty_set; }
 
 		else if (has_empty_marker(op1)) { p("D:ES1"); n = empty_set; }
 
@@ -145,9 +150,10 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLooku
 	return something_has_changed;
 }
 
-bool process_node_rec(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetLookup& esLookup)
+bool process_node_rec(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCloud& sp, 
+	lmu::EmptySetLookup& esLookup)
 {
-	if (process_node(n, sampling_grid_size, esLookup))
+	if (process_node(n, sampling_grid_size, sp, esLookup))
 	{
 		return true;
 	}
@@ -156,7 +162,7 @@ bool process_node_rec(lmu::CSGNode& n, double sampling_grid_size, lmu::EmptySetL
 		bool something_has_changed = false;
 		for (auto& child : n.childsRef())
 		{
-			something_has_changed |= process_node_rec(child, sampling_grid_size, esLookup);
+			something_has_changed |= process_node_rec(child, sampling_grid_size, sp, esLookup);
 		}
 		return something_has_changed;
 	}
@@ -185,7 +191,7 @@ lmu::CSGNode lmu::to_binary_tree(const CSGNode& node)
 
 		split_node = to_binary_tree(split_node);
 
-		new_node.childsRef() = {new_node.childsCRef()[0], split_node };
+		new_node.childsRef() = { to_binary_tree(new_node.childsCRef()[0]), split_node };
 	}
 	else
 	{
@@ -195,10 +201,12 @@ lmu::CSGNode lmu::to_binary_tree(const CSGNode& node)
 		}
 	}
 
+	writeNode(new_node, "test.gv");
+
 	return new_node;
 }
 
-lmu::CSGNode lmu::remove_redundancies(const CSGNode& node, double sampling_grid_size)
+lmu::CSGNode lmu::remove_redundancies(const CSGNode& node, double sampling_grid_size, const lmu::PointCloud& sp)
 {
 	auto opt_node = to_binary_tree(node);
 
@@ -209,7 +217,7 @@ lmu::CSGNode lmu::remove_redundancies(const CSGNode& node, double sampling_grid_
 
 	while (something_has_changed)
 	{
-		something_has_changed = process_node_rec(opt_node, sampling_grid_size, esLookup);
+		something_has_changed = process_node_rec(opt_node, sampling_grid_size, sp, esLookup);
 	}
 	return opt_node;
 }

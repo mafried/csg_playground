@@ -16,6 +16,7 @@ namespace lmu
 
 	struct SamplingParams
 	{
+		bool use_cit_points_for_pi_extraction;
 		double sampling_grid_size;
 		std::string python_interpreter_path;
 	};

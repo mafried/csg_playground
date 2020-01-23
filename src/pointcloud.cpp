@@ -16,6 +16,11 @@
 #include <pcl/point_cloud.h>
 #include <pcl/octree/octree_search.h>
 
+lmu::PointCloud lmu::empty_pc()
+{
+	return PointCloud();
+}
+
 lmu::PointCloud lmu::pointCloudFromVector(const std::vector<Eigen::Matrix<double, 1, 6>>& points)
 {
 	PointCloud pc(points.size(), 6);
