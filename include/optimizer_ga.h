@@ -5,6 +5,12 @@
 
 namespace lmu 
 {
+	enum class GeoScoreStrategy
+	{
+		SURFACE_SAMPLES,
+		IN_OUT_SAMPLES
+	};
+
 	struct RankerParams
 	{
 		CSGNodeSamplingParams sampling_params;
@@ -17,6 +23,8 @@ namespace lmu
 		double size_score_weight; 
 
 		int max_sampling_points;
+			
+		GeoScoreStrategy geo_score_strat;
 	};
 
 	struct CreatorParams
@@ -65,7 +73,8 @@ namespace lmu
 
 	const double invalid_proximity_score = -1.0;
 
-	double compute_local_proximity_score(const CSGNode& node, double sampling_grid_size);
+	double compute_local_proximity_score(const CSGNode& node, double sampling_grid_size, 
+		const lmu::PointCloud& sampling_points);
 }
 
 #endif

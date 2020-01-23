@@ -388,8 +388,8 @@ TEST(Proximity_Score)
 
 	const double sampling_grid_size = 0.1;
 
-	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s2 }), sampling_grid_size) == 1.0);
-	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s3 }), sampling_grid_size) == 0.0);
+	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s2 }), sampling_grid_size, empty_pc()) == 1.0);
+	ASSERT_TRUE(compute_local_proximity_score(opUnion({ s1, s3 }), sampling_grid_size, empty_pc()) == 0.0);
 }
 
 TEST(Python_Parser)

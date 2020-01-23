@@ -210,6 +210,10 @@ lmu::OptimizerGAParams lmu::PipelineRunner::read_opt_ga_params(const ParameterSe
 	opt_ga_params.ga_params.tournament_k = p.getInt("GA", "TournamentK", 2);
 	opt_ga_params.ga_params.max_iterations = p.getInt("GA", "MaxIterations", 100);
 
+	opt_ga_params.ranker_params.geo_score_strat =
+		p.getStr("GA", "Ranker.GeoScoreStrategy", "Surface") == "Surface" ?
+		GeoScoreStrategy::SURFACE_SAMPLES : GeoScoreStrategy::IN_OUT_SAMPLES;
+
 	opt_ga_params.ranker_params.geo_score_weight = p.getDouble("GA", "Ranker.GeoScoreWeight", 20.0);
 	opt_ga_params.ranker_params.size_score_weight = p.getDouble("GA", "Ranker.SizeScoreWeight", 2.0);
 	opt_ga_params.ranker_params.prox_score_weight = p.getDouble("GA", "Ranker.ProxScoreWeight", 2.0);

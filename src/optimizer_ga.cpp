@@ -3,6 +3,7 @@
 #include "evolution.h"
 #include "pointcloud.h"
 #include "csgnode_helper.h"
+#include "cit.h"
 
 using namespace lmu;
 
@@ -218,12 +219,38 @@ private:
 
 struct CSGNodeRanker
 {
-	CSGNodeRanker(const CSGNode& input_node, const RankerParams& params) :
+	CSGNodeRanker(const CSGNode& input_node, const std::vector<ImplicitFunctionPtr>& primitives, 
+		const RankerParams& params) :
 		input_node(input_node),
-		input_node_pc(lmu::farthestPointSampling(lmu::computePointCloud(input_node, params.sampling_params), params.max_sampling_points)),
 		input_node_size(numNodes(input_node)),
 		params(params)
 	{
+		switch (params.geo_score_strat)
+		{
+		case GeoScoreStrategy::SURFACE_SAMPLES:
+			surface_pc = lmu::farthestPointSampling(
+				lmu::computePointCloud(input_node, params.sampling_params), params.max_sampling_points);
+
+			in_pc = empty_pc();
+			out_pc = empty_pc();
+			in_out_pc = empty_pc();
+			break;
+		case GeoScoreStrategy::IN_OUT_SAMPLES:
+			surface_pc = empty_pc();
+
+			out_pc = extract_points_from_cits(
+				generate_cits(input_node, params.sampling_params.samplingStepSize, 
+					CITSGenerationOptions::OUTSIDE, primitives));
+
+			in_pc = extract_points_from_cits(
+				generate_cits(input_node, params.sampling_params.samplingStepSize, 
+					CITSGenerationOptions::INSIDE, primitives));
+
+			in_out_pc = mergePointClouds({ in_pc, out_pc });
+
+			break;
+		}
+
 		input_node_geo_score = compute_geo_score(input_node);
 	}
 
@@ -231,7 +258,8 @@ struct CSGNodeRanker
 	{
 		auto geo_score = compute_geo_score(node) / input_node_geo_score;
 
-		auto prox_score = params.prox_score_weight == 0.0 ? 0.0 : compute_local_proximity_score(node, params.sampling_params.samplingStepSize);
+		auto prox_score = params.prox_score_weight == 0.0 ? 0.0 : 
+			compute_local_proximity_score(node, params.sampling_params.samplingStepSize, in_out_pc);
 
 		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
 		
@@ -252,13 +280,48 @@ private:
 
 	double compute_geo_score(const CSGNode& node) const
 	{
-		double numCorrectSamples = 0.0;
-		double numConsideredSamples = (double)input_node_pc.rows();
+		switch (params.geo_score_strat)
+		{
+		case GeoScoreStrategy::SURFACE_SAMPLES:
+			return compute_geo_surface_score(node);
+		case GeoScoreStrategy::IN_OUT_SAMPLES:
+			return compute_geo_in_out_score(node);
+		}
+	}
 
-		for (int i = 0; i < input_node_pc.rows(); ++i)
+	double compute_geo_in_out_score(const CSGNode& node) const
+	{
+		double numCorrectSamples = 0.0;
+		double numConsideredSamples = (double)(in_pc.rows() + out_pc.rows());
+
+		for (int i = 0; i < in_pc.rows(); ++i)
+		{
+			Eigen::Matrix<double, 1, 6> pn = in_pc.row(i);
+			Eigen::Vector3d p = pn.leftCols(3);
+
+			numCorrectSamples += (node.signedDistance(p) <= 0.0 ? 1.0 : 0.0);
+		}
+
+		for (int i = 0; i < out_pc.rows(); ++i)
+		{
+			Eigen::Matrix<double, 1, 6> pn = out_pc.row(i);
+			Eigen::Vector3d p = pn.leftCols(3);
+
+			numCorrectSamples += (node.signedDistance(p) >= 0.0 ? 1.0 : 0.0);
+		}
+
+		return (numCorrectSamples / numConsideredSamples);
+	}
+
+	double compute_geo_surface_score(const CSGNode& node) const
+	{
+		double numCorrectSamples = 0.0;
+		double numConsideredSamples = (double)surface_pc.rows();
+
+		for (int i = 0; i < surface_pc.rows(); ++i)
 		{
 
-			Eigen::Matrix<double, 1, 6> pn = input_node_pc.row(i);
+			Eigen::Matrix<double, 1, 6> pn = surface_pc.row(i);
 			Eigen::Vector3d sampleP = pn.leftCols(3);
 			Eigen::Vector3d sampleN = pn.rightCols(3);
 
@@ -276,7 +339,11 @@ private:
 	CSGNode input_node;
 	int input_node_size;
 	double input_node_geo_score;
-	lmu::PointCloud input_node_pc;
+	lmu::PointCloud surface_pc;
+	lmu::PointCloud in_pc;
+	lmu::PointCloud out_pc;
+	lmu::PointCloud in_out_pc;
+
 	RankerParams params;
 };
 
@@ -310,7 +377,7 @@ struct CSGNodePopulationManipulator
 
 		for (auto& node : population)
 		{
-			if (node.rank.geo_score == 1.0)
+			if (node.rank.geo_score == 1.0)//&& node.rank.size_score >= 0.0)
 			{
 				pareto_nodes.push_back(node);
 			}
@@ -334,7 +401,7 @@ struct CSGNodePopulationManipulator
 
 	void save_pareto(std::ostream& s)
 	{
-		s << "PARETO" << std::endl;
+		s << "# Pareto" << std::endl;
 
 		for (auto& node : pareto_nodes)
 		{			
@@ -368,7 +435,7 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	if (primitives.size() == 1)
 		return geometry(primitives[0]);
 
-	CSGNodeRanker ranker(node, params.ranker_params);
+	CSGNodeRanker ranker(node, primitives, params.ranker_params);
 	CSGNodeCreator creator(node, primitives, params.creator_params);
 	CSGNodeIterationStopCriterion stop_criterion(params.ga_params.max_iterations);
 	CSGNodeTournamentSelector t_selector(params.ga_params.tournament_k);
@@ -387,10 +454,13 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 
 	manipulator.save_pareto(report_stream);
 
+	std::cout << "RANK: " << ranker.rank(opt_res.node) << std::endl;
+
 	return opt_res;
 }
 
-void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid_size, double& score, EmptySetLookup& esLookup)
+void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid_size, double& score, 
+	const lmu::PointCloud& sampling_points, EmptySetLookup& esLookup)
 {
 	auto n = node.childsCRef().size();
 
@@ -407,26 +477,29 @@ void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid
 	else if (n == 1)
 	{
 		score += 1.0;
-		compute_local_proximity_score_rec(node.childsCRef()[0], sampling_grid_size, score, esLookup);
+		compute_local_proximity_score_rec(node.childsCRef()[0], sampling_grid_size, score, 
+			sampling_points, esLookup);
 	}
 	else if (n == 2)
 	{
 		const auto& left = node.childsCRef()[0];
 		const auto& right = node.childsCRef()[1];
 
-		score += is_empty_set(opInter({ left, right }), sampling_grid_size, lmu::empty_pc(), esLookup) ? 0.0 : 1.0;
+		score += is_empty_set(opInter({ left, right }), sampling_grid_size, 
+			sampling_points, esLookup) ? 0.0 : 1.0;
 		
-		compute_local_proximity_score_rec(left, sampling_grid_size, score, esLookup);
-		compute_local_proximity_score_rec(right, sampling_grid_size, score, esLookup);
+		compute_local_proximity_score_rec(left, sampling_grid_size, score, sampling_points, esLookup);
+		compute_local_proximity_score_rec(right, sampling_grid_size, score, sampling_points, esLookup);
 	}
 }
 
-double lmu::compute_local_proximity_score(const CSGNode& node, double sampling_grid_size)
+double lmu::compute_local_proximity_score(const CSGNode& node, double sampling_grid_size, 
+	const lmu::PointCloud& sampling_points)
 {
 	EmptySetLookup esLookup;
 	double score = 0.0;
 
-	compute_local_proximity_score_rec(node, sampling_grid_size, score, esLookup);
+	compute_local_proximity_score_rec(node, sampling_grid_size, score, sampling_points, esLookup);
 
 	//std::cout << "NUM: " << (double)numNodes(node, true) << std::endl;
 	//std::cout << "SCORE: " << score;

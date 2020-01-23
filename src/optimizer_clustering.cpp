@@ -30,8 +30,7 @@ bool is_fully_contained_in(const lmu::ImplicitFunctionPtr& primitive, const lmu:
 	lmu::AABB aabb = primitive->aabb();
 	Eigen::Vector3d min = aabb.c - aabb.s;
 	Eigen::Vector3d max = aabb.c + aabb.s;
-
-
+	
 	return _is_in(primitive, node, sampling_grid_size, min, max);
 }
 

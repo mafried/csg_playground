@@ -30,7 +30,7 @@ namespace lmu
 	};
 
 	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size, CITSGenerationOptions options, 
-		const std::vector<ImplicitFunctionPtr>& primitives);
+		const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 	DNF extract_prime_implicants(const CITS& cits, const lmu::PointCloud& outside_points, double sampling_grid_size);
 
@@ -38,6 +38,8 @@ namespace lmu
 	
 	CITSets generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size,  
 		bool use_cit_points_for_pi_extraction, const std::vector<ImplicitFunctionPtr>& primitives = {});
+
+	PointCloud extract_points_from_cits(const CITS& cit_sets);
 
 	std::ostream& operator <<(std::ostream& stream, const CITSets& c);
 

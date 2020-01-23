@@ -250,10 +250,8 @@ bool lmu::_is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::CSGNode& 
 
 	const Eigen::Vector3d s = (max - min);
 	const Eigen::Vector3d p = min + s * 0.5;
-	const double n_d = n.signedDistance(p);
-	const double prim_d = primitive->signedDistance(p);
-
-	if (n_d > 0.0 && prim_d <= 0.0)
+	
+	if (primitive->signedDistance(p) <= 0.0 && n.signedDistance(p) > 0.0)
 	{
 		return false;
 	}

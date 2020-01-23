@@ -260,8 +260,7 @@ lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_
 {
 	CITSets inside_sets;
 	
-	inside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::INSIDE,
-		primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
+	inside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::INSIDE, primitives);
 
 	//writeNode(DNFtoCSGNode(sets.cits.dnf), "test_test_test.gv");
 	//toJSONFile(DNFtoCSGNode(sets.cits.dnf), "test_test_test.json");
@@ -273,23 +272,8 @@ lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_
 	PointCloud outside_points; 
 	if (use_cit_points_for_pi_extraction)
 	{
-		CITSets outside_sets;
-		outside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::OUTSIDE,
-			primitives.empty() ? lmu::allDistinctFunctions(n) : primitives);
-
-		std::vector<Eigen::Matrix<double, 1, 6>> sampling_points;		
-		for (const auto p : outside_sets.cits.points)
-		{
-			Eigen::Matrix<double, 1, 6> m;
-			m.row(0) << p.transpose(), 0, 0, 0;
-			sampling_points.push_back(m);
-		}
-
-		std::cout << "NUM: " << (outside_sets.cits.points.size() + inside_sets.cits.points.size()) << std::endl;
-
-		outside_points = pointCloudFromVector(sampling_points);
-
-		writePointCloudXYZ("test.xyz", outside_points);
+		CITS outside_cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::OUTSIDE, primitives);
+		outside_points = extract_points_from_cits(outside_cits);
 	}
 	else
 	{
@@ -300,6 +284,19 @@ lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_
 	inside_sets.pis_as_cit_indices = convert_pis_to_cit_indices(inside_sets.prime_implicants, inside_sets.cits);
 	
 	return inside_sets;
+}
+
+lmu::PointCloud lmu::extract_points_from_cits(const CITS & cits)
+{
+	std::vector<Eigen::Matrix<double, 1, 6>> sampling_points;
+	for (const auto p : cits.points)
+	{
+		Eigen::Matrix<double, 1, 6> m;
+		m.row(0) << p.transpose(), 0, 0, 0;
+		sampling_points.push_back(m);
+	}
+
+	return  pointCloudFromVector(sampling_points);	
 }
 
 std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)
