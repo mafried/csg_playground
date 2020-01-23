@@ -62,7 +62,7 @@ int lmu::PipelineRunner::run()
 	// Create output stat files.
 	std::cout << "Create optimizer stat files..." << std::endl;
 	std::ofstream opt_out(output_folder + "opt_output.txt");
-	opt_out << "Input size: " << numNodes(node) << std::endl;
+	opt_out << "# Input size: " << numNodes(node) << std::endl;
 
 	std::ofstream timings(output_folder + "timings.txt");
 	TimeTicker ticker;
@@ -144,7 +144,7 @@ int lmu::PipelineRunner::run()
 
 		timings << "Decomposition: " << ticker.tick() << std::endl;
 
-		opt_out << "Output size: " << numNodes(node) << std::endl;
+		opt_out << "# Output size: " << numNodes(node) << std::endl;
 	}
 	catch (const std::exception& ex)
 	{

@@ -354,7 +354,8 @@ struct CSGNodePopulationManipulator
 	CSGNodePopulationManipulator(CSGNodeCreator* creator, CSGNodeRanker* ranker, double max_delta) :
 		max_delta(max_delta),
 		ranker(ranker),
-		creator(creator)
+		creator(creator),
+		iteration(0)
 	{
 	}
 
@@ -379,10 +380,11 @@ struct CSGNodePopulationManipulator
 		{
 			if (node.rank.geo_score == 1.0)//&& node.rank.size_score >= 0.0)
 			{
-				pareto_nodes.push_back(node);
+				pareto_nodes.push_back(std::make_pair(iteration, node));
 			}
 		}
-
+		
+		iteration++;
 	}
 
 	CSGNode get_best()
@@ -392,8 +394,8 @@ struct CSGNodePopulationManipulator
 
 		for (auto& node : pareto_nodes)
 		{
-			if (node.rank.score > best_score)
-				best = node.creature;
+			if (node.second.rank.score > best_score)
+				best = node.second.creature;
 		}
 
 		return best;
@@ -405,7 +407,7 @@ struct CSGNodePopulationManipulator
 
 		for (auto& node : pareto_nodes)
 		{			
-			s << node.rank << std::endl;
+			s << node.first << " " << node.second.rank << std::endl;
 		}
 	}
 
@@ -414,11 +416,12 @@ struct CSGNodePopulationManipulator
 		return "CSGNode Population Manipulator";
 	}
 
-	mutable std::vector<RankedCreature<CSGNode, Rank>> pareto_nodes;
+	mutable std::vector<std::pair<int, RankedCreature<CSGNode, Rank>>> pareto_nodes;
 
 	double max_delta;
 	CSGNodeCreator* creator;
 	CSGNodeRanker* ranker;
+	mutable int iteration;
 };
 
 
