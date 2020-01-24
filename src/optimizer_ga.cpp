@@ -299,7 +299,7 @@ private:
 			Eigen::Matrix<double, 1, 6> pn = in_pc.row(i);
 			Eigen::Vector3d p = pn.leftCols(3);
 
-			numCorrectSamples += (node.signedDistance(p) <= 0.0 ? 1.0 : 0.0);
+			numCorrectSamples += (node.signedDistance(p) < 0.0 ? 1.0 : 0.0);
 		}
 
 		for (int i = 0; i < out_pc.rows(); ++i)
