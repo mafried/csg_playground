@@ -13,36 +13,44 @@ struct CSGNodeRanker;
 //using Rank = double;
 struct Rank
 {
-	Rank(double score, double geo_score, double prox_score, double size_score) :
+	Rank(double score, double geo_score, double prox_score, double size_score, double size_diff_score) :
 		score(score),
 		geo_score(geo_score),
 		prox_score(prox_score),
-		size_score(size_score)
+		size_score(size_score),
+		size_diff_score(size_diff_score)
 	{
 	}
 
-	Rank(double score = 0.0) :
+	explicit Rank(double score = 0.0) :
 		score(score),
-		geo_score(score)
+		geo_score(score),
+		prox_score(score),
+		size_score(score),
+		size_diff_score(score)
+
 	{
 	}
-
+	
 	double score;
 	double geo_score; 
 	double prox_score;
 	double size_score;
-	
-	friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.score < rhs.score; }
-	friend inline bool operator> (const Rank& lhs, const Rank& rhs) { return rhs < lhs; }
-	friend inline bool operator<=(const Rank& lhs, const Rank& rhs) { return !(lhs > rhs); }
-	friend inline bool operator>=(const Rank& lhs, const Rank& rhs) { return !(lhs < rhs); }
-	friend inline bool operator==(const Rank& lhs, const Rank& rhs) { return lhs.score == rhs.score; }
-	friend inline bool operator!=(const Rank& lhs, const Rank& rhs) { return !(lhs == rhs); }
+	double size_diff_score;
+
+	operator double() const { return score; }
+
+	//friend inline bool operator< (const Rank& lhs, const Rank& rhs) { return lhs.score < rhs.score; }
+	//friend inline bool operator> (const Rank& lhs, const Rank& rhs) { return rhs < lhs; }
+	//friend inline bool operator<=(const Rank& lhs, const Rank& rhs) { return !(lhs > rhs); }
+	//friend inline bool operator>=(const Rank& lhs, const Rank& rhs) { return !(lhs < rhs); }
+	//friend inline bool operator==(const Rank& lhs, const Rank& rhs) { return lhs.score == rhs.score; }
+	//friend inline bool operator!=(const Rank& lhs, const Rank& rhs) { return !(lhs == rhs); }
 };
 
 std::ostream& operator<<(std::ostream& out, const Rank& r)
 {
-	out << "score: " << r.score << " geo: " << r.geo_score << " prox: " << r.prox_score << " size: " << r.size_score;
+	out << "score: " << r.score << " geo: " << r.geo_score << " prox: " << r.prox_score << " size: " << r.size_score << " size diff: " << r.size_diff_score;
 	return out;
 }
 
@@ -238,14 +246,39 @@ struct CSGNodeRanker
 		case GeoScoreStrategy::IN_OUT_SAMPLES:
 			surface_pc = empty_pc();
 
+			auto out_cits = generate_cits(input_node, params.sampling_params.samplingStepSize,
+				CITSGenerationOptions::OUTSIDE, primitives);
 			out_pc = extract_points_from_cits(
-				generate_cits(input_node, params.sampling_params.samplingStepSize, 
-					CITSGenerationOptions::OUTSIDE, primitives));
+				out_cits);
 
+			auto in_cits = generate_cits(input_node, params.sampling_params.samplingStepSize,
+				CITSGenerationOptions::INSIDE, primitives);
 			in_pc = extract_points_from_cits(
-				generate_cits(input_node, params.sampling_params.samplingStepSize, 
-					CITSGenerationOptions::INSIDE, primitives));
+				in_cits);
 
+			toJSONFile(DNFtoCSGNode(out_cits.dnf), "outside_cits.json");
+			toJSONFile(DNFtoCSGNode(in_cits.dnf), "inside_cits.json");
+
+			//==================
+
+			/*
+			toJSONFile(DNFtoCSGNode(in_cits.dnf), "inside_cits.json");
+			std::cout << "POINT CHECKS IN: " << std::endl;
+			for (int i = 0; i < in_pc.rows(); ++i)
+			{
+				Eigen::Vector3d p = in_pc.row(i).leftCols(3).transpose();
+				std::cout << DNFtoCSGNode(in_cits.dnf).signedDistance(p) << std::endl;
+			}
+			std::cout << "POINT CHECKS OUT: " << std::endl;
+			for (int i = 0; i < out_pc.rows(); ++i)
+			{
+				Eigen::Vector3d p = out_pc.row(i).leftCols(3).transpose();
+				std::cout << DNFtoCSGNode(out_cits.dnf).signedDistance(p) << std::endl;
+			}
+			*/
+			//==================
+
+			
 			in_out_pc = mergePointClouds({ in_pc, out_pc });
 
 			break;
@@ -256,25 +289,28 @@ struct CSGNodeRanker
 
 	Rank rank(const CSGNode& node) const
 	{
+		//std::cout << "INPUT GEO SCORE: " << input_node_geo_score << std::endl;
+
 		auto geo_score = compute_geo_score(node) / input_node_geo_score;
 
 		auto prox_score = params.prox_score_weight == 0.0 ? 0.0 : 
 			compute_local_proximity_score(node, params.sampling_params.samplingStepSize, in_out_pc);
 
-		auto size_score = 1.0 - ((double)numNodes(node) / (double)input_node_size);
+		auto size_score = (double)numNodes(node);
+
+		auto size_diff_score = (double)input_node_size - size_score;
 		
 		//std::cout << "GEO: " << geo_score << " PROXIMITY:" << prox_score << " SIZE: " << size_score << std::endl;
 
-		return Rank(
-			params.geo_score_weight * geo_score + 
-			params.prox_score_weight * prox_score + 
-			params.size_score_weight * size_score, geo_score, prox_score, size_score);
+		return Rank(0.0, geo_score, prox_score, size_score, size_diff_score);
 	}
 
 	std::string info() const
 	{
 		return std::string();
 	}
+
+	RankerParams params;
 
 private:
 
@@ -298,8 +334,13 @@ private:
 		{
 			Eigen::Matrix<double, 1, 6> pn = in_pc.row(i);
 			Eigen::Vector3d p = pn.leftCols(3);
+			
+			//std::cout << "IN: " << node.signedDistance(p) << std::endl;
 
-			numCorrectSamples += (node.signedDistance(p) < 0.0 ? 1.0 : 0.0);
+			if (node.signedDistance(p) < 0.0)
+			{
+				numCorrectSamples++;
+			}
 		}
 
 		for (int i = 0; i < out_pc.rows(); ++i)
@@ -307,7 +348,13 @@ private:
 			Eigen::Matrix<double, 1, 6> pn = out_pc.row(i);
 			Eigen::Vector3d p = pn.leftCols(3);
 
-			numCorrectSamples += (node.signedDistance(p) >= 0.0 ? 1.0 : 0.0);
+			//std::cout << "OUT: " << node.signedDistance(p) << std::endl;
+
+
+			if (node.signedDistance(p) > 0.0)
+			{
+				numCorrectSamples++;
+			}
 		}
 
 		return (numCorrectSamples / numConsideredSamples);
@@ -344,7 +391,6 @@ private:
 	lmu::PointCloud out_pc;
 	lmu::PointCloud in_out_pc;
 
-	RankerParams params;
 };
 
 //////////////////////////// MANIPULATOR ////////////////////////////
@@ -365,7 +411,7 @@ struct CSGNodePopulationManipulator
 
 	void manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const
 	{
-		auto filtered_pop = population;
+		/*auto filtered_pop = population;
 
 		for (auto& node : population)
 		{
@@ -374,8 +420,27 @@ struct CSGNodePopulationManipulator
 				node.creature = creator->create();
 				node.rank = ranker->rank(node.creature);
 			}
-		}
+		}*/
 
+		// Normalize size. 
+		double largest_size_diff = -std::numeric_limits<double>::max();
+		double smallest_size_diff = std::numeric_limits<double>::max();
+		for (const auto& node : population)
+		{
+			largest_size_diff = node.rank.size_diff_score > largest_size_diff ? node.rank.size_diff_score : largest_size_diff;
+			smallest_size_diff = node.rank.size_diff_score < smallest_size_diff ? node.rank.size_diff_score : smallest_size_diff;
+		}
+		for (auto& node : population)
+			node.rank.size_diff_score = (node.rank.size_diff_score - smallest_size_diff) / (largest_size_diff - smallest_size_diff);
+
+		// Compute score.
+		for (auto& node : population)
+			node.rank.score =
+			ranker->params.geo_score_weight * node.rank.geo_score +
+			ranker->params.prox_score_weight * node.rank.prox_score +
+			ranker->params.size_score_weight * node.rank.size_diff_score;
+
+		// Add best nodes to pareto set.
 		for (auto& node : population)
 		{
 			if (node.rank.geo_score == 1.0)//&& node.rank.size_score >= 0.0)
@@ -447,6 +512,13 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	CSGNodeTournamentSelector t_selector(params.ga_params.tournament_k);
 	CSGNodePopulationManipulator manipulator(&creator, &ranker, params.man_params.max_delta);
 
+
+	//auto test_node = fromJSONFile("wrong_node.json");
+	//std::cout << "RANK WRONG: " << ranker.rank(test_node) << std::endl;
+
+	//int f;
+	//std::cin >> f;
+
 	CSGNodeGA::Parameters ga_params(params.ga_params.population_size, params.ga_params.num_best_parents,
 		params.ga_params.mutation_rate, params.ga_params.crossover_rate, params.ga_params.in_parallel,
 		Schedule(), Schedule(), params.ga_params.use_caching);
@@ -459,9 +531,9 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	res.statistics.save(report_stream, &opt_res.node);
 
 	manipulator.save_pareto(report_stream);
-
-	std::cout << "RANK: " << ranker.rank(opt_res.node) << std::endl;
-
+	
+	//toJSONFile(opt_res.node, "wrong_node.json");
+	
 	return opt_res;
 }
 

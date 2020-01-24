@@ -390,7 +390,7 @@ CSGNodeOperationType lmu::operationTypeFromString(std::string type)
 		parsedType = CSGNodeOperationType::Intersection;
 	else if (type == "unknown")
 		parsedType = CSGNodeOperationType::Unknown;
-	else if (type == "complement")
+	else if (type == "complement" || type == "negate")
 		parsedType = CSGNodeOperationType::Complement;
 	else if (type == "identity")
 		parsedType = CSGNodeOperationType::Identity;

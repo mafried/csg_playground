@@ -17,7 +17,7 @@ namespace lmu
 
 	struct Rank
 	{
-		Rank(double geo, double size, double depth, double combined) : 
+		Rank(double geo, double size, double depth, double combined) :
 			geo(geo),
 			size(size),
 			depth(depth),
@@ -25,17 +25,19 @@ namespace lmu
 		{
 		}
 
-		Rank() : 
+		Rank() :
 			Rank(0.0)
 		{
 		}
 
 		explicit Rank(double v) :
-			Rank(v, v, v,v)
+			Rank(v, v, v, v)
 		{
 		}
 
-		double geo; 
+		operator double() const { return combined; }
+
+		double geo;
 		double size;
 		double depth;
 		double combined;
@@ -47,16 +49,16 @@ namespace lmu
 		friend inline bool operator==(const Rank& lhs, const Rank& rhs) { return lhs.combined == rhs.combined; }
 		friend inline bool operator!=(const Rank& lhs, const Rank& rhs) { return !(lhs == rhs); }
 
-		Rank& operator+=(const Rank& rhs) 
-		{							
+		Rank& operator+=(const Rank& rhs)
+		{
 			geo += rhs.geo;
-			size += rhs.size; 
+			size += rhs.size;
 			depth += rhs.depth;
 			combined += rhs.combined;
 
 			return *this;
 		}
-		
+
 		Rank& operator-=(const Rank& rhs)
 		{
 			geo -= rhs.geo;
@@ -67,9 +69,9 @@ namespace lmu
 			return *this;
 		}
 
-		friend Rank operator+(Rank lhs, const Rank& rhs) 
+		friend Rank operator+(Rank lhs, const Rank& rhs)
 		{
-			lhs += rhs; 
+			lhs += rhs;
 			return lhs;
 		}
 
@@ -125,7 +127,7 @@ namespace lmu
 		double _epsilon;
 		double _alpha;
 
-		int _numSamplePoints; 
+		int _numSamplePoints;
 
 		std::shared_ptr<ParetoState> _paretoState;
 	};
@@ -165,24 +167,24 @@ namespace lmu
 		lmu::Graph _connectionGraph;
 		lmu::CSGNodeRanker _ranker;
 	};
-	
+
 	enum class CSGNodeOptimization
 	{
-		RANDOM, 
+		RANDOM,
 		TRAVERSE
 	};
 
 	CSGNodeOptimization optimizationTypeFromString(std::string type);
 
 	struct CSGNodePopMan
-	{	
+	{
 		CSGNodePopMan(bool sizeOptimization, double optimizationProb, double preOptimizationProb, int maxFunctions, int nodeSelectionTries, int randomIterations, CSGNodeOptimization type, const lmu::CSGNodeRanker& ranker, const lmu::Graph& connectionGraph);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
 		void manipulateAfterRanking(std::vector<RankedCreature<CSGNode, Rank>>& population) const;
 		std::string info() const;
 
-	private: 
+	private:
 
 		CSGNode getOptimizedTree(std::vector<ImplicitFunctionPtr> funcs) const;
 		std::vector<ImplicitFunctionPtr> getSuitableFunctions(const std::vector<ImplicitFunctionPtr>& funcs) const;
@@ -201,7 +203,7 @@ namespace lmu
 		mutable std::default_random_engine _rndEngine;
 		mutable std::random_device _rndDevice;
 	};
-			
+
 	struct GeometryStopCriterion
 	{
 		GeometryStopCriterion(int maxIterations, int maxIterationsWithoutSizeImprovement, double targetGeometryScore = 1.0) :
@@ -251,7 +253,7 @@ namespace lmu
 		int _sameSizeScoreCounter;
 	};
 
-	
+
 	using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode, Rank>>;
 
 	using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
@@ -266,7 +268,7 @@ namespace lmu
 	enum class ParallelismOptions
 	{
 		NoParallelism = 0,
-		PerCliqueParallelism = 1, 
+		PerCliqueParallelism = 1,
 		GAParallelism = 2
 	};
 	ParallelismOptions operator|(ParallelismOptions lhs, ParallelismOptions rhs);
@@ -278,10 +280,10 @@ namespace lmu
 
 	CSGNode mergeCSGNodeCliqueSimple(CSGNodeClique& clique);
 	void optimizeCSGNodeClique(CSGNodeClique& clique, float tolerance);
-  
+
 	double lambdaBasedOnPoints(const std::vector<lmu::ImplicitFunctionPtr>& shapes);
-	
-    CSGNode computeGAWithPartitions(const std::vector<Graph>& partitions, const lmu::ParameterSet& p);
+
+	CSGNode computeGAWithPartitions(const std::vector<Graph>& partitions, const lmu::ParameterSet& p);
 
 	double computeNormalizedGeometryScore(const CSGNode& node, const std::vector<ImplicitFunctionPtr>& funcs, double h);
 }

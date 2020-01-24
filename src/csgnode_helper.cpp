@@ -54,46 +54,54 @@ lmu::CSGNode readNode(const json& json)
 	}
 	else
 	{
-		auto geoType = json.at("geo").get<std::string>();
-		std::transform(geoType.begin(), geoType.end(), geoType.begin(), ::tolower);
-		
-		auto name = json.at("name").get<std::string>();
-
-		auto params = json.at("params");
-
-		auto center = readVec3(params.at("center"));
-
-		auto rotIter = params.find("rotation");
-		auto rotation = rotIter == params.end() ? Eigen::Vector3d(0,0,0) : readVec3(*rotIter);
-		Eigen::AngleAxisd rotx(rotation.x(), Eigen::Vector3d(1.0, 0.0, 0.0));
-		Eigen::AngleAxisd roty(rotation.y(), Eigen::Vector3d(0.0, 1.0, 0.0));
-		Eigen::AngleAxisd rotz(rotation.z(), Eigen::Vector3d(0.0, 0.0, 1.0));
-
-		auto trans = 
-			(Eigen::Affine3d)Eigen::Translation3d(center.x(), center.y(), center.z()) * rotx * roty * rotz;
-		
-		if (geoType == "sphere")
-		{		
-			return geo<IFSphere>(
-				trans,
-				params.at("radius").get<double>(),
-				name);
-		}
-		else if (geoType == "box" || geoType == "cube")
+		auto geoTypeIt = json.find("geo");
+		if (geoTypeIt != json.cend())
 		{
-			return geo<IFBox>(
-				trans,
-				readVec3(params.at("radius")) * 2.0,
-				2,
-				name);
+			auto geoType = geoTypeIt->get<std::string>();
+			std::transform(geoType.begin(), geoType.end(), geoType.begin(), ::tolower);
+
+			auto name = json.at("name").get<std::string>();
+
+			auto params = json.at("params");
+
+			auto center = readVec3(params.at("center"));
+
+			auto rotIter = params.find("rotation");
+			auto rotation = rotIter == params.end() ? Eigen::Vector3d(0, 0, 0) : readVec3(*rotIter);
+			Eigen::AngleAxisd rotx(rotation.x(), Eigen::Vector3d(1.0, 0.0, 0.0));
+			Eigen::AngleAxisd roty(rotation.y(), Eigen::Vector3d(0.0, 1.0, 0.0));
+			Eigen::AngleAxisd rotz(rotation.z(), Eigen::Vector3d(0.0, 0.0, 1.0));
+
+			auto trans =
+				(Eigen::Affine3d)Eigen::Translation3d(center.x(), center.y(), center.z()) * rotx * roty * rotz;
+
+			if (geoType == "sphere")
+			{
+				return geo<IFSphere>(
+					trans,
+					params.at("radius").get<double>(),
+					name);
+			}
+			else if (geoType == "box" || geoType == "cube")
+			{
+				return geo<IFBox>(
+					trans,
+					readVec3(params.at("radius")) * 2.0,
+					2,
+					name);
+			}
+			else if (geoType == "cylinder")
+			{
+				return geo<IFCylinder>(
+					trans,
+					params.at("radius").get<double>(),
+					params.at("height").get<double>(),
+					name);
+			}
 		}
-		else if (geoType == "cylinder")
+		else
 		{
-			return geo<IFCylinder>(
-				trans,
-				params.at("radius").get<double>(),
-				params.at("height").get<double>(),				
-				name);
+			std::cout << json;
 		}
 	}
 
@@ -151,7 +159,7 @@ lmu::json lmu::toJSON(const lmu::CSGNode& node)
 			break;
 		}
 		
-		std::cout << "NAME: " << node.function()->name() << std::endl;
+		//std::cout << "NAME: " << node.function()->name() << std::endl;
 		json["name"] = node.function()->name();
 
 		auto pos = node.function()->pos();
@@ -174,6 +182,9 @@ lmu::json lmu::toJSON(const lmu::CSGNode& node)
 			break;
 		case CSGNodeOperationType::Difference:
 			json["op"] = "subtract";
+			break;
+		case CSGNodeOperationType::Complement:
+			json["op"] = "negate";
 			break;
 		}
 

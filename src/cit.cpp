@@ -96,7 +96,7 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 				
 				double nd = n.signedDistance(p);				
 				if ((options == CITSGenerationOptions::INSIDE && nd >= 0.0) || 
-					(options == CITSGenerationOptions::OUTSIDE && nd < 0.0)) 
+					(options == CITSGenerationOptions::OUTSIDE && nd <= 0.0)) 
 					continue;
 
 				lmu::Clause clause(prims.size());

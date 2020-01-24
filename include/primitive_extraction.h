@@ -90,6 +90,8 @@ namespace lmu
 		double relative_area;
 		double combined;
 
+		operator double() const { return combined; }
+
 		std::vector<AreaScore> per_primitive_area_scores;
 
 		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined < rhs.combined; }

@@ -481,10 +481,10 @@ namespace lmu
 				
 				std::cout << "After Rank manipulation." << std::endl;
 				popMan.manipulateAfterRanking(population);
-
+	
 				sortPopulation(population);
 				stats.sortingDurations.push_back(stats.iterationDuration.tick());
-							
+				
 				stats.bestCandidateScores.push_back(population.front().rank);
 				stats.worstCandidateScores.push_back(population.back().rank);
 				
@@ -493,7 +493,7 @@ namespace lmu
 				//std::cout << "Optimize population." << std::endl;
 				//popMan.manipulateBeforeRanking(newPopulation);
 				//stats.optDurations.push_back(stats.iterationDuration.tick());
-
+				
 				while (newPopulation.size() < params.populationSize)
 				{
 					auto parent1 = parentSelector.selectFrom(population);
@@ -652,9 +652,10 @@ namespace lmu
 			}
 			else // single threaded
 			{
+				int i = 0;
 				for (auto& c : population)
 				{
-					c.rank = rankCreatureSingleThreaded(c.creature, ranker, useCaching, stats);								
+					c.rank = rankCreatureSingleThreaded(c.creature, ranker, useCaching, stats);													
 				}
 			}
 		}
@@ -687,9 +688,9 @@ namespace lmu
 
 			//sort by rank
 			std::sort(population.begin(), population.end(),
-				[](const RankedCreature& a, const RankedCreature& b) -> bool
+				[](const RankedCreature& a, const RankedCreature& b)
 			{
-				return a.rank > b.rank;
+				return a.rank >= b.rank;
 			});
 		}
 
