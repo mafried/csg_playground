@@ -69,6 +69,9 @@ struct ClauseAndPointEqual
 	}
 };
 
+#include "mesh.h"
+#include <igl/writeOBJ.h>
+
 lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOptions options, 
 	const std::vector<ImplicitFunctionPtr>& primitives)
 {
@@ -139,7 +142,7 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 		/*}
 		i++;*/
 	}
-	
+
 	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
 	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.dnf.clauses), [](const ClauseAndPoint& cap) { return cap.clause; });
 
@@ -159,8 +162,8 @@ bool is_outside(const lmu::Clause& c, const lmu::CITS& cits, double sampling_gri
 		for (int i = 0; i < outside_points.rows(); ++i)
 		{
 			Eigen::Vector3d p = outside_points.row(i).leftCols(3).transpose();
-			std::cout << "P: " << p.transpose() << std::endl;
-			if (clause_node.signedDistance(p) < 0.0)
+			//std::cout << "P: " << p.transpose() << std::endl;
+			if (clause_node.signedDistance(p) <= 0.0)
 				return true;
 		}
 
@@ -252,15 +255,16 @@ std::vector<std::unordered_set<int>> lmu::convert_pis_to_cit_indices(const DNF& 
 	return cit_indices_vec;
 }
 
-//#include "mesh.h"
-//#include <igl/writeOBJ.h>
-
 lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_size, 
 	bool use_cit_points_for_pi_extraction, const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	CITSets inside_sets;
 	
 	inside_sets.cits = generate_cits(n, sampling_grid_size, CITSGenerationOptions::INSIDE, primitives);
+
+
+	//auto mesh = lmu::computeMesh(lmu::DNFtoCSGNode(inside_sets.cits.dnf), Eigen::Vector3i(50, 50, 50));
+	//igl::writeOBJ("cit_sets.obj", mesh.vertices, mesh.indices);
 
 	//writeNode(DNFtoCSGNode(sets.cits.dnf), "test_test_test.gv");
 	//toJSONFile(DNFtoCSGNode(sets.cits.dnf), "test_test_test.json");
@@ -283,6 +287,10 @@ lmu::CITSets lmu::generate_cit_sets(const lmu::CSGNode& n, double sampling_grid_
 	inside_sets.prime_implicants = extract_prime_implicants(inside_sets.cits, outside_points, sampling_grid_size);
 	inside_sets.pis_as_cit_indices = convert_pis_to_cit_indices(inside_sets.prime_implicants, inside_sets.cits);
 	
+	//mesh = lmu::computeMesh(lmu::DNFtoCSGNode(inside_sets.prime_implicants), Eigen::Vector3i(50, 50, 50));
+	//igl::writeOBJ("primes.obj", mesh.vertices, mesh.indices);
+
+
 	return inside_sets;
 }
 

@@ -395,7 +395,10 @@ struct CSGNodePopulationManipulator
 		for (auto& node : pareto_nodes)
 		{
 			if (node.second.rank.score > best_score)
+			{
 				best = node.second.creature;
+				best_score = node.second.rank.score;
+			}
 		}
 
 		return best;

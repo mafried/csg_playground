@@ -15,7 +15,7 @@
 
 void save_as_obj_mesh(const lmu::CSGNode& node, const std::string& path)
 {
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(200, 200, 200));
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
 	igl::writeOBJ(path, mesh.vertices, mesh.indices);
 }
 
@@ -83,67 +83,29 @@ int lmu::PipelineRunner::run()
 	writeNode(node, output_folder + "after_red.gv");
 	std::cout << "Done." << std::endl;
 
-	// Decompose. 
-	std::cout << "Decompose..." << std::endl;
 	try
 	{
 		ticker.tick();
 
-		node = optimize_with_decomposition(node, pp.sampling_grid_size, true,
-			[&pp, this, &opt_out, &timings](const CSGNode& node, const PrimitiveCluster& prims)
-		{			
-			// Run Optimizer.
-			std::cout << "Optimize..." << std::endl;
-
-			TimeTicker opt_ticker;
-
-			auto opt_node = opNo();
-
-			if (pp.optimizer == "GA")
+		if (pp.use_decomposition)
+		{
+			// Decompose. 
+			std::cout << "Decompose..." << std::endl;
+			
+			node = optimize_with_decomposition(node, pp.sampling_grid_size, true,
+				[&pp, this, &opt_out, &timings](const CSGNode& node, const PrimitiveCluster& prims)
 			{
-				opt_node = optimize_with_ga(node, read_opt_ga_params(params), opt_out, prims).node;
+				return optimize(node, prims, pp, opt_out, timings);
+			});
 
-				//TODO: It might make sense to use the CIT points also for sampling here. 
+			timings << "Decomposition (opt included): " << ticker.tick() << std::endl;
+		}
+		else
+		{
+			node = optimize(node, {}, pp, opt_out, timings);
+		}	
 
-				opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
-			}
-			else if (pp.optimizer == "Sampling.SetCover")
-			{
-				auto sp = read_opt_sampling_params(params);
-				opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size, sp.use_cit_points_for_pi_extraction,
-					PythonInterpreter(sp.python_interpreter_path), {}, opt_out);
-
-				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
-			}
-			else if (pp.optimizer == "Sampling.QuineMcCluskey")
-			{
-				auto sp = read_opt_sampling_params(params);
-				opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_SIMPLIFY_LOGIC,
-					PythonInterpreter(sp.python_interpreter_path));
-
-				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
-			}
-			else if (pp.optimizer == "Sampling.Espresso")
-			{
-				auto sp = read_opt_sampling_params(params);
-				opt_node = optimize_with_python(node, SimplifierMethod::ESPRESSO,
-					PythonInterpreter(sp.python_interpreter_path));
-
-				opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
-			}
-			else
-			{
-				throw std::runtime_error("Optimizer with name '" + pp.optimizer + "' does not exist.");
-			}
-
-			timings << "Optimization: " << opt_ticker.tick() << std::endl;
-
-			return opt_node;
-
-		});
-
-		timings << "Decomposition: " << ticker.tick() << std::endl;
-
+	
 		opt_out << "# Output size: " << numNodes(node) << std::endl;
 	}
 	catch (const std::exception& ex)
@@ -175,6 +137,56 @@ int lmu::PipelineRunner::run()
 	return 0;
 }
 
+lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveCluster& prims, 
+	const PipelineParams& pp, std::ofstream& opt_out, std::ofstream& timings)
+{
+	// Run Optimizer.
+	std::cout << "Optimize..." << std::endl;
+
+	TimeTicker opt_ticker;
+
+	auto opt_node = opNo();
+
+	if (pp.optimizer == "GA")
+	{
+		opt_node = optimize_with_ga(node, read_opt_ga_params(params), opt_out, prims).node;
+
+		opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
+	}
+	else if (pp.optimizer == "Sampling.SetCover")
+	{
+		auto sp = read_opt_sampling_params(params);
+		opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size, sp.use_cit_points_for_pi_extraction,
+			PythonInterpreter(sp.python_interpreter_path), {}, opt_out);
+
+		opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
+	}
+	else if (pp.optimizer == "Sampling.QuineMcCluskey")
+	{
+		auto sp = read_opt_sampling_params(params);
+		opt_node = optimize_with_python(node, SimplifierMethod::SIMPY_SIMPLIFY_LOGIC,
+			PythonInterpreter(sp.python_interpreter_path));
+
+		opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
+	}
+	else if (pp.optimizer == "Sampling.Espresso")
+	{
+		auto sp = read_opt_sampling_params(params);
+		opt_node = optimize_with_python(node, SimplifierMethod::ESPRESSO,
+			PythonInterpreter(sp.python_interpreter_path));
+
+		opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
+	}
+	else
+	{
+		throw std::runtime_error("Optimizer with name '" + pp.optimizer + "' does not exist.");
+	}
+
+	timings << "Optimization: " << opt_ticker.tick() << std::endl;
+
+	return opt_node;
+}
+
 lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet & params)
 {
 	PipelineParams pipeline_params;
@@ -183,6 +195,7 @@ lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet
 	pipeline_params.tree_file = params.getStr("Pipeline", "Tree", "tree.json");
 	pipeline_params.sampling_grid_size = params.getDouble("Pipeline", "SamplingGridSize", 0.1);
 	pipeline_params.save_meshes = params.getBool("Pipeline", "SaveMeshes", false);
+	pipeline_params.use_decomposition = params.getBool("Pipeline", "UseDecomposition", true);
 
 	return pipeline_params;
 }
