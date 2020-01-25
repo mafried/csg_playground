@@ -72,16 +72,34 @@ struct ClauseAndPointEqual
 #include "mesh.h"
 #include <igl/writeOBJ.h>
 
+void insert_clause(const lmu::Clause& c, const Eigen::Vector3d& p, const std::vector<lmu::ImplicitFunctionPtr>& primitives, 
+	std::unordered_map<lmu::Clause, Eigen::Vector3d, ClauseHash, ClauseEqual>& clauses)
+{
+	auto it = clauses.find(c);
+	if (it != clauses.end())
+	{
+		double d_new = c.signedDistance(p, primitives);
+		double d_old = c.signedDistance(it->second, primitives);
+		if (d_new < d_old)
+			it->second = p;
+	}
+	else
+	{
+		clauses[c] = p;
+	}
+}
+
 lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOptions options, 
 	const std::vector<ImplicitFunctionPtr>& primitives)
 {
 	auto prims = primitives.empty() ? lmu::allDistinctFunctions(n) : primitives;
 
 	lmu::AABB aabb = aabb_from_primitives(prims);
-	Eigen::Vector3d min = aabb.c - aabb.s;
-	Eigen::Vector3d max = aabb.c + aabb.s;
+	Eigen::Vector3d min = aabb.c - aabb.s - (aabb.s * 0.01);
+	Eigen::Vector3d max = aabb.c + aabb.s + (aabb.s * 0.01);
 
-	std::unordered_set<ClauseAndPoint, ClauseAndPointHash, ClauseAndPointEqual> clauses;
+	//std::unordered_set<ClauseAndPoint, ClauseAndPointHash, ClauseAndPointEqual> clauses;
+	std::unordered_map<lmu::Clause, Eigen::Vector3d, ClauseHash, ClauseEqual> clauses;
 
 	//std::cout << "C: " << aabb.c.transpose() << " S: " << aabb.s.transpose() << std::endl;
 	//std::cout << "min: " << min.transpose() << " max: " << max.transpose() << std::endl;
@@ -92,11 +110,11 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 		for (int y = 0; y < s.y(); y++)
 			for (int z = 0; z < s.z(); z++)
 			{
-				Eigen::Vector3d p(x * sgs + min.x(), y * sgs + min.y(), z * sgs + min.z());
+				Eigen::Vector3d p((double)x * sgs + min.x(), (double)y * sgs + min.y(), (double)z * sgs + min.z());
 				
 				double nd = n.signedDistance(p);				
-				if ((options == CITSGenerationOptions::INSIDE && nd >= 0.0) || 
-					(options == CITSGenerationOptions::OUTSIDE && nd <= 0.0)) 
+				if ((options == CITSGenerationOptions::INSIDE && nd > 0.0) || 
+					(options == CITSGenerationOptions::OUTSIDE && nd < 0.0)) 
 					continue;
 
 				lmu::Clause clause(prims.size());
@@ -106,12 +124,16 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 					double pd = prims[i]->signedDistance(p);
 					clause.literals[i] = true;
 					clause.negated[i] = pd > 0.0;
-					num_negations += clause.negated[i] ? 1 : 0;
+					num_negations += clause.negated[i] ? 1 : 0; //TODO: correct?
 				}
 
 				// In cases where the input node does contain more primitives than the considered primitive set. 
-				if(num_negations < prims.size())
-					clauses.insert(ClauseAndPoint(clause, p));
+				// TODO: Check if this is still needed and the correct test.
+				//if (num_negations < prims.size())
+				//{
+					//clauses.insert(ClauseAndPoint(clause, p));
+					insert_clause(clause, p, prims, clauses);
+				//}
 			}
 
 	CITS cits;
@@ -137,8 +159,8 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 		}
 		if (!is_redundant)
 		{
-		*/	cits.points.push_back(cl.p);
-			cits.dnf.clauses.push_back(cl.clause);
+		*/	cits.points.push_back(cl.second /*p*/);
+			cits.dnf.clauses.push_back(cl.first/*cl.clause*/);
 		/*}
 		i++;*/
 	}

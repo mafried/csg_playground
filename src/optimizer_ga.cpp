@@ -349,8 +349,7 @@ private:
 			Eigen::Vector3d p = pn.leftCols(3);
 
 			//std::cout << "OUT: " << node.signedDistance(p) << std::endl;
-
-
+			
 			if (node.signedDistance(p) > 0.0)
 			{
 				numCorrectSamples++;
