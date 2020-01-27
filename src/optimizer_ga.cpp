@@ -581,6 +581,10 @@ double lmu::compute_local_proximity_score(const CSGNode& node, double sampling_g
 	//std::cout << "NUM: " << (double)numNodes(node, true) << std::endl;
 	//std::cout << "SCORE: " << score;
 
-	return score == invalid_proximity_score ? score : score / (double)numNodes(node, true);
+	auto num_nodes = numNodes(node, true);
+	if (num_nodes == 0)
+		return 0.0;
+
+	return score == invalid_proximity_score ? score : score / (double)num_nodes;
 }
 

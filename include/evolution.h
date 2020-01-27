@@ -690,7 +690,7 @@ namespace lmu
 			std::sort(population.begin(), population.end(),
 				[](const RankedCreature& a, const RankedCreature& b)
 			{
-				return a.rank >= b.rank;
+				return a.rank > b.rank;
 			});
 		}
 
