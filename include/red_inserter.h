@@ -12,7 +12,9 @@ namespace lmu
 	{
 		SubtreeCopy,
 		DoubleNegation,
-		Distributive
+		Distributive,
+		Absorption,
+		GA
 	};
 	std::ostream& operator <<(std::ostream& stream, const InserterType& it);
 	
@@ -91,6 +93,20 @@ namespace lmu
 	};
 
 	struct DistributiveInserter : IInserter
+	{
+		virtual bool inflate(CSGNode& node) const override;
+		virtual std::shared_ptr<IInserter> clone() const override;
+		virtual InserterType type() const override;
+	};
+
+	struct GAInserter : IInserter
+	{
+		virtual bool inflate(CSGNode& node) const override;
+		virtual std::shared_ptr<IInserter> clone() const override;
+		virtual InserterType type() const override;
+	};
+
+	struct AbsorptionInserter : IInserter
 	{
 		virtual bool inflate(CSGNode& node) const override;
 		virtual std::shared_ptr<IInserter> clone() const override;

@@ -433,7 +433,7 @@ TEST(RedInserter)
 
 	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
 
-	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::SubtreeCopy, 1.0) });
+	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::Absorption, 1.0) });
 
 	writeNode(inflated_node, "inflated_node.gv");
 

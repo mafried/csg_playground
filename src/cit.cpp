@@ -134,7 +134,7 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 					//clauses.insert(ClauseAndPoint(clause, p));
 					insert_clause(clause, p, prims, clauses);
 				//}
-			}
+				}
 
 	CITS cits;
 	cits.dnf.functions = prims;
@@ -165,6 +165,8 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 		i++;*/
 	}
 
+	std::cout << "# Nodes: " << numNodes(DNFtoCSGNode(cits.dnf)) << std::endl;
+	
 	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.points), [](const ClauseAndPoint& cap) { return cap.p; });
 	//std::transform(clauses.begin(), clauses.end(), std::back_inserter(cits.dnf.clauses), [](const ClauseAndPoint& cap) { return cap.clause; });
 

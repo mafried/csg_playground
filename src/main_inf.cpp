@@ -2,7 +2,9 @@
 #include <iostream>
 #include "red_inserter.h"
 #include "optimizer_red.h"
+#include "optimizer_ga.h"
 #include "csgnode_helper.h"
+#include "pointcloud.h"
 
 int main(int argc, char *argv[])
 {
@@ -36,11 +38,11 @@ int main(int argc, char *argv[])
 		}
 
 		std::cout << "Load tree from json..." << std::endl;
-		auto inp = lmu::fromJSONFile(inp_file);
+		auto inp = lmu::to_binary_tree(lmu::fromJSONFile(inp_file));
 		std::cout << "Done." << std::endl;
 
 		std::cout << "Inflate tree..." << std::endl;
-		auto out = lmu::inflate_node(inp, iterations, inserters);
+		auto out = lmu::to_binary_tree(lmu::inflate_node(inp, iterations, inserters));
 		std::cout << "Done." << std::endl;
 
 		if (check_correctness)
@@ -48,8 +50,8 @@ int main(int argc, char *argv[])
 			std::cout << "Check for correctness..." << std::endl;
 			lmu::EmptySetLookup esLookup;
 
-			auto is_correct = lmu::is_empty_set(lmu::opDiff({ inp,out }), sampling_grid_size, esLookup) &&
-				lmu::is_empty_set(lmu::opDiff({ out,inp }), sampling_grid_size, esLookup);
+			auto is_correct = lmu::is_empty_set(lmu::opDiff({ inp,out }), sampling_grid_size, lmu::empty_pc(), esLookup) &&
+				lmu::is_empty_set(lmu::opDiff({ out,inp }), sampling_grid_size, lmu::empty_pc(), esLookup);
 
 			std::cout << "Done." << std::endl;
 			if (is_correct)
@@ -70,9 +72,21 @@ int main(int argc, char *argv[])
 		std::cout << "Done." << std::endl;
 
 		std::cout << "Write tree to gv..." << std::endl;
-		lmu::writeNode(out, out_file + ".gv");
+		lmu::writeNode(out, out_file.substr(0, out_file.find_last_of(".")) + "_graph.gv");
 		std::cout << "Done." << std::endl;
-				
+
+		std::cout << "Write info file" << std::endl;
+		std::ofstream f(out_file.substr(0, out_file.find_last_of(".")) + "_info.ini");
+
+		f << "[Info]" << std::endl;
+		f << "OldTreeSize = " << lmu::numNodes(inp) << std::endl;
+		f << "OldTreeProx = " << std::setprecision(3) << lmu::compute_local_proximity_score(inp, sampling_grid_size, lmu::empty_pc()) << std::endl;
+
+		f << "NewTreeSize = " << lmu::numNodes(out) << std::endl;
+		f << "NewTreeProx = " << std::setprecision(3) << lmu::compute_local_proximity_score(out, sampling_grid_size, lmu::empty_pc()) << std::endl;
+
+		f.close();
+
 		return 0;
 	}
 	catch (const std::exception& ex)

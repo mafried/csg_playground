@@ -21,8 +21,12 @@ std::ostream& lmu::operator <<(std::ostream& stream, const lmu::InserterType& it
 	case InserterType::Distributive:
 		it_str = "Distributive";
 		break;
-
-
+	case InserterType::Absorption:
+		it_str = "Absorption";
+		break;
+	case InserterType::GA:
+		it_str = "GA";
+		break;
 	}
 
 	stream << it_str;
@@ -40,7 +44,10 @@ Inserter lmu::inserter(InserterType type, double probability)
 		return Inserter(std::make_shared<DoubleNegationInserter>(), probability);
 	case InserterType::Distributive:
 		return Inserter(std::make_shared<DistributiveInserter>(), probability);
-
+	case InserterType::Absorption:
+		return Inserter(std::make_shared<AbsorptionInserter>(), probability);
+	case InserterType::GA:
+		return Inserter(std::make_shared<GAInserter>(), probability);
 	}
 }
 
@@ -189,4 +196,52 @@ std::shared_ptr<IInserter> lmu::DistributiveInserter::clone() const
 InserterType lmu::DistributiveInserter::type() const
 {
 	return InserterType::Distributive;
+}
+
+bool lmu::AbsorptionInserter::inflate(CSGNode& node) const
+{
+	static std::default_random_engine generator;
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+	
+	int node_idx = du(generator, parmu_t{ 0, numNodes(node) - 1 });
+	CSGNode* sub_node = nodePtrAt(node, node_idx);
+	
+	if (std::bernoulli_distribution(0.5)(generator))
+	{
+		node = opUnion({ node, opInter({node, *sub_node }) });
+	}
+	else
+	{
+		node = opInter({ node, opUnion({ node, *sub_node }) });
+	}
+
+	return true;
+}
+
+std::shared_ptr<IInserter> lmu::AbsorptionInserter::clone() const
+{
+	return std::make_shared<AbsorptionInserter>(*this);
+}
+
+InserterType lmu::AbsorptionInserter::type() const
+{
+	return InserterType::Absorption;
+}
+
+bool lmu::GAInserter::inflate(CSGNode& node) const
+{
+	//TODO
+
+	return true;
+}
+
+std::shared_ptr<IInserter> lmu::GAInserter::clone() const
+{
+	return std::make_shared<GAInserter>(*this);
+}
+
+InserterType lmu::GAInserter::type() const
+{
+	return InserterType::GA;
 }
