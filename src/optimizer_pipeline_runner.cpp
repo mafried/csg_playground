@@ -15,7 +15,7 @@
 
 void save_as_obj_mesh(const lmu::CSGNode& node, const std::string& path)
 {
-	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50));
+	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
 	igl::writeOBJ(path, mesh.vertices, mesh.indices);
 }
 
@@ -52,19 +52,19 @@ int lmu::PipelineRunner::run()
 	if (pp.save_meshes)
 	{
 		std::cout << "Save input mesh..." << std::endl;
-		save_as_obj_mesh(node, output_folder + "input.obj");
+		save_as_obj_mesh(node, output_folder + "/input.obj");
 		std::cout << "Done." << std::endl;
 	}
 
 	//Save input node
-	writeNode(node, output_folder + "input.gv");
+	writeNode(node, output_folder + "/input.gv");
 
 	// Create output stat files.
 	std::cout << "Create optimizer stat files..." << std::endl;
-	std::ofstream opt_out(output_folder + "opt_output.txt");
+	std::ofstream opt_out(output_folder + "/opt_output.txt");
 	opt_out << "# Input size: " << numNodes(node) << std::endl;
 
-	std::ofstream timings(output_folder + "timings.txt");
+	std::ofstream timings(output_folder + "/timings.txt");
 	TimeTicker ticker;
 	std::cout << "Done." << std::endl;
 
@@ -77,10 +77,13 @@ int lmu::PipelineRunner::run()
 	if (pp.save_meshes)
 	{
 		std::cout << "Save after red mesh..." << std::endl;
-		save_as_obj_mesh(node, output_folder + "after_red.obj");
+		save_as_obj_mesh(node, output_folder + "/after_red.obj");
 		std::cout << "Done." << std::endl;
 	}
-	writeNode(node, output_folder + "after_red.gv");
+	writeNode(node, output_folder + "/after_red.gv");
+
+	opt_out << "# Before decompose size: " << numNodes(node) << std::endl;
+
 	std::cout << "Done." << std::endl;
 
 	try
@@ -95,6 +98,9 @@ int lmu::PipelineRunner::run()
 			node = optimize_with_decomposition(node, pp.sampling_grid_size, true,
 				[&pp, this, &opt_out, &timings](const CSGNode& node, const PrimitiveCluster& prims)
 			{
+				//if(pp.save_meshes)
+				//	save_as_obj_mesh(node, output_folder + "/after_dec.obj");
+				
 				return optimize(node, prims, pp, opt_out, timings);
 			});
 
@@ -122,12 +128,12 @@ int lmu::PipelineRunner::run()
 	}
 
 	// Save results 
-	writeNode(node, output_folder + "output.gv");
+	writeNode(node, output_folder + "/output.gv");
 
 	if (pp.save_meshes)
 	{
 		std::cout << "Save output mesh..." << std::endl;
-		save_as_obj_mesh(node, output_folder + "output.obj");
+		save_as_obj_mesh(node, output_folder + "/output.obj");
 		std::cout << "Done." << std::endl;
 	}
 
@@ -142,6 +148,8 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 {
 	// Run Optimizer.
 	std::cout << "Optimize..." << std::endl;
+
+	opt_out << "# Before opt size: " << numNodes(node) << std::endl;
 
 	TimeTicker opt_ticker;
 

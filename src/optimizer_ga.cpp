@@ -548,7 +548,7 @@ void compute_local_proximity_score_rec(const CSGNode& node, double sampling_grid
 	else if (n > 2)
 	{
 		score = invalid_proximity_score;
-		std::cerr << "Proximity score computation: No more than 2 children allowed." << std::endl;
+		std::cout << "Proximity score computation: No more than 2 children allowed." << std::endl;
 		return;
 	}
 	else if (n == 1)

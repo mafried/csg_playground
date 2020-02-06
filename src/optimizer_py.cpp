@@ -262,7 +262,11 @@ CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method,
 {
 	std::string python_input_expr = espresso_expression(node);
 
+	std::cout << "Input Expression: " << espresso_expression(node) << std::endl;
+
 	std::string python_output_expr = py_interpreter.simplify(python_input_expr, method);
+
+	std::cout << "Output Expression: " << python_output_expr << std::endl;
 
 	/*PyObject *pName, *pModule, *pDict, *pFunc, *pValue, *presult;
 
@@ -316,7 +320,7 @@ CSGNode lmu::optimize_with_python(const CSGNode & node, SimplifierMethod method,
 	}
 	catch(const CSGNodeParseException& ex)
 	{
-		std::cerr << "Could not parse python expression. Reason: " << ex.msg << " Index: " << ex.error_pos << std::endl;
+		std::cout << "Could not parse python expression. Reason: " << ex.msg << " Index: " << ex.error_pos << std::endl;
 		return opNo();
 	}
 }
