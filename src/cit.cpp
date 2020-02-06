@@ -242,6 +242,8 @@ lmu::DNF lmu::extract_prime_implicants(const CITS& cits, const lmu::PointCloud& 
 	std::unordered_set<Clause, ClauseHash, ClauseEqual> prime_clauses;
 	lmu::EmptySetLookup esLookup;
 
+	std::cout << "# Outside points: " << outside_points.rows() << std::endl;
+
 	int i = 0;
 	for (const auto& clause : cits.dnf.clauses)
 	{

@@ -64,7 +64,9 @@ int lmu::PipelineRunner::run()
 	std::ofstream opt_out(output_folder + "/opt_output.txt");
 	opt_out << "# Input size: " << numNodes(node) << std::endl;
 
-	std::ofstream timings(output_folder + "/timings.txt");
+	std::ofstream timings(output_folder + "/timings.ini");
+	timings << "[Timings]" << std::endl;
+
 	TimeTicker ticker;
 	std::cout << "Done." << std::endl;
 
@@ -72,7 +74,7 @@ int lmu::PipelineRunner::run()
 	std::cout << "Remove Redundancies..." << std::endl;	
 	ticker.tick();
 	node = remove_redundancies(node, pp.sampling_grid_size, empty_pc());
-	timings << "Remove Redundancies: " << ticker.tick() << std::endl;
+	timings << "RemoveRedundancies=" << ticker.tick() << std::endl;
 	
 	if (pp.save_meshes)
 	{
@@ -104,7 +106,7 @@ int lmu::PipelineRunner::run()
 				return optimize(node, prims, pp, opt_out, timings);
 			});
 
-			timings << "Decomposition (opt included): " << ticker.tick() << std::endl;
+			timings << "DecompositionAndOpt=" << ticker.tick() << std::endl;
 		}
 		else
 		{
@@ -190,7 +192,7 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 		throw std::runtime_error("Optimizer with name '" + pp.optimizer + "' does not exist.");
 	}
 
-	timings << "Optimization: " << opt_ticker.tick() << std::endl;
+	timings << "Optimization=" << opt_ticker.tick() << std::endl;
 
 	return opt_node;
 }
