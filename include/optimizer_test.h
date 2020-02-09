@@ -433,7 +433,7 @@ TEST(RedInserter)
 
 	auto node = opUnion({ opDiff({ opUnion({ s1, s2 }), opUnion({ s3, s4 }) }), s5 });
 
-	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::Absorption, 1.0) });
+	auto inflated_node = inflate_node(node, 10, { inserter(InserterType::GA, 1.0) });
 
 	writeNode(inflated_node, "inflated_node.gv");
 
@@ -459,10 +459,10 @@ TEST(DominantPrimDecomposer)
 	const double sampling = 0.01;
 	const bool use_diff_op = true;
 
-	auto res_0 = dom_prim_decomposition(node_0, sampling, use_diff_op);
-	auto res_1 = dom_prim_decomposition(node_1, sampling, use_diff_op);
-	auto res_2 = dom_prim_decomposition(node_2, sampling, use_diff_op);
-	auto res_3 = dom_prim_decomposition(node_3, sampling, use_diff_op);
+	auto res_0 = dom_prim_decomposition(node_0, sampling, use_diff_op, empty_pc(), empty_pc());
+	auto res_1 = dom_prim_decomposition(node_1, sampling, use_diff_op, empty_pc(), empty_pc());
+	auto res_2 = dom_prim_decomposition(node_2, sampling, use_diff_op, empty_pc(), empty_pc());
+	auto res_3 = dom_prim_decomposition(node_3, sampling, use_diff_op, empty_pc(), empty_pc());
 
 	ASSERT_TRUE(res_0.already_complete());
 	ASSERT_TRUE(res_1.already_complete());
@@ -492,7 +492,7 @@ TEST(DominantPrimOptimizer)
 
 	auto params = get_std_ga_params();
 
-	auto opt_node = optimize_with_decomposition(node, sampling, use_diff_op,
+	auto opt_node = optimize_with_decomposition(node, sampling, use_diff_op, empty_pc(), empty_pc(), empty_pc(),
 		[&params](const CSGNode& node, const PrimitiveCluster& prims)
 	{
 		return optimize_with_ga(node, params, std::cout, prims).node;
@@ -525,7 +525,7 @@ TEST(CSGExpr1)
 
 	auto params = get_std_ga_params();
 
-	auto opt_node = optimize_with_decomposition(inflated_node, sampling, use_diff_op,
+	auto opt_node = optimize_with_decomposition(inflated_node, sampling, use_diff_op, empty_pc(), empty_pc(), empty_pc(),
 		[&params](const CSGNode& node, const PrimitiveCluster& prims)
 	{
 		return optimize_with_ga(node, params, std::cout, prims).node;

@@ -54,6 +54,9 @@ namespace lmu
 	bool _is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::CSGNode& n, double sampling_grid_size,
 		const Eigen::Vector3d& min, const Eigen::Vector3d& max);
 
+	bool _is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& out);
+	bool _is_out(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& in);
+
 }
 
 #endif

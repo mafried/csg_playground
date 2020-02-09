@@ -61,11 +61,13 @@ namespace lmu
 
 	struct OptimizerGAResult
 	{
-		OptimizerGAResult(const CSGNode& node) : 
-			node(node)
+		OptimizerGAResult(const CSGNode& node, const std::vector<CSGNode>& pareto_nodes) :
+			node(node),
+			pareto_nodes(pareto_nodes)
 		{
 		}
 
+		std::vector<CSGNode> pareto_nodes;
 		CSGNode node; 
 	};
 

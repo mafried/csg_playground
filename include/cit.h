@@ -44,7 +44,7 @@ namespace lmu
 	std::ostream& operator <<(std::ostream& stream, const CITSets& c);
 
 	struct PythonInterpreter;
-
+	
 	CSGNode optimize_pi_set_cover(const CSGNode& node, double sampling_grid_size, bool use_cit_points_for_pi_extraction,
 		const PythonInterpreter& interpreter, const std::vector<ImplicitFunctionPtr>& primitives = {}, std::ostream& report_stream = std::cout);
 

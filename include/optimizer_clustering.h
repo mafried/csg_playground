@@ -11,8 +11,10 @@ namespace lmu
 	std::vector<CSGNode> cluster_union_paths(const CSGNode& node);
 
 	std::vector<ImplicitFunctionPtr> find_dominating_prims(const CSGNode& node, double sampling_grid_size);
+	std::vector<ImplicitFunctionPtr> find_dominating_prims(const CSGNode& node, const lmu::PointCloud& out);
 
 	std::vector<ImplicitFunctionPtr> find_negated_dominating_prims(const CSGNode& node, double sampling_grid_size);
+	std::vector<ImplicitFunctionPtr> find_negated_dominating_prims(const CSGNode& node, const lmu::PointCloud& in);
 
 	using PrimitiveCluster = std::vector<ImplicitFunctionPtr>;
 
@@ -49,10 +51,12 @@ namespace lmu
 			return rest_prims.empty();
 		}
 	};
-
-	DecompositionResult dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op);
+	
+	DecompositionResult dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
+		const lmu::PointCloud& in, const lmu::PointCloud& out);
 
 	CSGNode optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
+		const lmu::PointCloud& in, const lmu::PointCloud& out, const lmu::PointCloud& in_out,
 		const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer);
 
 }

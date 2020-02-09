@@ -6,8 +6,7 @@
 
 int main()
 {
-	RUN_TEST(CSGExpr1);
-
+	RUN_TEST(RedInserter);
 	return 0; 
 }
 

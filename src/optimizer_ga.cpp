@@ -500,10 +500,10 @@ using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank,
 OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAParams& params, std::ostream& report_stream, const std::vector<ImplicitFunctionPtr>& primitives)
 {	
 	if (node.childsCRef().empty())
-		return node;
+		return OptimizerGAResult(node, {});
 
 	if (primitives.size() == 1)
-		return geometry(primitives[0]);
+		return OptimizerGAResult(geometry(primitives[0]), {});
 
 	CSGNodeRanker ranker(node, primitives, params.ranker_params);
 	CSGNodeCreator creator(node, primitives, params.creator_params);
@@ -525,7 +525,11 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 	CSGNodeGA ga;
 	auto res = ga.run(ga_params, t_selector, creator, ranker, stop_criterion, manipulator);
 
-	auto opt_res = OptimizerGAResult(manipulator.get_best());
+	std::vector<CSGNode> pareto_nodes;
+	std::transform(manipulator.pareto_nodes.begin(), manipulator.pareto_nodes.end(), std::back_inserter(pareto_nodes), 
+		[](const auto& rpn) { return rpn.second.creature; });
+
+	auto opt_res = OptimizerGAResult(manipulator.get_best(), pareto_nodes);
 	
 	res.statistics.save(report_stream, &opt_res.node);
 

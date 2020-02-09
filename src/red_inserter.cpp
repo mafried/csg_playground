@@ -4,6 +4,7 @@
 #include <algorithm>
 #include "csgnode.h"
 #include "csgnode_helper.h"
+#include "optimizer_ga.h"
 
 using namespace lmu;
 
@@ -54,7 +55,6 @@ Inserter lmu::inserter(InserterType type, double probability)
 CSGNode lmu::inflate_node(const CSGNode& node, int iterations, const std::vector<Inserter>& inserter)
 {
 	CSGNode inflated_node = node;
-
 
 	std::vector<double> probs;
 	std::transform(inserter.begin(), inserter.end(), std::back_inserter(probs), [](const Inserter& ins) {return ins.propability(); });
@@ -231,9 +231,52 @@ InserterType lmu::AbsorptionInserter::type() const
 
 bool lmu::GAInserter::inflate(CSGNode& node) const
 {
-	//TODO
+	OptimizerGAParams params;
 
-	return true;
+	params.ranker_params.geo_score_weight = 20.0;
+	params.ranker_params.size_score_weight = -0.1; /*we want larger trees.*/
+	params.ranker_params.prox_score_weight = -0.1; /*...and also trees with bad proxy score.*/
+	
+	params.ranker_params.gradient_step_size = 0.0001;
+	params.ranker_params.position_tolerance = 0.1;
+	params.ranker_params.sampling_params.errorSigma = 0.00000001;
+	params.ranker_params.sampling_params.samplingStepSize = 0.1;
+	params.ranker_params.sampling_params.maxDistance = 0.1;
+	params.ranker_params.max_sampling_points = 250;
+	params.ranker_params.geo_score_strat = GeoScoreStrategy::IN_OUT_SAMPLES;
+
+	params.creator_params.create_new_prob = 0.3;
+	params.creator_params.subtree_prob = 0.3;
+	params.creator_params.initial_population_dist = { 0.1,0.8,0.1 };
+
+	params.man_params.max_delta = 0.2;
+
+	params.ga_params.crossover_rate = 0.4;
+	params.ga_params.mutation_rate = 0.3;
+	params.ga_params.in_parallel = true;
+	params.ga_params.max_iterations = 10;
+	params.ga_params.num_best_parents = 2;
+	params.ga_params.population_size = 100;
+	params.ga_params.tournament_k = 2;
+	params.ga_params.use_caching = true;	
+
+	
+	auto res = optimize_with_ga(node, params, std::cout);
+
+	double max_grow_percentage = 1.5;
+	double min_grow_percentage = 1.2;
+
+	for (const auto& n : res.pareto_nodes)
+	{
+		double percentage = (double)numNodes(n) / (double)numNodes(node);
+		if (percentage >= min_grow_percentage && percentage <= max_grow_percentage)
+		{
+			node = n; 
+			return true;
+		}
+	}
+
+	return false;
 }
 
 std::shared_ptr<IInserter> lmu::GAInserter::clone() const

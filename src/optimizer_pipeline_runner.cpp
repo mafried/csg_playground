@@ -13,6 +13,28 @@
 
 #include <fstream>
 
+void sample_if_empty(const lmu::CSGNode& n, const lmu::PrimitiveCluster& primitives, double sampling_grid_size, lmu::CITSampling& cit_sampling)
+{
+
+	std::cout << "Generate CIT sets..." << std::endl;
+
+	if (!cit_sampling.empty())
+	{
+		std::cout << "Already there. Done." << std::endl;
+		return;
+	}
+
+	cit_sampling.in_sets.cits = lmu::generate_cits(n, sampling_grid_size, lmu::CITSGenerationOptions::INSIDE, primitives);	
+	cit_sampling.out_sets.cits = lmu::generate_cits(n, sampling_grid_size, lmu::CITSGenerationOptions::OUTSIDE, primitives);
+	
+	cit_sampling.in = lmu::extract_points_from_cits(cit_sampling.in_sets.cits);
+	cit_sampling.out = lmu::extract_points_from_cits(cit_sampling.out_sets.cits);
+
+	cit_sampling.in_out = lmu::mergePointClouds({ cit_sampling.in, cit_sampling.out });
+
+	std::cout << "Done." << std::endl;
+}
+
 void save_as_obj_mesh(const lmu::CSGNode& node, const std::string& path)
 {
 	auto mesh = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100));
@@ -28,37 +50,13 @@ lmu::PipelineRunner::PipelineRunner(const std::string& input_config, const std::
 int lmu::PipelineRunner::run()
 {
 	auto pp = read_pipeline_params(params);
-
-	auto node = opNo();
-
-	// Load CSG tree.
-	std::cout << "Load CSG tree from '" << pp.tree_file << "'..." << std::endl;
-	{
-		try
-		{
-			node = fromJSONFile(pp.tree_file);
-
-			node = to_binary_tree(node);
-		}
-		catch (const std::exception& ex)
-		{
-			std::cerr << "Cannot load CSG tree from '" << pp.tree_file << "'. Reason: " << ex.what() << std::endl;
-			return 1;
-		}
-	}
-	std::cout << "Done." << std::endl;
-
-	// Save input node mesh.
-	if (pp.save_meshes)
-	{
-		std::cout << "Save input mesh..." << std::endl;
-		save_as_obj_mesh(node, output_folder + "/input.obj");
-		std::cout << "Done." << std::endl;
-	}
-
-	//Save input node
-	writeNode(node, output_folder + "/input.gv");
-
+	CITSampling cit_sampling;
+	
+	// Load node.
+	auto node = load(pp);
+	if (node.operationType() == CSGNodeOperationType::Noop)
+		return 1;
+		
 	// Create output stat files.
 	std::cout << "Create optimizer stat files..." << std::endl;
 	std::ofstream opt_out(output_folder + "/opt_output.txt");
@@ -71,11 +69,18 @@ int lmu::PipelineRunner::run()
 	std::cout << "Done." << std::endl;
 
 	// Remove Redundancies. 
-	std::cout << "Remove Redundancies..." << std::endl;	
-	ticker.tick();
-	node = remove_redundancies(node, pp.sampling_grid_size, empty_pc());
-	timings << "RemoveRedundancies=" << ticker.tick() << std::endl;
-	
+	if (pp.use_redundancy_removal)
+	{
+		std::cout << "Remove Redundancies..." << std::endl;
+		ticker.tick();
+
+		if (pp.use_cit_points_for_redundancy_removal)
+			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
+		
+		node = remove_redundancies(node, pp.sampling_grid_size, cit_sampling.in_out);
+		timings << "RemoveRedundancies=" << ticker.tick() << std::endl;
+	}
+
 	if (pp.save_meshes)
 	{
 		std::cout << "Save after red mesh..." << std::endl;
@@ -97,12 +102,12 @@ int lmu::PipelineRunner::run()
 			// Decompose. 
 			std::cout << "Decompose..." << std::endl;
 			
-			node = optimize_with_decomposition(node, pp.sampling_grid_size, true,
-				[&pp, this, &opt_out, &timings](const CSGNode& node, const PrimitiveCluster& prims)
-			{
-				//if(pp.save_meshes)
-				//	save_as_obj_mesh(node, output_folder + "/after_dec.obj");
-				
+			if (pp.use_cit_points_for_decomposition)
+				sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
+
+			node = optimize_with_decomposition(node, pp.sampling_grid_size, true, cit_sampling.in, cit_sampling.out, cit_sampling.in_out,
+				[&pp, this, &opt_out, &timings, &cit_sampling](const CSGNode& node, const PrimitiveCluster& prims)
+			{				
 				return optimize(node, prims, pp, opt_out, timings);
 			});
 
@@ -112,7 +117,6 @@ int lmu::PipelineRunner::run()
 		{
 			node = optimize(node, {}, pp, opt_out, timings);
 		}	
-
 	
 		opt_out << "# Output size: " << numNodes(node) << std::endl;
 	}
@@ -144,8 +148,42 @@ int lmu::PipelineRunner::run()
 
 	return 0;
 }
+lmu::CSGNode lmu::PipelineRunner::load(const PipelineParams& pp)
+{
+	auto node = opNo();
 
-lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveCluster& prims, 
+	// Load CSG tree.
+	std::cout << "Load CSG tree from '" << pp.tree_file << "'..." << std::endl;
+	{
+		try
+		{
+			node = fromJSONFile(pp.tree_file);
+
+			node = to_binary_tree(node);
+		}
+		catch (const std::exception& ex)
+		{
+			std::cout << "Cannot load CSG tree from '" << pp.tree_file << "'. Reason: " << ex.what() << std::endl;
+			return node;
+		}
+	}
+	std::cout << "Done." << std::endl;
+
+	// Save input node mesh.
+	if (pp.save_meshes)
+	{
+		std::cout << "Save input mesh..." << std::endl;
+		save_as_obj_mesh(node, output_folder + "/input.obj");
+		std::cout << "Done." << std::endl;
+	}
+
+	//Save input node
+	writeNode(node, output_folder + "/input.gv");
+
+	return node;
+}
+
+lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveCluster& prims,
 	const PipelineParams& pp, std::ofstream& opt_out, std::ofstream& timings)
 {
 	// Run Optimizer.
@@ -166,8 +204,9 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 	else if (pp.optimizer == "Sampling.SetCover")
 	{
 		auto sp = read_opt_sampling_params(params);
+
 		opt_node = optimize_pi_set_cover(node, sp.sampling_grid_size, sp.use_cit_points_for_pi_extraction,
-			PythonInterpreter(sp.python_interpreter_path), {}, opt_out);
+			PythonInterpreter(sp.python_interpreter_path), prims, opt_out);
 
 		opt_node = transform_to_diffs(lmu::to_binary_tree(opt_node));
 	}
@@ -206,6 +245,9 @@ lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet
 	pipeline_params.sampling_grid_size = params.getDouble("Pipeline", "SamplingGridSize", 0.1);
 	pipeline_params.save_meshes = params.getBool("Pipeline", "SaveMeshes", false);
 	pipeline_params.use_decomposition = params.getBool("Pipeline", "UseDecomposition", true);
+	pipeline_params.use_decomposition = params.getBool("Pipeline", "UseRedundancyRemoval", true);
+	pipeline_params.use_cit_points_for_decomposition = params.getBool("Pipeline", "UseCITPointsForDecomposition", false);
+	pipeline_params.use_cit_points_for_redundancy_removal = params.getBool("Pipeline", "UseCITPointsForRedundancyRemoval", false);
 
 	return pipeline_params;
 }
@@ -214,6 +256,7 @@ lmu::SamplingParams lmu::PipelineRunner::read_opt_sampling_params(const Paramete
 {
 	SamplingParams p;
 	p.use_cit_points_for_pi_extraction = params.getBool("Sampling", "UseCITPointsForPiExtraction", false);
+	
 	p.sampling_grid_size = params.getDouble("Sampling", "SamplingGridSize", 0.1);
 	p.python_interpreter_path = params.getStr("Sampling", "PythonInterpreterPath", "");
 

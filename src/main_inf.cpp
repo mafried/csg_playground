@@ -78,12 +78,15 @@ int main(int argc, char *argv[])
 		std::cout << "Write info file" << std::endl;
 		std::ofstream f(out_file.substr(0, out_file.find_last_of(".")) + "_info.ini");
 
+		lmu::AABB aabb = lmu::aabb_from_primitives(lmu::allDistinctFunctions(inp));
+
 		f << "[Info]" << std::endl;
 		f << "OldTreeSize = " << lmu::numNodes(inp) << std::endl;
 		f << "OldTreeProx = " << std::setprecision(3) << lmu::compute_local_proximity_score(inp, sampling_grid_size, lmu::empty_pc()) << std::endl;
-
+		f << "OldTreeDims = (" << (aabb.s.x() * 2.0) << ", " << (aabb.s.y() * 2.0) << ", " << (aabb.s.z() * 2.0) << ")" << std::endl;
 		f << "NewTreeSize = " << lmu::numNodes(out) << std::endl;
 		f << "NewTreeProx = " << std::setprecision(3) << lmu::compute_local_proximity_score(out, sampling_grid_size, lmu::empty_pc()) << std::endl;
+
 
 		f.close();
 

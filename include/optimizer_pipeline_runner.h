@@ -4,6 +4,7 @@
 #include "params.h"
 #include "optimizer_ga.h"
 #include "optimizer_clustering.h"
+#include "cit.h"
 
 namespace lmu
 {
@@ -13,7 +14,12 @@ namespace lmu
 		std::string tree_file;
 		double sampling_grid_size;
 		bool save_meshes;	
+
 		bool use_decomposition;
+		bool use_redundancy_removal;
+
+		bool use_cit_points_for_redundancy_removal;
+		bool use_cit_points_for_decomposition;
 	};
 
 	struct SamplingParams
@@ -21,6 +27,26 @@ namespace lmu
 		bool use_cit_points_for_pi_extraction;
 		double sampling_grid_size;
 		std::string python_interpreter_path;
+	};
+	
+	struct CITSampling
+	{
+		CITSampling() :
+			in(lmu::empty_pc()), out(lmu::empty_pc()), in_out(lmu::empty_pc())
+		{
+		}
+
+		lmu::PointCloud in;
+		lmu::PointCloud out;
+		lmu::PointCloud in_out;
+
+		lmu::CITSets in_sets;
+		lmu::CITSets out_sets;
+
+		bool empty() const
+		{
+			return in.rows() == 0;
+		}
 	};
 
 	struct PipelineRunner
@@ -30,6 +56,8 @@ namespace lmu
 		int run();
 
 	private:
+
+		CSGNode load(const PipelineParams& pp);
 
 		CSGNode optimize(const CSGNode& node, const PrimitiveCluster& prims,
 			const PipelineParams& pp, std::ofstream& opt_out, std::ofstream& timings);
