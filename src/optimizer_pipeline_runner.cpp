@@ -198,8 +198,6 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 	if (pp.optimizer == "GA")
 	{
 		opt_node = optimize_with_ga(node, read_opt_ga_params(params), opt_out, prims).node;
-
-		opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
 	}
 	else if (pp.optimizer == "Sampling.SetCover")
 	{
@@ -231,6 +229,8 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 		throw std::runtime_error("Optimizer with name '" + pp.optimizer + "' does not exist.");
 	}
 
+	opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
+
 	timings << "Optimization=" << opt_ticker.tick() << std::endl;
 
 	return opt_node;
@@ -245,7 +245,7 @@ lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet
 	pipeline_params.sampling_grid_size = params.getDouble("Pipeline", "SamplingGridSize", 0.1);
 	pipeline_params.save_meshes = params.getBool("Pipeline", "SaveMeshes", false);
 	pipeline_params.use_decomposition = params.getBool("Pipeline", "UseDecomposition", true);
-	pipeline_params.use_decomposition = params.getBool("Pipeline", "UseRedundancyRemoval", true);
+	pipeline_params.use_redundancy_removal = params.getBool("Pipeline", "UseRedundancyRemoval", true);
 	pipeline_params.use_cit_points_for_decomposition = params.getBool("Pipeline", "UseCITPointsForDecomposition", false);
 	pipeline_params.use_cit_points_for_redundancy_removal = params.getBool("Pipeline", "UseCITPointsForRedundancyRemoval", false);
 

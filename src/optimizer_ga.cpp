@@ -133,18 +133,18 @@ struct CSGNodeCreator
 		{
 		case 0:
 			create(node, max_tree_depth, 0);
-			std::cout << "create" << std::endl;
+			//std::cout << "create" << std::endl;
 			break;
 		case 1:
 			node = input_node;
-			std::cout << "take input node." << std::endl;
+			//std::cout << "take input node." << std::endl;
 			break;
 		case 2:
 			node = mutate(input_node);
-			std::cout << "take mutated input node." << std::endl;
+			//std::cout << "take mutated input node." << std::endl;
 			break;
 		default:
-			std::cerr << "Creator: No strategy for CSGNode creation available." << std::endl;
+			std::cout << "Creator: No strategy for CSGNode creation available." << std::endl;
 			break;
 		}
 
