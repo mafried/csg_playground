@@ -61,6 +61,7 @@ int lmu::PipelineRunner::run()
 	std::cout << "Create optimizer stat files..." << std::endl;
 	std::ofstream opt_out(output_folder + "/opt_output.txt");
 	opt_out << "# Input size: " << numNodes(node) << std::endl;
+	opt_out << "# Input proximity: " << compute_local_proximity_score(node, pp.sampling_grid_size, empty_pc());
 
 	std::ofstream timings(output_folder + "/timings.ini");
 	timings << "[Timings]" << std::endl;
@@ -90,18 +91,19 @@ int lmu::PipelineRunner::run()
 	writeNode(node, output_folder + "/after_red.gv");
 
 	opt_out << "# Before decompose size: " << numNodes(node) << std::endl;
+	opt_out << "# Before decompose proximity: " << compute_local_proximity_score(node, pp.sampling_grid_size, empty_pc());
 
 	std::cout << "Done." << std::endl;
 
 	try
-	{
-		ticker.tick();
-
+	{	
 		if (pp.use_decomposition)
 		{
 			// Decompose. 
 			std::cout << "Decompose..." << std::endl;
-			
+		
+			ticker.tick();
+
 			if (pp.use_cit_points_for_decomposition)
 				sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
 
@@ -119,6 +121,7 @@ int lmu::PipelineRunner::run()
 		}	
 	
 		opt_out << "# Output size: " << numNodes(node) << std::endl;
+		opt_out << "# Output proximity: " << compute_local_proximity_score(node, pp.sampling_grid_size, empty_pc());
 	}
 	catch (const std::exception& ex)
 	{

@@ -454,11 +454,11 @@ namespace lmu
 		{
 			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion, popMan));
 	
-			std::cout << "Create random population..." << std::endl;
+			//std::cout << "Create random population..." << std::endl;
 
 			auto population = createRandomPopulation(params.populationSize, creator);
 		
-			std::cout << "Random population with " << population.size() << " creatures was created." << std::endl;
+			//std::cout << "Random population with " << population.size() << " creatures was created." << std::endl;
 
 			int iterationCount = 0;
 			_stopRequested.store(false);
@@ -468,18 +468,18 @@ namespace lmu
 
 			while (!stopCriterion.shouldStop(population, iterationCount) && !_stopRequested.load())			
 			{
-				std::cout << "Start iteration " << std::endl;
+				//std::cout << "Start iteration " << std::endl;
 				stats.iterationDuration.reset();
 				
-				std::cout << "Optimize population." << std::endl;
+				//std::cout << "Optimize population." << std::endl;
 				popMan.manipulateBeforeRanking(population);
 				stats.optDurations.push_back(stats.iterationDuration.tick());
 
-				std::cout << "Rank population." << std::endl;
+				//std::cout << "Rank population." << std::endl;
 				rankPopulation(population, ranker, params.rankingInParallel, params.useCaching, stats);
 				stats.rankingDurations.push_back(stats.iterationDuration.tick());
 				
-				std::cout << "After Rank manipulation." << std::endl;
+				//std::cout << "After Rank manipulation." << std::endl;
 				popMan.manipulateAfterRanking(population);
 	
 				sortPopulation(population);
@@ -508,7 +508,7 @@ namespace lmu
 				
 				population = newPopulation; 
 				stats.update();
-				stats.print();
+				//stats.print();
 				iterationCount++;
 
 				// Update the cross-over rate and mutation rate based on 
@@ -517,7 +517,7 @@ namespace lmu
 				mutationRate = params.mutationRate * params.mutationSchedule.getFactor(iterationCount);
 			}
 
-			std::cout << "End." << std::endl;
+			//std::cout << "End." << std::endl;
 
 			stats.totalDuration.tick();
 						
