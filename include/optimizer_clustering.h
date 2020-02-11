@@ -53,10 +53,10 @@ namespace lmu
 	};
 	
 	DecompositionResult dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
-		const lmu::PointCloud& in, const lmu::PointCloud& out);
+		const lmu::PointCloud& in, const lmu::PointCloud& out, bool use_sampling_points);
 
 	CSGNode optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
-		const lmu::PointCloud& in, const lmu::PointCloud& out, const lmu::PointCloud& in_out,
+		const lmu::PointCloud& in, const lmu::PointCloud& out, const lmu::PointCloud& in_out, bool use_sampling_points,
 		const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer);
 
 }

@@ -47,6 +47,8 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_dominating_prims(const CSGNode& 
 {
 	std::vector<ImplicitFunctionPtr> dps;
 
+	//TODO: check node inside/outside in _is_in
+
 	for (const auto& primitive : allDistinctFunctions(node))
 	{
 		if (_is_in(primitive, out))
@@ -66,6 +68,8 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const C
 std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const CSGNode& node, const lmu::PointCloud& in)
 {
 	std::vector<ImplicitFunctionPtr> dps;
+
+	//TODO: check node inside/outside in _is_out
 
 	for (const auto& primitive : allDistinctFunctions(node))
 	{
@@ -227,7 +231,7 @@ lmu::CSGNode compute_decomposed_expression(const lmu::PrimitiveCluster& dom_prim
 	std::transform(dom_prims.begin(), dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, true); });
 	std::transform(neg_dom_prims.begin(), neg_dom_prims.end(), std::back_inserter(combined_dom_prims), [](const lmu::ImplicitFunctionPtr& f) {return std::make_pair(f, false); });
 
-	std::cout << "# Dominant Prims: " << combined_dom_prims.size() << std::endl;
+	//std::cout << "# Dominant Prims: " << combined_dom_prims.size() << std::endl;
 
 	lmu::EmptySetLookup esl;
 
@@ -245,19 +249,17 @@ lmu::CSGNode compute_decomposed_expression(const lmu::PrimitiveCluster& dom_prim
 		}
 	} 
 
-	//TODO: find a replacement for select_next_from() which takes proximity into account.
-
 	return node;
 }
 
 lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
-	const lmu::PointCloud& in, const lmu::PointCloud& out)
+	const lmu::PointCloud& in, const lmu::PointCloud& out, bool use_sampling_points)
 {
 	PrimitiveCluster dom_prims; 
 	PrimitiveCluster neg_dom_prims;
 	
-	// If there are no sampling points, sample hierarchically.
-	if (in.rows() == 0)
+	// If there are no sampling points or they should not be used, sample hierarchically.
+	if (!use_sampling_points || in.rows() == 0)
 	{
 		dom_prims = find_dominating_prims(node, sampling_grid_size);
 		neg_dom_prims = find_negated_dominating_prims(node, sampling_grid_size);
@@ -271,14 +273,16 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 	auto rest_prims = get_rest_prims(
 		get_rest_prims(allDistinctFunctions(node), dom_prims), neg_dom_prims);
 
-	std::cout << "Dom Prims: " << dom_prims.size() << " Negated Dom Prims: " << neg_dom_prims.size() << " Rest Prims: " << rest_prims.size() << std::endl;
+	//std::cout << "Dom Prims: " << dom_prims.size() << " Negated Dom Prims: " << neg_dom_prims.size() << " Rest Prims: " << rest_prims.size() << std::endl;
 
 	DecompositionResult res;
 	res.node = compute_decomposed_expression(dom_prims, neg_dom_prims, use_diff_op, sampling_grid_size);
 
+	//std::cout << "Res.Node: " << numNodes(res.node)  << " " << allDistinctFunctions(res.node).size() << std::endl;
+
 	if (rest_prims.empty())
 	{
-		lmu::visit(res.node, [&rest_prims](lmu::CSGNode& n)
+		lmu::visit(res.node, [](lmu::CSGNode& n)
 		{
 			if (n.childsCRef().size() == 2)
 			{
@@ -318,44 +322,65 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 	return res;
 }
 
+#include "mesh.h"
+#include <igl/writeOBJ.h>
+
 lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
-	const lmu::PointCloud& in, const lmu::PointCloud& out, const lmu::PointCloud& in_out,
+	const lmu::PointCloud& in, const lmu::PointCloud& out, const lmu::PointCloud& in_out, bool use_sampling_points,
 	const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer)
 {
 	std::cout << "Decompose node." << std::endl;
 	
-	auto dec = dom_prim_decomposition(node, sampling_grid_size, use_diff_op, in, out);
+	auto dec = dom_prim_decomposition(node, sampling_grid_size, use_diff_op, in, out, use_sampling_points);
+
+	std::cout << "--- used prims: " << std::endl;
+	for (const auto& rp : dec.used_prims) std::cout << " -:" <<  rp->name() << std::endl;
 
 	if (!dec.already_complete())
 	{
 		auto opt_node = node;
 
-		std::cout << "Replace decomposed prims with empty set marker." << std::endl;
-
 		// Replace primitives used in the decomposition node part with empty set marker. 
 		bool prim_replaced = false;
-		visit(opt_node, [&dec, &prim_replaced](CSGNode& n)
+		if (!dec.used_prims.empty())
 		{
-			static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
+			std::cout << "Replace decomposed prims with empty set marker." << std::endl;
 
-			if (n.type() == CSGNodeType::Geometry &&
-				std::find(dec.used_prims.begin(), dec.used_prims.end(), n.function()) != dec.used_prims.end())
+			visit(opt_node, [&dec, &prim_replaced](CSGNode& n)
 			{
-				n = empty_set;
-				prim_replaced = true;
-			}
-		});
+				static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
+
+				if (n.type() == CSGNodeType::Geometry &&
+					std::find(dec.used_prims.begin(), dec.used_prims.end(), n.function()) != dec.used_prims.end())
+				{
+					n = empty_set;
+					prim_replaced = true;
+				}
+			});
+		}
+		else
+		{
+			std::cout << "No prims decomposed." << std::endl;
+		}
 
 		// Simplify.
 		if (prim_replaced)
 		{
 			std::cout << "Remove redundancies." << std::endl;
 
-			writeNode(opt_node, "opt_node_" + std::to_string(numNodes(opt_node)) + ".gv");
+			//writeNode(opt_node, "test_opt_0.dv");
 
 			opt_node = remove_redundancies(opt_node, sampling_grid_size, in_out);
-			
-			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, in, out, in_out, optimizer);
+
+			//auto mesh = lmu::computeMesh(opt_node, Eigen::Vector3i(100, 100, 100));
+			//igl::writeOBJ("test_mesh_opt.obj", mesh.vertices, mesh.indices);
+
+			//writeNode(opt_node, "test_opt_1.dv");
+
+			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, in, out, in_out, use_sampling_points, optimizer);
+
+			//writeNode(opt_node, "test_opt_2.dv");
+
 		}
 		else
 		{
