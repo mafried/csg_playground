@@ -69,7 +69,7 @@ int lmu::PipelineRunner::run()
 	TimeTicker ticker;
 	std::cout << "Done." << std::endl;
 
-	// Remove Redundancies. 
+	// Remove Redundancies Before. 
 	if (pp.use_redundancy_removal)
 	{
 		std::cout << "Remove Redundancies..." << std::endl;
@@ -136,6 +136,19 @@ int lmu::PipelineRunner::run()
 	{
 		std::cerr << "Something went wrong. Node is NoOp." << std::endl;
 		return 1;
+	}
+
+	// Remove Redundancies Afterwards. 
+	if (pp.use_redundancy_removal)
+	{
+		std::cout << "Remove Redundancies..." << std::endl;
+		ticker.tick();
+
+		if (pp.use_cit_points_for_redundancy_removal)
+			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
+
+		node = remove_redundancies(node, pp.sampling_grid_size, cit_sampling.in_out);
+		timings << "RemoveRedundanciesAfterwards=" << ticker.tick() << std::endl;
 	}
 
 	// Save results 
@@ -233,8 +246,6 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 	{
 		throw std::runtime_error("Optimizer with name '" + pp.optimizer + "' does not exist.");
 	}
-
-	opt_node = remove_redundancies(opt_node, pp.sampling_grid_size, empty_pc());
 
 	timings << "Optimization=" << opt_ticker.tick() << std::endl;
 
