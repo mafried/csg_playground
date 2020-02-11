@@ -404,6 +404,7 @@ lmu::CSGNode lmu::optimize_pi_set_cover(const CSGNode& node, double sampling_gri
 		for (auto index : indices) report_stream << index << " ";
 		report_stream << "} ";
 	}
+	report_stream << std::endl;
 
 	DNF selected_prime_implicants;
 	selected_prime_implicants.functions = cit_sets.prime_implicants.functions;
