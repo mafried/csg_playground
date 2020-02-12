@@ -108,7 +108,8 @@ int lmu::PipelineRunner::run()
 			if (pp.use_cit_points_for_decomposition)
 				sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
 
-			node = optimize_with_decomposition(node, pp.sampling_grid_size, true, cit_sampling.in, cit_sampling.out, cit_sampling.in_out, pp.use_cit_points_for_decomposition,
+			node = optimize_with_decomposition(node, pp.sampling_grid_size, true, 
+				cit_sampling.in_out, pp.use_cit_points_for_decomposition,
 				[&pp, this, &opt_out, &timings, &cit_sampling](const CSGNode& node, const PrimitiveCluster& prims)
 			{				
 				return optimize(node, prims, pp, opt_out, timings);

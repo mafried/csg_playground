@@ -254,26 +254,30 @@ bool lmu::_is_empty_set(const lmu::CSGNode & n, const lmu::PointCloud& sp)
 	return true;
 }
 
-bool lmu::_is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& out)
+bool lmu::_is_in(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& in_out, const CSGNode& node)
 {
-	for (int i = 0; i < out.rows(); ++i)
+	for (int i = 0; i < in_out.rows(); ++i)
 	{
-		Eigen::Vector3d p = out.row(i).leftCols(3).transpose();
+		Eigen::Vector3d p = in_out.row(i).leftCols(3).transpose();
 		auto pd = primitive->signedDistance(p);
-		if (pd < 0.0)
+		auto nd = node.signedDistance(p);
+
+		if (nd >= 0.0 && pd < 0.0)
 			return false;
 	}
 
 	return true;
 }
 
-bool lmu::_is_out(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& in)
+bool lmu::_is_out(const lmu::ImplicitFunctionPtr& primitive, const lmu::PointCloud& in_out, const CSGNode& node)
 {
-	for (int i = 0; i < in.rows(); ++i)
+	for (int i = 0; i < in_out.rows(); ++i)
 	{
-		Eigen::Vector3d p = in.row(i).leftCols(3).transpose();
+		Eigen::Vector3d p = in_out.row(i).leftCols(3).transpose();
 		auto pd = primitive->signedDistance(p);
-		if (pd < 0.0)
+		auto nd = node.signedDistance(p);
+
+		if (nd < 0.0 && pd < 0.0)
 			return false;
 	}
 
