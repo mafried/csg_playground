@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[])
 {
-	const auto num_inserter_types = 3;
+	const auto num_inserter_types = 5;
 
 	if (argc < 7) {
 		return 1;
@@ -29,7 +29,14 @@ int main(int argc, char *argv[])
 		
 		for (int i = 6; i < argc; ++i)
 		{
-			auto inserter_type = (lmu::InserterType)(i % num_inserter_types);
+			auto inserter_type_idx = i - 6;
+			if (inserter_type_idx >= num_inserter_types)
+			{
+				std::cerr << "Incorrect inserter type index." << std::endl;
+				return 1;
+			}
+
+			auto inserter_type = (lmu::InserterType)inserter_type_idx;
 			auto prob = std::stod(argv[i]);
 			
 			inserters.push_back(lmu::inserter(inserter_type, prob));
