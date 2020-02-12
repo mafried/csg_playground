@@ -479,6 +479,16 @@ std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode & node)
 			vec.push_back(n.function());
 	});
 
+	// Remove all primitives with the same name.
+	// Note: This is a quick test which does not replace a real geometric equality check. 
+	std::sort(vec.begin(), vec.end(), [](const ImplicitFunctionPtr& pa, const ImplicitFunctionPtr& pb) {
+		return pa->name() < pb->name();
+	});
+	auto last = std::unique(vec.begin(), vec.end(), [](const ImplicitFunctionPtr& pa, const ImplicitFunctionPtr& pb) {
+		return pa->name() == pb->name();
+	});
+	vec.erase(last, vec.end());
+
 	return vec;
 }
 
