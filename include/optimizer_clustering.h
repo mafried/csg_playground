@@ -37,7 +37,7 @@ namespace lmu
 		}
 
 		PrimitiveCluster rest_prims;
-		PrimitiveCluster used_prims;
+		PrimitiveCluster dominant_prims;
 		CSGNode node; 
 
 		// If the tree is not already complete, the position in the tree
@@ -46,7 +46,7 @@ namespace lmu
 	
 		// Already complete means that the there are no rest primitives 
 		// and the corresponding tree is already complete.
-		bool already_complete() const
+		bool no_more_rest_prims() const
 		{
 			return rest_prims.empty();
 		}

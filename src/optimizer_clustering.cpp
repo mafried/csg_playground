@@ -317,7 +317,7 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 		res.rest_prims = rest_prims;	
 	}
 
-	res.used_prims = allDistinctFunctions(res.node);
+	res.dominant_prims = allDistinctFunctions(res.node);
 
 	return res;
 }
@@ -330,73 +330,49 @@ lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampli
 	const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer)
 {
 	std::cout << "Decompose node." << std::endl;
-	
+
 	auto dec = dom_prim_decomposition(node, sampling_grid_size, use_diff_op, in_out, use_sampling_points);
 
-	std::cout << "--- used prims: " << std::endl;
-	for (const auto& rp : dec.used_prims) std::cout << " -:" <<  rp->name() << std::endl;
-
-	if (!dec.already_complete())
+	if (dec.no_more_rest_prims())
 	{
-		auto opt_node = node;
-
-		// Replace primitives used in the decomposition node part with empty set marker. 
-		bool prim_replaced = false;
-		if (!dec.used_prims.empty())
+		std::cout << "Decomposition already complete." << std::endl;		
+	}
+	else
+	{
+		if (dec.dominant_prims.empty()) // No more dominant prims found for decomposition. 
 		{
-			std::cout << "Replace decomposed prims with empty set marker." << std::endl;
+			std::cout << "No more dominant prims found. Use optimizer." << std::endl;
 
-			visit(opt_node, [&dec, &prim_replaced](CSGNode& n)
+			// Use different technique to optimize node and
+			// combine rest node with decomposed part. 
+			CSGNode* dec_node_ptr = nodePtrAt(dec.node, dec.noop_node_idx);
+			*dec_node_ptr = optimizer(node, dec.rest_prims);
+		}
+		else // dominant prims found.
+		{
+			// Replace primitives used in the decomposition node part with empty set marker. 
+			std::cout << "Replace decomposed prims with empty set marker." << std::endl;
+			auto rest_node_without_dom_prims = node;
+			visit(rest_node_without_dom_prims, [&dec](CSGNode& n)
 			{
 				static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
 
 				if (n.type() == CSGNodeType::Geometry &&
-					std::find(dec.used_prims.begin(), dec.used_prims.end(), n.function()) != dec.used_prims.end())
+					std::find(dec.dominant_prims.begin(), dec.dominant_prims.end(), n.function()) != dec.dominant_prims.end())
 				{
 					n = empty_set;
-					prim_replaced = true;
 				}
 			});
+
+			// Remove empty set marker.
+			std::cout << "Remove empty set markers." << std::endl;
+			rest_node_without_dom_prims = remove_redundancies(rest_node_without_dom_prims, sampling_grid_size, in_out);
+
+			// Try to recursively decompose the rest node.
+			CSGNode* dec_node_ptr = nodePtrAt(dec.node, dec.noop_node_idx);
+			*dec_node_ptr = optimize_with_decomposition(rest_node_without_dom_prims, sampling_grid_size, use_diff_op, in_out,
+				use_sampling_points, optimizer);
 		}
-		else
-		{
-			std::cout << "No prims decomposed." << std::endl;
-		}
-
-		// Simplify.
-		if (prim_replaced)
-		{
-			std::cout << "Remove redundancies." << std::endl;
-
-			//writeNode(opt_node, "test_opt_0.dv");
-
-			opt_node = remove_redundancies(opt_node, sampling_grid_size, in_out);
-
-			//auto mesh = lmu::computeMesh(opt_node, Eigen::Vector3i(100, 100, 100));
-			//igl::writeOBJ("test_mesh_opt.obj", mesh.vertices, mesh.indices);
-
-			//writeNode(opt_node, "test_opt_1.dv");
-
-			opt_node = optimize_with_decomposition(opt_node, sampling_grid_size, use_diff_op, in_out, use_sampling_points, optimizer);
-
-			//writeNode(opt_node, "test_opt_2.dv");
-
-		}
-		else
-		{
-			std::cout << "Use external optimizer." << std::endl;
-
-			// Use different technique to optimize opt_node.
-			opt_node = optimizer(opt_node, dec.rest_prims);
-		}
-
-		// Combine rest node with decomposed part. 
-		CSGNode* node_ptr = nodePtrAt(dec.node, dec.noop_node_idx);
-		*node_ptr = opt_node;		
-	}	
-	else
-	{
-		std::cout << "Decomposition already complete." << std::endl;
 	}
 
 	return dec.node;

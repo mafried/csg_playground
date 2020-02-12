@@ -142,9 +142,13 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCl
 		}
 		else
 			something_has_changed = false;
+
+		break;
 	}
 	default:
 		something_has_changed = false;
+
+		break;
 	}
 
 	return something_has_changed;
