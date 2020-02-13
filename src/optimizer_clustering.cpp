@@ -47,8 +47,6 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_dominating_prims(const CSGNode& 
 {
 	std::vector<ImplicitFunctionPtr> dps;
 
-	//TODO: check node inside/outside in _is_in
-
 	for (const auto& primitive : allDistinctFunctions(node))
 	{
 		if (_is_in(primitive, in_out, node))
@@ -68,9 +66,7 @@ std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const C
 std::vector<lmu::ImplicitFunctionPtr> lmu::find_negated_dominating_prims(const CSGNode& node, const lmu::PointCloud& in_out)
 {
 	std::vector<ImplicitFunctionPtr> dps;
-
-	//TODO: check node inside/outside in _is_out
-
+	
 	for (const auto& primitive : allDistinctFunctions(node))
 	{
 		if (_is_out(primitive, in_out, node))
@@ -339,6 +335,11 @@ lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampli
 	}
 	else
 	{
+		std::cout << "DPs: ";
+		for (const auto& dp : dec.dominant_prims)
+			std::cout << dp->name() << " ";
+		std::cout << std::endl;
+
 		if (dec.dominant_prims.empty()) // No more dominant prims found for decomposition. 
 		{
 			std::cout << "No more dominant prims found. Use optimizer." << std::endl;

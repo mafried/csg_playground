@@ -205,7 +205,7 @@ lmu::CSGNode lmu::to_binary_tree(const CSGNode& node)
 		}
 	}
 
-	writeNode(new_node, "test.gv");
+	//writeNode(new_node, "test.gv");
 
 	return new_node;
 }

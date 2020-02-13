@@ -259,6 +259,8 @@ namespace lmu
 	std::vector<CSGNodePtr> allGeometryNodePtrs(const CSGNode& node);
 	std::vector<ImplicitFunctionPtr> allDistinctFunctions(const CSGNode& node);
 
+	CSGNode filter_name_duplicates(const CSGNode& node);
+
 	void visit(const CSGNode& node, const std::function<void(const CSGNode& node)>& f);
 	void visit(CSGNode& node, const std::function<void(CSGNode& node)>& f);
 

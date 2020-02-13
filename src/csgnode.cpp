@@ -471,25 +471,34 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 
 std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode & node)
 {	
-	std::vector<ImplicitFunctionPtr> vec;
+	std::set<ImplicitFunctionPtr> set;
 
-	visit(node, [&vec](const CSGNode& n)
+	visit(node, [&set](const CSGNode& n)
 	{
 		if (n.type() == CSGNodeType::Geometry)
-			vec.push_back(n.function());
+			set.insert(n.function());
+	});
+	
+	return std::vector<ImplicitFunctionPtr>(set.begin(), set.end());
+}
+
+CSGNode lmu::filter_name_duplicates(const CSGNode& node)
+{
+	CSGNode res = node;
+
+	std::unordered_map<std::string, ImplicitFunctionPtr> func_map; 
+	for (const auto& f : allDistinctFunctions(node))
+		func_map[f->name()] = f;
+
+	visit(res, [&func_map](CSGNode& n) 
+	{
+		if (n.type() == CSGNodeType::Geometry)
+		{
+			n = geometry(func_map[n.function()->name()]);
+		}
 	});
 
-	// Remove all primitives with the same name.
-	// Note: This is a quick test which does not replace a real geometric equality check. 
-	std::sort(vec.begin(), vec.end(), [](const ImplicitFunctionPtr& pa, const ImplicitFunctionPtr& pb) {
-		return pa->name() < pb->name();
-	});
-	auto last = std::unique(vec.begin(), vec.end(), [](const ImplicitFunctionPtr& pa, const ImplicitFunctionPtr& pb) {
-		return pa->name() == pb->name();
-	});
-	vec.erase(last, vec.end());
-
-	return vec;
+	return res;
 }
 
 void lmu::visit(const CSGNode& node, const std::function<void(const CSGNode&node)>& f)

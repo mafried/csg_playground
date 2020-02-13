@@ -56,7 +56,20 @@ int lmu::PipelineRunner::run()
 	auto node = load(pp);
 	if (node.operationType() == CSGNodeOperationType::Noop)
 		return 1;
+
+	std::cout << "Before: ";
+	for (const auto& p : allDistinctFunctions(node))
+		std::cout << p->name() << " ";
+	std::cout << std::endl;
+
+	// Find and remove primitive duplicates.
+	node = filter_name_duplicates(node);
 		
+	std::cout << "After: ";
+	for (const auto& p : allDistinctFunctions(node))
+		std::cout << p->name() << " ";
+	std::cout << std::endl;
+
 	// Create output stat files.
 	std::cout << "Create optimizer stat files..." << std::endl;
 	std::ofstream opt_out(output_folder + "/opt_output.txt");
