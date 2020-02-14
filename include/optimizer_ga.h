@@ -49,6 +49,8 @@ namespace lmu
 		bool use_caching;
 		int tournament_k; 
 		int max_iterations;
+		int max_count;
+		double delta;
 	};
 
 	struct OptimizerGAParams

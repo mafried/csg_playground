@@ -305,6 +305,8 @@ lmu::OptimizerGAParams lmu::PipelineRunner::read_opt_ga_params(const ParameterSe
 	opt_ga_params.ga_params.crossover_rate = p.getDouble("GA", "CrossoverRate", 0.4);
 	opt_ga_params.ga_params.tournament_k = p.getInt("GA", "TournamentK", 2);
 	opt_ga_params.ga_params.max_iterations = p.getInt("GA", "MaxIterations", 100);
+	opt_ga_params.ga_params.max_count = p.getInt("GA", "MaxCount", 10);
+	opt_ga_params.ga_params.delta = p.getDouble("GA", "Delta", 0.0001);
 
 	opt_ga_params.ranker_params.geo_score_strat =
 		p.getStr("GA", "Ranker.GeoScoreStrategy", "Surface") == "Surface" ?

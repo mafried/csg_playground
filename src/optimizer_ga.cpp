@@ -492,8 +492,63 @@ struct CSGNodePopulationManipulator
 };
 
 
+struct CSGNodeIterationStopCriterion
+{
+	CSGNodeIterationStopCriterion(int maxCount, double delta, int maxIterations) :
+		_maxCount(maxCount),
+		_delta(delta),
+		_maxIterations(maxIterations),
+		_currentCount(0),
+		_lastBestRank(0.0)
+	{
+	}
+
+	bool shouldStop(std::vector<RankedCreature<CSGNode, Rank>>& population, int iterationCount)
+	{
+		std::cout << "Iteration " << iterationCount << std::endl;
+
+		if (iterationCount >= _maxIterations)
+			return true;
+
+		if (population.empty())
+			return true;
+
+		Rank currentBestRank = population[0].rank;
+
+		if( std::abs(currentBestRank.geo_score - _lastBestRank.geo_score) <= _delta &&
+			std::abs(currentBestRank.size_score - _lastBestRank.size_score) <= _delta &&
+			std::abs(currentBestRank.prox_score - _lastBestRank.prox_score) <= _delta)
+		{
+			//No change
+			_currentCount++;
+		}
+		else
+		{
+			_currentCount = 0;
+		}
+
+		_lastBestRank = currentBestRank;
+
+		return _currentCount >= _maxCount;
+	}
+
+	std::string info() const
+	{
+		std::stringstream ss;
+		ss << "No Change Stop Criterion Selector (maxCount=" << _maxCount << ", delta=" << _delta << ", " << _maxIterations << ")";
+		return ss.str();
+	}
+
+private:
+	int _maxCount;
+	int _currentCount;
+	int _maxIterations;
+	double _delta;
+	Rank _lastBestRank;
+};
+
 using CSGNodeTournamentSelector = TournamentSelector<RankedCreature<CSGNode, Rank>>;
-using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
+//using CSGNodeIterationStopCriterion = IterationStopCriterion<RankedCreature<CSGNode, Rank>>;
 using CSGNodeNoFitnessIncreaseStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<CSGNode, Rank>, Rank>;
 using CSGNodeGA = GeneticAlgorithm<CSGNode, CSGNodeCreator, CSGNodeRanker, Rank, CSGNodeTournamentSelector, CSGNodeIterationStopCriterion, CSGNodePopulationManipulator>;
 
@@ -507,7 +562,7 @@ OptimizerGAResult lmu::optimize_with_ga(const CSGNode& node, const OptimizerGAPa
 
 	CSGNodeRanker ranker(node, primitives, params.ranker_params);
 	CSGNodeCreator creator(node, primitives, params.creator_params);
-	CSGNodeIterationStopCriterion stop_criterion(params.ga_params.max_iterations);
+	CSGNodeIterationStopCriterion stop_criterion(params.ga_params.max_count, params.ga_params.delta, params.ga_params.max_iterations);
 	CSGNodeTournamentSelector t_selector(params.ga_params.tournament_k);
 	CSGNodePopulationManipulator manipulator(&creator, &ranker, params.man_params.max_delta);
 
