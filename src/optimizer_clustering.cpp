@@ -320,10 +320,11 @@ lmu::DecompositionResult lmu::dom_prim_decomposition(const CSGNode& node, double
 
 #include "mesh.h"
 #include <igl/writeOBJ.h>
+#include "optimizer_ga.h"
 
 lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
 	const lmu::PointCloud& in_out, bool use_sampling_points,
-	const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer)
+	const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer, std::ostream& opt_out)
 {
 	std::cout << "Decompose node." << std::endl;
 
@@ -372,7 +373,7 @@ lmu::CSGNode lmu::optimize_with_decomposition(const CSGNode& node, double sampli
 			// Try to recursively decompose the rest node.
 			CSGNode* dec_node_ptr = nodePtrAt(dec.node, dec.noop_node_idx);
 			*dec_node_ptr = optimize_with_decomposition(rest_node_without_dom_prims, sampling_grid_size, use_diff_op, in_out,
-				use_sampling_points, optimizer);
+				use_sampling_points, optimizer, opt_out);
 		}
 	}
 

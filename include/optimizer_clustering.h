@@ -57,7 +57,7 @@ namespace lmu
 
 	CSGNode optimize_with_decomposition(const CSGNode& node, double sampling_grid_size, bool use_diff_op,
 		const lmu::PointCloud& in_out, bool use_sampling_points,
-		const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer);
+		const std::function<CSGNode(const CSGNode& node, const PrimitiveCluster& prims)>& optimizer, std::ostream& opt_out);
 
 }
 

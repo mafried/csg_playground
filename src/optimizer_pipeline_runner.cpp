@@ -126,7 +126,7 @@ int lmu::PipelineRunner::run()
 				[&pp, this, &opt_out, &timings, &cit_sampling](const CSGNode& node, const PrimitiveCluster& prims)
 			{				
 				return optimize(node, prims, pp, opt_out, timings);
-			});
+			}, opt_out);
 
 			timings << "DecompositionAndOpt=" << ticker.tick() << std::endl;
 		}

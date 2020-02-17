@@ -456,12 +456,27 @@ struct CSGNodePopulationManipulator
 		CSGNode best = opNo(); 
 		double best_score = 0.0;
 
+		double largest_size = -std::numeric_limits<double>::max();
+		double smallest_size = std::numeric_limits<double>::max();
+		for (const auto& node : pareto_nodes)
+		{
+			largest_size = node.second.rank.size_score > largest_size ? node.second.rank.size_score : largest_size;
+			smallest_size = node.second.rank.size_score < smallest_size ? node.second.rank.size_score : smallest_size;
+		}
+
 		for (auto& node : pareto_nodes)
 		{
-			if (node.second.rank.score > best_score)
+			double size_score = (node.second.rank.size_score - smallest_size) / (largest_size - smallest_size);
+			
+			double score = 
+				ranker->params.geo_score_weight * node.second.rank.geo_score +
+				ranker->params.prox_score_weight * node.second.rank.prox_score -
+				ranker->params.size_score_weight * size_score;
+
+			if (score > best_score)
 			{
 				best = node.second.creature;
-				best_score = node.second.rank.score;
+				best_score = score;
 			}
 		}
 
