@@ -13,7 +13,7 @@
 
 #include <fstream>
 
-void sample_if_empty(const lmu::CSGNode& n, const lmu::PrimitiveCluster& primitives, double sampling_grid_size, lmu::CITSampling& cit_sampling)
+void sample_if_empty(const lmu::CSGNode& n, const lmu::PrimitiveCluster& primitives, double sampling_grid_size, lmu::CITSampling& cit_sampling, std::ostream& timings)
 {
 
 	std::cout << "Generate CIT sets..." << std::endl;
@@ -24,6 +24,8 @@ void sample_if_empty(const lmu::CSGNode& n, const lmu::PrimitiveCluster& primiti
 		return;
 	}
 
+	lmu::TimeTicker ticker;
+
 	cit_sampling.in_sets.cits = lmu::generate_cits(n, sampling_grid_size, lmu::CITSGenerationOptions::INSIDE, primitives);	
 	cit_sampling.out_sets.cits = lmu::generate_cits(n, sampling_grid_size, lmu::CITSGenerationOptions::OUTSIDE, primitives);
 	
@@ -31,6 +33,8 @@ void sample_if_empty(const lmu::CSGNode& n, const lmu::PrimitiveCluster& primiti
 	cit_sampling.out = lmu::extract_points_from_cits(cit_sampling.out_sets.cits);
 
 	cit_sampling.in_out = lmu::mergePointClouds({ cit_sampling.in, cit_sampling.out });
+
+	timings << "CITSampling=" << ticker.tick() << std::endl;
 
 	std::cout << "Done." << std::endl;
 }
@@ -85,12 +89,12 @@ int lmu::PipelineRunner::run()
 	// Remove Redundancies Before. 
 	if (pp.use_redundancy_removal)
 	{
-		std::cout << "Remove Redundancies..." << std::endl;
-		ticker.tick();
-
 		if (pp.use_cit_points_for_redundancy_removal)
-			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
-		
+			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling, timings);
+	
+		std::cout << "Remove Redundancies..." << std::endl;
+
+		ticker.tick();
 		node = remove_redundancies(node, pp.sampling_grid_size, cit_sampling.in_out);
 		timings << "RemoveRedundancies=" << ticker.tick() << std::endl;
 	}
@@ -119,7 +123,7 @@ int lmu::PipelineRunner::run()
 			ticker.tick();
 
 			if (pp.use_cit_points_for_decomposition)
-				sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
+				sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling, timings);
 
 			node = optimize_with_decomposition(node, pp.sampling_grid_size, true, 
 				cit_sampling.in_out, pp.use_cit_points_for_decomposition,
@@ -156,11 +160,11 @@ int lmu::PipelineRunner::run()
 	if (pp.use_redundancy_removal)
 	{
 		std::cout << "Remove Redundancies..." << std::endl;
-		ticker.tick();
 
 		if (pp.use_cit_points_for_redundancy_removal)
-			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling);
+			sample_if_empty(node, {}, pp.sampling_grid_size, cit_sampling, timings);
 
+		ticker.tick();
 		node = remove_redundancies(node, pp.sampling_grid_size, cit_sampling.in_out);
 		timings << "RemoveRedundanciesAfterwards=" << ticker.tick() << std::endl;
 	}
