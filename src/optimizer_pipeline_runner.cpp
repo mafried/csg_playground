@@ -226,7 +226,8 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 	std::cout << "Optimize..." << std::endl;
 
 	opt_out << "# Before opt size: " << numNodes(node) << std::endl;
-
+	opt_out << "# Before opt proximity: " << compute_local_proximity_score(node, pp.sampling_grid_size, empty_pc()) << std::endl;
+	
 	TimeTicker opt_ticker;
 
 	auto opt_node = opNo();
@@ -267,6 +268,10 @@ lmu::CSGNode lmu::PipelineRunner::optimize(const CSGNode& node, const PrimitiveC
 
 	timings << "Optimization=" << opt_ticker.tick() << std::endl;
 
+	opt_out << "# After opt size: " << numNodes(opt_node) << std::endl;
+	opt_out << "# After opt proximity: " << compute_local_proximity_score(opt_node, pp.sampling_grid_size, empty_pc()) << std::endl;
+
+
 	return opt_node;
 }
 
@@ -282,6 +287,12 @@ lmu::PipelineParams lmu::PipelineRunner::read_pipeline_params(const ParameterSet
 	pipeline_params.use_redundancy_removal = params.getBool("Pipeline", "UseRedundancyRemoval", true);
 	pipeline_params.use_cit_points_for_decomposition = params.getBool("Pipeline", "UseCITPointsForDecomposition", false);
 	pipeline_params.use_cit_points_for_redundancy_removal = params.getBool("Pipeline", "UseCITPointsForRedundancyRemoval", false);
+
+	std::cout << "Use Red Rem: " << pipeline_params.use_redundancy_removal << std::endl;
+	std::cout << "Use Dec: " << pipeline_params.use_decomposition << std::endl;
+	std::cout << "Use CIT for Red Rem: " << pipeline_params.use_cit_points_for_redundancy_removal << std::endl;
+	std::cout << "Use CIT for Dec: " << pipeline_params.use_cit_points_for_decomposition << std::endl;
+
 
 	return pipeline_params;
 }

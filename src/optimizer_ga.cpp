@@ -458,19 +458,26 @@ struct CSGNodePopulationManipulator
 
 		double largest_size = -std::numeric_limits<double>::max();
 		double smallest_size = std::numeric_limits<double>::max();
+		double largest_prox = -std::numeric_limits<double>::max();
+		double smallest_prox = std::numeric_limits<double>::max();
+
 		for (const auto& node : pareto_nodes)
 		{
 			largest_size = node.second.rank.size_score > largest_size ? node.second.rank.size_score : largest_size;
 			smallest_size = node.second.rank.size_score < smallest_size ? node.second.rank.size_score : smallest_size;
+	
+			largest_prox = node.second.rank.prox_score > largest_prox ? node.second.rank.prox_score : largest_prox;
+			smallest_prox = node.second.rank.prox_score < smallest_prox ? node.second.rank.prox_score : smallest_prox;
 		}
 
 		for (auto& node : pareto_nodes)
 		{
 			double size_score = (node.second.rank.size_score - smallest_size) / (largest_size - smallest_size);
-			
+			double prox_score = (node.second.rank.prox_score - smallest_prox) / (largest_prox - smallest_prox);
+
 			double score = 
 				ranker->params.geo_score_weight * node.second.rank.geo_score +
-				ranker->params.prox_score_weight * node.second.rank.prox_score -
+				ranker->params.prox_score_weight * prox_score -
 				ranker->params.size_score_weight * size_score;
 
 			if (score > best_score)
