@@ -424,21 +424,37 @@ struct CSGNodePopulationManipulator
 		// Normalize size. 
 		double largest_size_diff = -std::numeric_limits<double>::max();
 		double smallest_size_diff = std::numeric_limits<double>::max();
+
+		double largest_prox = -std::numeric_limits<double>::max();
+		double smallest_prox = std::numeric_limits<double>::max();
+
 		for (const auto& node : population)
 		{
 			largest_size_diff = node.rank.size_diff_score > largest_size_diff ? node.rank.size_diff_score : largest_size_diff;
 			smallest_size_diff = node.rank.size_diff_score < smallest_size_diff ? node.rank.size_diff_score : smallest_size_diff;
+
+			largest_prox = node.rank.prox_score > largest_prox ? node.rank.prox_score : largest_prox;
+			smallest_prox = node.rank.prox_score < smallest_prox ? node.rank.prox_score : smallest_prox;
 		}
-		for (auto& node : population)
-			node.rank.size_diff_score = (node.rank.size_diff_score - smallest_size_diff) / (largest_size_diff - smallest_size_diff);
+		
+		//for (auto& node : population)
+		//{
+		//	node.rank.size_diff_score = (node.rank.size_diff_score - smallest_size_diff) / (largest_size_diff - smallest_size_diff);
+		//	node.rank.prox_score = (node.rank.prox_score - smallest_prox) / (largest_prox - smallest_prox);
+		//}
 
 		// Compute score.
 		for (auto& node : population)
+		{
+			double norm_size_diff_score = (node.rank.size_diff_score - smallest_size_diff) / (largest_size_diff - smallest_size_diff);
+			double norm_prox_score = (node.rank.prox_score - smallest_prox) / (largest_prox - smallest_prox);
+			
 			node.rank.score =
-			ranker->params.geo_score_weight * node.rank.geo_score +
-			ranker->params.prox_score_weight * node.rank.prox_score +
-			ranker->params.size_score_weight * node.rank.size_diff_score;
-
+				ranker->params.geo_score_weight * node.rank.geo_score +
+				ranker->params.prox_score_weight * norm_prox_score +
+				ranker->params.size_score_weight * norm_size_diff_score;
+		}
+		
 		// Add best nodes to pareto set.
 		for (auto& node : population)
 		{
