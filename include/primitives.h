@@ -19,7 +19,8 @@ namespace lmu
 		Cylinder, 
 		Sphere, 
 		Cone,
-		Plane		
+		Plane,
+		Torus
 	};
 	std::string manifoldTypeToString(ManifoldType type);
 	ManifoldType manifoldTypeFromString(std::string type);

@@ -330,7 +330,7 @@ lmu::PointCloud lmu::extract_points_from_cits(const CITS & cits)
 		sampling_points.push_back(m);
 	}
 
-	return  pointCloudFromVector(sampling_points);	
+	return pointCloudFromVector(sampling_points);	
 }
 
 std::ostream& lmu::operator <<(std::ostream& stream, const lmu::CITSets& c)

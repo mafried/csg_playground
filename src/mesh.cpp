@@ -597,6 +597,12 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 		return "Box";
 	case ImplicitFunctionType::Polytope:
 		return "Polytope";
+	case ImplicitFunctionType::Cone:
+		return "Cone";
+	case ImplicitFunctionType::Torus:
+		return "Torus";
+	case ImplicitFunctionType::Plane:
+		return "Plane";
 	case ImplicitFunctionType::Null:
 		return "Null";
 	default:
@@ -765,7 +771,8 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::stri
       Eigen::Vector3d c;
       s >> c[0] >> c[1] >> c[2];
 
-      res.push_back(std::make_shared<IFCone>(t, c, name));
+	  //TODO
+      //res.push_back(std::make_shared<IFCone>(t, c, name));
 
     }
   }		
@@ -824,106 +831,6 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 	}
 }
 
-void lmu::reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
-{
-	std::unordered_map<std::shared_ptr<ImplicitFunction>, std::vector<Eigen::Matrix<double, 1, 6>>> selectedPoints;
-
-	for (auto& f : functions)
-	{
-		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
-
-		//Check orientation
-		int numSameSide = 0;
-		for (int i = 0; i < f->pointsCRef().rows(); ++i)
-		{
-			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
-			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-			numSameSide += g.dot(n) > 0.0;
-		}
-		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
-			
-		for (auto& f2 : functions)
-		{
-			if (f == f2 || !areConnected(graph, f, f2))
-				continue;
-
-			int furthestAwayPointIdx = 0;
-			double curLargestDistance = 0.0;
-			for (int i = 0; i < f->pointsCRef().rows(); ++i)
-			{
-				Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-				Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
-				Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-
-				double d = std::abs(f2->signedDistance(p));
-				if (d > curLargestDistance)
-				{
-					furthestAwayPointIdx = i;
-					curLargestDistance = d;
-				}
-			}
-			
-			auto point = f->points().row(furthestAwayPointIdx);
-			Eigen::Vector3d p = point.leftCols(3);
-			Eigen::Vector3d n = point.rightCols(3);
-			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-
-			Eigen::Matrix<double, 1, 6> newPoint;
-			newPoint << p.transpose(), (outside ? g : -g).transpose();
-
-			selectedPoints.push_back(newPoint);
-		}
-
-		f->setScoreWeight(f->points().rows() / selectedPoints.size());
-
-		PointCloud pc;
-		pc.resize(selectedPoints.size(), 6);
-		for (int i = 0; i < pc.rows(); ++i)
-		{
-			pc.row(i) = selectedPoints[i];
-		}
-		f->points() = pc;
-
-		//std::cout << f->name() << ": " << (outside ? "Outside" : "Inside") << " " << (g.dot(n) > 0.0 ? "Outside" : "Inside") << std::endl;
-	}
-}
-
-
-
-
-void lmu::arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h)
-{
-	std::unordered_map<std::shared_ptr<ImplicitFunction>, std::vector<Eigen::Matrix<double, 1, 6>>> selectedPoints;
-
-	for (auto& f : functions)
-	{
-		std::vector<Eigen::Matrix<double, 1, 6>> selectedPoints;
-
-		//Check orientation
-		int numSameSide = 0;
-		for (int i = 0; i < f->pointsCRef().rows(); ++i)
-		{
-			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			Eigen::Vector3d n = f->pointsCRef().row(i).rightCols(3);
-			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-			numSameSide += g.dot(n) > 0.0;
-		}
-		bool outside = numSameSide >= f->pointsCRef().rows() / 2;
-		//std::cout << f->name() << ": " << numSameSide << " " << f->pointsCRef().rows() << std::endl;
-		
-		for (int i = 0; i < f->pointsCRef().rows(); ++i)
-		{
-			Eigen::Vector3d p = f->pointsCRef().row(i).leftCols(3);
-			Eigen::Vector3d g = f->signedDistanceAndGradient(p, h).bottomRows(3);
-
-			Eigen::Matrix<double, 1, 6> newPoint;
-			newPoint << p.transpose(), (outside ? g : -g).transpose();
-
-			f->points().row(i) = newPoint;
-		}
-	}
-}
 
 
 void lmu::writePrimitives(const std::string& filename, 
@@ -989,17 +896,10 @@ Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, d
 	double dz = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
 
 	return Eigen::Vector3d(dx, dy, dz);
-	
-	/*int i;
-	Eigen::RowVector3d c;
-	_tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
-	
-	return _mesh.normals.row(i);*/
 }
 
 double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
-{
-	
+{	
 	double d = std::numeric_limits<double>::max(); 
 
 	for (int i = 0; i < _p.size(); ++i)
@@ -1008,25 +908,11 @@ double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
 		d = pn < d ? pn : d;
 	}
 	
-	
-	/*double s;
-	int i;
-	Eigen::RowVector3d c;
-	
-	double sqrd = _tree.squared_distance(_mesh.vertices, _mesh.indices, localP.transpose(), i, c);
-	
-	s = 1. - 2.*_hier.winding_number(localP);
-	
-	double d2 = std::sqrt(sqrd) * s;
-	
-	std::cout << "D: " << d << " " << d2 << std::endl;
-	*/
-
 	return -d;
-
 }
 
-inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d & transform, double radius, double height, const std::string & name) :
+
+inline lmu::IFCylinder::IFCylinder(const Eigen::Affine3d& transform, double radius, double height, const std::string & name) :
 	ImplicitFunction(transform, createCylinder(transform, radius, radius, height, 200, 200), name),
 	_radius(radius),
 	_height(height)
@@ -1130,3 +1016,168 @@ inline lmu::IFBox::IFBox(const Eigen::Affine3d & transform, const Eigen::Vector3
 
 	_aabb = AABB(tpos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 }
+
+lmu::IFTorus::IFTorus(const Eigen::Affine3d& transform,	double minor, double major, const std::string& name) :
+	ImplicitFunction(transform, lmu::Mesh(), name),	
+	_major(major),
+	_minor(minor)
+{
+}
+
+ImplicitFunctionType lmu::IFTorus::type() const
+{
+	return ImplicitFunctionType::Torus;
+}
+
+std::shared_ptr<ImplicitFunction> lmu::IFTorus::clone() const
+{
+	return std::make_shared<IFTorus>(*this);
+}
+
+std::string lmu::IFTorus::serializeParameters() const
+{
+	return "";
+}
+
+Mesh lmu::IFTorus::createMesh() const
+{
+	return _mesh;
+}
+
+Eigen::Vector3d lmu::IFTorus::gradientLocal(const Eigen::Vector3d & localP, double h)
+{
+	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+	double dy = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+	double dz = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
+
+	return Eigen::Vector3d(dx, dy, dz);
+}
+
+double lmu::IFTorus::signedDistanceLocal(const Eigen::Vector3d& localP)
+{
+	const auto n = Eigen::Vector3d(1.0, 0.0, 0.0);
+
+	auto s = localP;
+	float spin1 = n.dot(s);
+	float spin0 = (s - spin1 * n).norm();
+	spin0 -= _major;
+	
+	return std::sqrt(spin0 * spin0 + spin1 * spin1) - _minor;
+
+	//if (!m_appleShaped)
+	//	return std::sqrt(spin0 * spin0 + spin1 * spin1) - m_rminor;
+	
+	// apple shaped torus distance
+	//float minorAngle = std::atan2(spin1, spin0); // minor angle
+	//if (fabs(minorAngle) < m_cutOffAngle)
+	//	return std::sqrt(spin0 * spin0 + spin1 * spin1) - m_rminor;
+	//spin0 += 2 * m_rmajor - m_rminor;
+	//if (minorAngle < 0)
+	//	spin1 += m_appleHeight;
+	//else
+	//	spin1 -= m_appleHeight;
+	//return -std::sqrt(spin0 * spin0 + spin1 * spin1);
+}
+
+lmu::IFCone::IFCone(const Eigen::Affine3d& transform, double angle, double height, const std::string& name) :
+	ImplicitFunction(transform, lmu::Mesh(), name),
+	_angle(angle),
+	_height(height)
+{	
+}
+
+ImplicitFunctionType lmu::IFCone::type() const
+{
+	return ImplicitFunctionType::Cone;
+}
+
+std::shared_ptr<ImplicitFunction> lmu::IFCone::clone() const
+{
+	return std::make_shared<IFCone>(*this);
+}
+
+std::string lmu::IFCone::serializeParameters() const
+{
+	return "";
+}
+
+Mesh lmu::IFCone::createMesh() const
+{
+	return _mesh;
+}
+
+Eigen::Vector3d lmu::IFCone::gradientLocal(const Eigen::Vector3d& localP, double h)
+{
+	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+	double dy = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+	double dz = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
+
+	return Eigen::Vector3d(dx, dy, dz);
+}
+
+double lmu::IFCone::signedDistanceLocal(const Eigen::Vector3d& localP)
+{
+	const auto n = Eigen::Vector3d(1.0, 0.0, 0.0);
+	// this is for one sided cone!
+	auto s = localP;
+	float g = s.dot(n); // distance to plane orhogonal to
+								// axisdir through center
+								// distance to axis
+	float sqrS = s.squaredNorm();
+	float f = sqrS - (g * g);
+	if (f <= 0)
+		f = 0;
+	else
+		f = std::sqrt(f);
+	float da = std::cos(_angle) * f;
+	float db = -std::sin(_angle) * g;
+	if (g < 0 && da - db < 0) // is inside other side of cone -> disallow
+		return std::sqrt(sqrS);
+	return da + db;
+}
+
+
+lmu::IFPlane::IFPlane(const Eigen::Affine3d& transform, const std::string& name) :
+	ImplicitFunction(transform, lmu::Mesh(), name)
+{
+}
+
+ImplicitFunctionType lmu::IFPlane::type() const
+{
+	return ImplicitFunctionType::Plane;
+}
+
+std::shared_ptr<ImplicitFunction> lmu::IFPlane::clone() const
+{
+	return std::make_shared<IFPlane>(*this);
+}
+
+std::string lmu::IFPlane::serializeParameters() const
+{
+	return "";
+}
+
+Mesh lmu::IFPlane::createMesh() const
+{
+	return _mesh;
+}
+
+Eigen::Vector3d lmu::IFPlane::gradientLocal(const Eigen::Vector3d& localP, double h)
+{
+	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
+	double dy = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
+	double dz = (signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocal(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
+
+	return Eigen::Vector3d(dx, dy, dz);
+}
+
+double lmu::IFPlane::signedDistanceLocal(const Eigen::Vector3d& localP)
+{
+	const auto n = Eigen::Vector3d(1.0, 0.0, 0.0);
+	double d =  n.dot(localP);
+
+	//std::cout << "D: " << d << std::endl;
+	return d; 
+}
+
+

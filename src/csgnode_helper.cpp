@@ -28,6 +28,10 @@ CSGNode lmu::opNo(const std::vector<CSGNode>& childs)
 {
 	return CSGNode(std::make_shared<NoOperation>("", childs));
 }
+CSGNode lmu::opPrim(const std::vector<CSGNode>& childs)
+{
+	return CSGNode(std::make_shared<BoundedPrimitiveOperation>("", childs));
+}
 
 Eigen::Vector3d readVec3(const json& json)
 {

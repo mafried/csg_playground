@@ -31,6 +31,7 @@ namespace lmu
 		Difference,
 		Complement,
 		Identity,
+		BoundedPrimitive,
 		Noop,
 		Invalid
 	};
@@ -505,6 +506,22 @@ namespace lmu
 		virtual CSGNodeOperationType operationType() const override;
 		virtual std::tuple<int, int> numAllowedChilds() const override;
 		virtual Mesh mesh() const override;
+	};
+
+	class BoundedPrimitiveOperation : public CSGNodeOperation
+	{
+	public:
+		BoundedPrimitiveOperation(const std::string& name, const std::vector<CSGNode>& childs = {});
+
+		virtual CSGNodePtr clone() const override;
+		virtual Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& p, double h = 0.001) const override;
+		virtual double signedDistance(const Eigen::Vector3d& p) const override;
+		virtual CSGNodeOperationType operationType() const override;
+		virtual std::tuple<int, int> numAllowedChilds() const override;
+		virtual Mesh mesh() const override;
+	private: 	
+		CSGNode _diffs;
+		CSGNode generate_diffs(const std::vector<CSGNode>& childs);
 	};
 
 	class NoOperation : public CSGNodeOperation

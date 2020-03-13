@@ -626,6 +626,8 @@ std::string lmu::manifoldTypeToString(ManifoldType type)
 		return "Sphere";
 	case ManifoldType::Cone:
 		return "Cone";
+	case ManifoldType::Torus:
+		return "Torus";
 	default:
 	case ManifoldType::None:
 		return "None";
@@ -644,6 +646,8 @@ lmu::ManifoldType lmu::manifoldTypeFromString(std::string type)
 		return ManifoldType::Sphere;
 	else if (type == "cone")
 		return ManifoldType::Cone;
+	else if (type == "torus")
+		return ManifoldType::Torus;
 	else
 		return ManifoldType::None;
 }

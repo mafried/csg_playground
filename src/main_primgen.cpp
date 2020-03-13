@@ -11,7 +11,7 @@
 #include <boost/algorithm/string.hpp>
 
 
-//#define WITH_VIEWER_GUI
+#define WITH_VIEWER_GUI
 
 std::vector<lmu::ImplicitFunctionPtr> splitCylinder(const lmu::ImplicitFunctionPtr& cyl)
 {
@@ -77,7 +77,7 @@ lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d
 {
 	static std::random_device rd;     
 	static std::mt19937 rng(rd());   
-	std::uniform_int_distribution<int> uni(0, 2); 
+	std::uniform_int_distribution<int> uni(3, 3); 
 
 	int type = uni(rng);
 	while (types.count(type) == 0)
@@ -88,10 +88,15 @@ lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d
 	case 0:
 		return lmu::geo<lmu::IFBox>(trans, Eigen::Vector3d(dims.z(), dims.x(), dims.y()), 2, "");
 	case 1: 
-		return lmu::geo<lmu::IFSphere>(trans, dims.x() / 2.0,"");
-	default:
+		return lmu::geo<lmu::IFSphere>(trans, dims.x(),"");
 	case 2: 		
-		return lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");
+		return lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");	
+	case 3: 
+		std::cout << "CONE" << std::endl;
+		return lmu::geo<lmu::IFCone>(trans, 0.1, 1, "");
+	default:
+	case 4: 
+		return lmu::geo<lmu::IFTorus>(trans, dims.x(), dims.y(), "");
 	}
 }
 
@@ -134,14 +139,14 @@ int main(int argc, char** argv)
 		k = std::stoi(argv[8]);
 		pointCloudSize = std::stoi(argv[9]);
 		cutOutProb = std::stod(argv[10]);
-		maxIterations = std::stoi(argv[11]);		
+		maxIterations = std::stoi(argv[11]);
 
 		std::unordered_set<std::string> strTypes;
 		boost::split(strTypes, std::string(argv[12]), [](char c) {return c == ';'; });
 		std::transform(strTypes.begin(), strTypes.end(), std::inserter(types, types.end()),
 			[](const std::string& s) -> int { std::cout << "Primitive Type: " << s << std::endl; return  std::stoi(s); });
 
-		
+
 		lmu::CSGNodeSamplingParams params(maxDistance, maxAngleDistance, errorSigma);
 
 		double preSamplingFactor = 5.0;
@@ -176,6 +181,26 @@ int main(int argc, char** argv)
 		igl::opengl::glfw::Viewer viewer;
 		viewer.mouse_mode = igl::opengl::glfw::Viewer::MouseMode::Rotation;
 #endif 
+		auto rot = Eigen::AngleAxisd(M_PI / 8.0, Eigen::Vector3d(0.0, 0.0, 1.0));
+		auto rot2 = Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0));
+		auto rot3 = Eigen::AngleAxisd(-M_PI / 8.0, Eigen::Vector3d(0.0, 0.0, 1.0));
+
+		auto trans = (Eigen::Affine3d)Eigen::Translation3d(0, 0, 0);
+		auto n = lmu::opPrim({	lmu::geo<lmu::IFCylinder>(trans, 2, 20.0, ""),
+								lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(-2, 0, 0) * rot, ""),
+								lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(+2, 0, 0) * rot3 , "")
+		   					 });
+#
+		//lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(-2, 0, 0), "").signedDistance(Eigen::Vector3d(0, 0, 0));
+		//lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(2, 0, 0), "").signedDistance(Eigen::Vector3d(0, 0, 0));
+
+		//std::cout << "================" << std::endl;
+
+		lmu::CSGNodeSamplingParams samplingParams(0.1, 0.1, 0.0, 0.1, Eigen::Vector3d(-10, -10, -10), Eigen::Vector3d(10, 10, 10));
+    	auto p = computePointCloud(n, samplingParams);
+		std::cout << "PC: " << p.rows() << std::endl;
+		viewer.data().set_points(p.leftCols(3), p.rightCols(3));
+
 		//auto mesh = lmu::fromOFFFile(modelPath);
 		//lmu::scaleMesh(mesh, 1.0);
 		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
@@ -186,7 +211,7 @@ int main(int argc, char** argv)
 
 		std::cout << "Clustering" << std::endl;
 		
-		auto clusters = lmu::kMeansClustering(pc, k);
+		/*auto clusters = lmu::kMeansClustering(pc, k);
 	
 		for (int iter = 0; iter < maxIterations; iter++)
 		{
@@ -295,6 +320,7 @@ int main(int argc, char** argv)
 			}
 			
 		}
+		*/
 
 #ifdef WITH_VIEWER_GUI
 		viewer.data().point_size = 5.0;

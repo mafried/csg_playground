@@ -33,6 +33,7 @@ namespace lmu
 	CSGNode opInter(const std::vector<CSGNode>& childs = {});
 	CSGNode opComp(const std::vector<CSGNode>& childs = {});
 	CSGNode opNo(const std::vector<CSGNode>& childs = {});
+	CSGNode opPrim(const std::vector<CSGNode>& childs = {});
 
 	using json = nlohmann::json;
 

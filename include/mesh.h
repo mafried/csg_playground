@@ -76,6 +76,8 @@ namespace lmu
 		Cone,
 		Box,
 		Polytope,
+		Torus,
+		Plane,
 		Null
 	};
 
@@ -547,6 +549,73 @@ namespace lmu
 		std::vector<Eigen::Vector3d> _n;
 	};
 
+	struct IFTorus : public ImplicitFunction
+	{
+		IFTorus(const Eigen::Affine3d& transform,
+			double minor, double major,	const std::string& name);
+
+		virtual ImplicitFunctionType type() const override;
+
+		std::shared_ptr<ImplicitFunction> clone() const override;
+
+		virtual std::string serializeParameters() const;
+
+		virtual Mesh createMesh() const override;
+
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override;
+
+	private:
+
+		double _minor;
+		double _major;		
+	};
+	
+	struct IFCone : public ImplicitFunction
+	{
+		IFCone(const Eigen::Affine3d& transform, double angle, double height, const std::string& name);
+
+		virtual ImplicitFunctionType type() const override;
+
+		std::shared_ptr<ImplicitFunction> clone() const override;
+
+		virtual std::string serializeParameters() const;
+
+		virtual Mesh createMesh() const override;
+
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override;
+
+	private:
+
+		double _angle;
+		double _height;
+
+	};
+
+	struct IFPlane : public ImplicitFunction
+	{
+		IFPlane(const Eigen::Affine3d& transform, const std::string& name);
+
+		virtual ImplicitFunctionType type() const override;
+
+		std::shared_ptr<ImplicitFunction> clone() const override;
+
+		virtual std::string serializeParameters() const;
+
+		virtual Mesh createMesh() const override;
+
+	protected:
+
+		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;
+		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override;
+	};
+
+
 	struct IFNull : public ImplicitFunction
 	{
 		IFNull(const std::string& name) :
@@ -563,10 +632,10 @@ namespace lmu
 		{
 			return std::make_shared<IFNull>(*this);
 		}
-		
-		virtual std::string serializeParameters() const 
+
+		virtual std::string serializeParameters() const
 		{
-		  return "";
+			return "";
 		}
 
 		virtual Mesh createMesh() const override
@@ -587,92 +656,11 @@ namespace lmu
 		}
 	};
 
-	struct IFCone : public ImplicitFunction
-	{
-		IFCone(const Eigen::Affine3d& transform, const Eigen::Vector3d& c, const std::string& name) :
-			ImplicitFunction(transform, Mesh(), name),
-			_c(c)
-		{
-		}
-
-		virtual ImplicitFunctionType type() const override
-		{
-			return ImplicitFunctionType::Cone;
-		}
-
-		virtual std::shared_ptr<ImplicitFunction> clone() const override
-		{
-			return std::make_shared<IFCone>(*this);
-		}
-
-		inline double sign(double v)
-		{
-			if (v < 0.0)
-				return -1.0;
-			else if (v > 0.0)
-				return 1.0;
-			else
-				return 0.0;
-		}
-
-		Eigen::Vector3d c() const {
-		  return _c;
-		}
-
-		virtual std::string serializeParameters() const {
-		  return std::to_string(_c[0]) + " " 
-		    + std::to_string(_c[1]) + " "
-		    + std::to_string(_c[2]);
-		}
-
-		virtual Mesh createMesh() const override
-		{
-			return createCylinder(_transform, _c.x(), _c.y(), _c.z(), 200, 200);
-		}
-
-	protected:
-
-		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override
-		{
-			double dx = (signedDistanceLocalInline(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
-			double dy = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() + h, localP.z())) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y() - h, localP.z()))) / (2.0 * h);
-			double dz = (signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() + h)) - signedDistanceLocalInline(Eigen::Vector3d(localP.x(), localP.y(), localP.z() - h))) / (2.0 * h);
-
-			return Eigen::Vector3d(dx, dy, dz);
-		}
-
-		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override
-		{
-			return signedDistanceLocalInline(localP);
-		}
-
-	private:
-
-		inline double signedDistanceLocalInline(const Eigen::Vector3d& localP) 
-		{
-			Eigen::Vector2d q = Eigen::Vector2d(Eigen::Vector2d(localP.x(), localP.z()).norm(), localP.y());
-			Eigen::Vector2d v = Eigen::Vector2d(_c.z()*_c.y() / _c.x(), -_c.z());
-			Eigen::Vector2d w = v - q;
-			Eigen::Vector2d vv = Eigen::Vector2d(v.dot(v), v.x()*v.x());
-			Eigen::Vector2d qv = Eigen::Vector2d(v.dot(w), v.x()*w.x());
-			Eigen::Vector2d d;
-			d.x() = std::max(qv.x(), 0.0)*qv.x() / vv.x();
-			d.y() = std::max(qv.y(), 0.0)*qv.y() / vv.y();
-
-			return sqrt(w.dot(w) - std::max(d.x(), d.y())) * sign(std::max(q.y()*v.x() - q.x()*v.y(), w.y()));
-		}
-
-		Eigen::Vector3d _c;
-	};
 	
 	// Read primitives saved with the .FIT file format
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFile(const std::string& file, double scaling = 1.0);
 
 	void movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter = false, double threshold = 0.0);
-
-	void reducePoints(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
-	void arrangeGradients(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, const lmu::Graph& graph, double h);
-
 
 
 	// Save primitives with the .PRIM file format
