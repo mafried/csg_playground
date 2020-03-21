@@ -457,6 +457,7 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	CGAL::Inverse_index<Polyhedron_3::Vertex_const_iterator>  index(ph->vertices_begin(), ph->vertices_end());
 	size_t faceIdx = 0;
 	for (auto fi = ph->facets_begin(); fi != ph->facets_end(); ++fi) {
+
 		auto hc = fi->facet_begin();
 		auto hc_end = hc;
 		std::size_t n = circulator_size(hc);

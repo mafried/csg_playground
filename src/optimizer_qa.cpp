@@ -43,5 +43,5 @@ CSGNode lmu::optimize_with_qa(const CSGNode& n, double sampling_grid_size, const
 
 	auto selected_cit_index_sets = interpreter.set_cover(index_sets, indices_to_cover);
 
-	
+	return CSGNode(nullptr);
 }

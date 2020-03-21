@@ -321,10 +321,13 @@ Mesh lmu::BoundedPrimitiveOperation::mesh() const
 	return Mesh();
 }
 CSGNode lmu::BoundedPrimitiveOperation::generate_diffs(const std::vector<CSGNode>& childs)
-{	
+{
+	if (childs.size() == 1)
+		return childs[0];
+
 	auto left_childs = childs;
 	left_childs.erase(left_childs.begin());
-	return opDiff({ childs[0], opUnion(left_childs) });
+	return /*opDiff*/ opDiff({ childs[0], opUnion(left_childs) });
 }
 
 /*
@@ -1456,13 +1459,6 @@ lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplin
 
 	std::vector<Eigen::Matrix<double,1,6>> validSamplingPoints;
 	
-	std::random_device rd{};
-	std::mt19937 gen{ rd() };
-
-	std::normal_distribution<> dx{ 0.0 , params.errorSigma };
-	std::normal_distribution<> dy{ 0.0 , params.errorSigma };
-	std::normal_distribution<> dz{ 0.0 , params.errorSigma };
-
 	for (int x = 0; x < numSamples(0); ++x)
 	{
 		for (int y = 0; y < numSamples(1); ++y)
@@ -1476,7 +1472,7 @@ lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplin
 				if (abs(samplingValue(0)) < params.maxDistance)
 				{
 					Eigen::Matrix<double, 1, 6> sp; 
-					sp.row(0) << samplingPoint(0) + dx(gen), samplingPoint(1) + dy(gen), samplingPoint(2) + dz(gen), samplingValue(1), samplingValue(2), samplingValue(3);
+					sp.row(0) << samplingPoint(0), samplingPoint(1), samplingPoint(2), samplingValue(1), samplingValue(2), samplingValue(3);
 
 					validSamplingPoints.push_back(sp);
 				}

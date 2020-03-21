@@ -10,57 +10,11 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include <pcl/surface/convex_hull.h>
+#include <pcl/common/centroid.h>
+
 
 #define WITH_VIEWER_GUI
-
-std::vector<lmu::ImplicitFunctionPtr> splitCylinder(const lmu::ImplicitFunctionPtr& cyl)
-{
-	const double h = 0.01;
-
-	auto cylNode = lmu::geometry(cyl);
-	std::vector<lmu::ImplicitFunctionPtr> splitted;
-
-	std::vector<Eigen::Matrix<double, 1, 6>> cylPoints;
-	std::vector<Eigen::Matrix<double, 1, 6>> box1Points;
-	std::vector<Eigen::Matrix<double, 1, 6>> box2Points;
-
-	Eigen::Vector3d refNormal(0,0,0);
-
-	for (int i = 0; i < cyl->pointsCRef().rows(); ++i)
-	{
-		auto p = cyl->pointsCRef().row(i);
-
-		lmu::Curvature c = lmu::curvature(p.leftCols(3).transpose(), cylNode, h);
-		//std::cout << c.k1 << " " << c.k2 << std::endl;
-		if (std::abs(c.k1) < h && std::abs(c.k2) < h)
-		{
-			if (refNormal == Eigen::Vector3d(0, 0, 0))
-				refNormal = p.rightCols(3).transpose();
-
-			if (refNormal.dot(p.rightCols(3).transpose()) <= 0.0)
-				box1Points.push_back(p);
-			else
-				box2Points.push_back(p);
-		}
-		else
-		{
-			cylPoints.push_back(p);
-		}
-	}
-
-	auto box1 = std::make_shared<lmu::IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(0, 0, 0), 2, ""); // Parameters do not matter;
-	auto box2 = std::make_shared<lmu::IFBox>(Eigen::Affine3d::Identity(), Eigen::Vector3d(0, 0, 0), 2, ""); // Parameters do not matter;
-
-	cyl->points() = lmu::pointCloudFromVector(cylPoints);
-	box1->points() = lmu::pointCloudFromVector(box1Points);
-	box2->points() = lmu::pointCloudFromVector(box2Points);
-
-	splitted.push_back(cyl);
-	splitted.push_back(box1);
-	splitted.push_back(box2);
-
-	return splitted;
-}
 
 void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& directory, int iteration, std::unordered_map<lmu::ImplicitFunctionType, int>& primitiveIds)
 {
@@ -73,30 +27,215 @@ void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& dir
 	primitiveIds[type] = primitiveIds[type] + 1;
 }
 
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/convex_hull_3.h>
+
+typedef CGAL::Simple_cartesian<double>            K;
+typedef CGAL::Polyhedron_3<K>                     Polyhedron_3;
+typedef K::Point_3                                Point_3;
+typedef K::Plane_3						          Plane_3;
+
+struct Plane_equation {
+	template <class Facet>
+	typename Facet::Plane_3 operator()(Facet& f) {
+		typename Facet::Halfedge_handle h = f.halfedge();
+		typedef typename Facet::Plane_3  Plane;
+		return Plane(h->vertex()->point(),
+			h->next()->vertex()->point(),
+			h->next()->next()->vertex()->point());
+	}
+};
+
+lmu::Mesh g_mesh;
+lmu::PointCloud g_pc;
+Eigen::MatrixXd g_lines;
+
+lmu::CSGNode create_rnd_polytope(const Eigen::Affine3d& trans, const Eigen::Vector3d& c, double r, int num_planes)
+{
+
+	// From  http://corysimon.github.io/articles/uniformdistn-on-sphere/
+	//r = 1.0;
+
+	//for (int i = 0; i < 100; i++)
+	//{
+
+	std::cout << "----------------" << std::endl;
+
+	std::vector<Point_3> points;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::mt19937 generator(seed);
+	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+	for (int i = 0; i < num_planes; i++)
+	{
+		double theta = 2 * M_PI * uniform01(generator);
+		double phi = acos(1 - 2 * uniform01(generator));
+
+		Point_3 p(
+			r * sin(phi) * cos(theta),
+			r * sin(phi) * sin(theta),
+			r * cos(phi)
+		);
+
+		points.push_back(p);
+
+		point_cloud->points.push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
+	}
+
+	pcl::PointXYZ centroid;
+	pcl::computeCentroid(*point_cloud, centroid);
+
+	std::cout << "=>" << points.size() << std::endl;
+
+	/*points =
+	{
+		Point_3(0.113904, -0.0759709, 0.025244),
+		Point_3(0.0449047, 0.0960923, -0.0901815),
+		Point_3(0.0603977, -0.105431, -0.0679646),
+		Point_3(-0.031272, -0.0929492, 0.0988199),
+		Point_3(0.0761061, -0.0619027, 0.0987865),
+		Point_3(0.00195516, -0.0964902, 0.100343),
+		Point_3(-0.123282, 0.0265094, -0.0590055),
+		Point_3(0.120172, -0.0540623, 0.0449309)
+	};*/
+
+	std::cout << "points: " << std::endl;
+	std::cout << "{" << std::endl;
+	for (const auto& p : points) std::cout << "Point_3(" << p.x() << ", " << p.y() << ", " << p.z() << ")," << std::endl;
+	std::cout << "};" << std::endl;
+
+	/*
+	Polyhedron_3 ph;
+	CGAL::convex_hull_3(points.begin(), points.end(), ph);
+
+	std::cout << "Size of: " << ph.size_of_vertices() << std::endl;
+
+	std::transform(ph.facets_begin(), ph.facets_end(), ph.planes_begin(), Plane_equation());
+	*/
+	pcl::ConvexHull<pcl::PointXYZ> chull;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr hull_points(new pcl::PointCloud<pcl::PointXYZ>);
+	std::vector<pcl::Vertices> hull_polygon;
+
+	chull.setInputCloud(point_cloud);
+	chull.reconstruct(*hull_points, hull_polygon);
+	std::cout << "DIMS: " << chull.getDimension() << std::endl;
+
+	std::vector<Eigen::Vector3d> _p;
+	std::vector<Eigen::Vector3d> _n;
+
+	for (const auto& p : hull_polygon)
+	{
+		auto p1 = hull_points->points[p.vertices[0]];
+		auto p2 = hull_points->points[p.vertices[1]];
+		auto p3 = hull_points->points[p.vertices[2]];
+
+		Eigen::Vector3d v1(p1.x - p2.x, p1.y - p2.y, p1.z - p2.z);
+		Eigen::Vector3d v2(p1.x - p3.x, p1.y - p3.y, p1.z - p3.z);
+		auto n = v2.cross(v1).normalized();
+		auto p = Eigen::Vector3d((p1.x + p2.x + p3.x) / 3.0, (p1.y + p2.y + p3.y) / 3.0, (p1.z + p2.z + p3.z) / 3.0);
+
+		if (n.dot(Eigen::Vector3d(centroid.x, centroid.y, centroid.z) - p) > 0)
+			n = -n;
+
+		_p.push_back(p);
+		_n.push_back(n);
+
+		//std::cout << "P: " << _p.back().transpose() << " " << _n.back().transpose() << std::endl;
+	}
+
+	g_mesh.vertices = Eigen::MatrixXd(hull_points->points.size(), 3);
+	for (int i = 0; i < hull_points->points.size(); ++i)
+		g_mesh.vertices.row(i) << hull_points->points[i].x, hull_points->points[i].y, hull_points->points[i].z;
+
+	g_mesh.indices = Eigen::MatrixXi(hull_polygon.size(), 3);
+	for (int i = 0; i < hull_polygon.size(); ++i)
+		g_mesh.indices.row(i) << hull_polygon[i].vertices[0], hull_polygon[i].vertices[1], hull_polygon[i].vertices[2];
+
+	g_mesh.transform = trans;
+	lmu::transform(g_mesh);
+
+	g_pc = lmu::PointCloud(_p.size(), 6);
+	for (int i = 0; i < _p.size(); ++i)
+		g_pc.row(i) << _p[i].transpose(), 1.0, 0.0, 0.0;
+
+	g_lines = Eigen::MatrixXd(_n.size(), 9);
+	for (int i = 0; i < _n.size(); ++i)
+		g_lines.row(i) << _p[i].transpose(), (_p[i] + _n[i]).transpose(), 1.0, 0.0, 0.0;
+
+
+	/*
+	for (auto plane = ph.planes_begin(); plane != ph.planes_end(); ++plane)
+	{
+		_p.push_back(Eigen::Vector3d(plane->point().x(), plane->point().y(), plane->point().z()));
+		_n.push_back(Eigen::Vector3d(plane->orthogonal_vector().x(), plane->orthogonal_vector().y(), plane->orthogonal_vector().z()));
+	}
+	*/
+
+	std::cout << "# planes: " << _p.size() << std::endl;
+
+	return lmu::geo<lmu::IFPolytope>(trans, _p, _n, "");
+		
+
+	std::cout << "----------------" << std::endl;
+	//}
+	
+	
+}
+
 lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d& dims, const std::unordered_set<int>& types)
 {
 	static std::random_device rd;     
 	static std::mt19937 rng(rd());   
-	std::uniform_int_distribution<int> uni(3, 3); 
+	std::uniform_int_distribution<int> uni(5, 5); 
 
 	int type = uni(rng);
 	while (types.count(type) == 0)
 		type = uni(rng);
 
+	auto t1 = Eigen::Affine3d::Identity();
+	t1.rotate(Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0)));
+	t1.scale(-1.0);
+	t1.translate(Eigen::Vector3d(-dims.maxCoeff() / 2.0,0,0));
+
+	auto t2 = Eigen::Affine3d::Identity();
+	t2.rotate(Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0)));
+	t2.scale(1.0);
+	t2.translate(Eigen::Vector3d(-dims.maxCoeff() / 2.0, 0, 0));
+
+	auto t3 = Eigen::Affine3d::Identity();
+	t3.scale(-1.0);
+	t3.translate(Eigen::Vector3d(-dims.maxCoeff(), 0, 0));
+
+	//std::cout << "P1: " << lmu::geo<lmu::IFPlane>(t1, "").signedDistanceAndGradient(Eigen::Vector3d(0,0,0)).transpose() << std::endl;
+	//std::cout << "P2: " << lmu::geo<lmu::IFPlane>(t2, "").signedDistanceAndGradient(Eigen::Vector3d(0,0,0)).transpose() << std::endl;
+	
+	std::cout << "Type: " << type << std::endl;
+
 	switch (type)
 	{
 	case 0:
-		return lmu::geo<lmu::IFBox>(trans, Eigen::Vector3d(dims.z(), dims.x(), dims.y()), 2, "");
-	case 1: 
-		return lmu::geo<lmu::IFSphere>(trans, dims.x(),"");
-	case 2: 		
-		return lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");	
-	case 3: 
-		std::cout << "CONE" << std::endl;
-		return lmu::geo<lmu::IFCone>(trans, 0.1, 1, "");
-	default:
+		return lmu::opPrim({ lmu::geo<lmu::IFBox>(trans, Eigen::Vector3d(dims.z(), dims.x(), dims.y()), 2, "") });
+	case 1:
+		return lmu::opPrim({ lmu::geo<lmu::IFSphere>(trans, dims.x(),"") });
+	case 2:
+		return lmu::opPrim({ lmu::geo<lmu::IFTorus>(trans, dims.minCoeff() / 2.0, dims.maxCoeff() / 2.0 , "") });
+	case 3:
+		return lmu::opPrim({ 
+			lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, 100, ""),
+			lmu::geo<lmu::IFPlane>(trans * t1, ""),
+			lmu::geo<lmu::IFPlane>(trans * t2, "")
+			});
 	case 4: 
-		return lmu::geo<lmu::IFTorus>(trans, dims.x(), dims.y(), "");
+		return lmu::opPrim({ 
+			lmu::geo<lmu::IFCone>(trans, 2.0 * std::atan(dims.minCoeff() / 2.0 / dims.maxCoeff()), 100, ""),
+			lmu::geo<lmu::IFPlane>(trans * t3, "")
+		});
+	case 5:
+		return lmu::opPrim({ create_rnd_polytope(trans, Eigen::Vector3d(0,0,0), dims.maxCoeff() / 2.0, 8)});		
 	}
 }
 
@@ -151,6 +290,8 @@ int main(int argc, char** argv)
 
 		double preSamplingFactor = 5.0;
 
+		std::cout << "CSG: " << modelType << std::endl;
+
 		// Load object from node json or object mesh file.
 		lmu::PointCloud pc;
 		if (modelType == "csg")
@@ -181,103 +322,130 @@ int main(int argc, char** argv)
 		igl::opengl::glfw::Viewer viewer;
 		viewer.mouse_mode = igl::opengl::glfw::Viewer::MouseMode::Rotation;
 #endif 
-		auto rot = Eigen::AngleAxisd(M_PI / 8.0, Eigen::Vector3d(0.0, 0.0, 1.0));
-		auto rot2 = Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d(0.0, 0.0, 1.0));
-		auto rot3 = Eigen::AngleAxisd(-M_PI / 8.0, Eigen::Vector3d(0.0, 0.0, 1.0));
-
-		auto trans = (Eigen::Affine3d)Eigen::Translation3d(0, 0, 0);
-		auto n = lmu::opPrim({	lmu::geo<lmu::IFCylinder>(trans, 2, 20.0, ""),
-								lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(-2, 0, 0) * rot, ""),
-								lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(+2, 0, 0) * rot3 , "")
-		   					 });
-#
-		//lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(-2, 0, 0), "").signedDistance(Eigen::Vector3d(0, 0, 0));
-		//lmu::geo<lmu::IFPlane>((Eigen::Affine3d)Eigen::Translation3d(2, 0, 0), "").signedDistance(Eigen::Vector3d(0, 0, 0));
-
-		//std::cout << "================" << std::endl;
-
-		lmu::CSGNodeSamplingParams samplingParams(0.1, 0.1, 0.0, 0.1, Eigen::Vector3d(-10, -10, -10), Eigen::Vector3d(10, 10, 10));
-    	auto p = computePointCloud(n, samplingParams);
-		std::cout << "PC: " << p.rows() << std::endl;
-		viewer.data().set_points(p.leftCols(3), p.rightCols(3));
-
-		//auto mesh = lmu::fromOFFFile(modelPath);
-		//lmu::scaleMesh(mesh, 1.0);
-		//viewer.data().set_mesh(mesh.vertices, mesh.indices);
-
-		std::cout << "Input point cloud size: " << pc.rows() << std::endl;
-		//pc = lmu::farthestPointSampling(pc, pointCloudSize);
-		//std::cout << "Reduced to " << pc.rows() << " Should be: " << (pointCloudSize) << std::endl;
-
-		std::cout << "Clustering" << std::endl;
 		
-		/*auto clusters = lmu::kMeansClustering(pc, k);
-	
+		pc = lmu::normalize(pc);
+		pc = lmu::farthestPointSampling(pc, pointCloudSize);
+		std::cout << "Input point cloud: " << pc.rows() << std::endl;
+
+		auto clusters = lmu::kMeansClustering(pc, k);
+
+		std::cout << "Clustering done." << std::endl;
+
 		for (int iter = 0; iter < maxIterations; iter++)
 		{
+			// Create primitives.
+
 			auto model = lmu::opUnion();
-			int i = 0;
 			for (const auto& cluster : clusters) {
 
 				auto clusterSize = std::get<1>(cluster).rows();
-				std::cout << "Cluster Size: " << clusterSize << std::endl;
 				if (clusterSize == 0)
 					continue;
-
+			
 				auto dims = lmu::computeOBBDims(std::get<1>(cluster));
-
-				//i++;
-				//double c = (double)i / (double)clusters.size();
-				//viewer.data().add_points(std::get<1>(cluster).leftCols(3), 
-				//	Eigen::RowVector3d(c, 0, 0).replicate(std::get<1>(cluster).rows(),1));
-
-				//std::cout << "Dims: " << dims << std::endl;
-
+			
 				auto trans = lmu::getOrientation(std::get<1>(cluster));
 
-				auto geo = selectPrimitive(trans, dims, types);//lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0, dims.maxCoeff(), "");
-				if (db(rng, parmb_t{ cutOutProb }))
-				{
-					std::cout << "As cutout." << std::endl;
-					model.addChild(lmu::opComp({ geo }));
-				}
-				else
-				{
-					model.addChild(geo);
-				}
+				auto geo = selectPrimitive(trans, dims, types);
+
+				model.addChild(geo);				
 			}
 
-			auto modelPC = lmu::computePointCloud(model, params);
+			auto model_pc = lmu::computePointCloud(model, 
+				lmu::CSGNodeSamplingParams(0.01, 0.01, 0.0,0.0, Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1)));
+						
+			model_pc = lmu::farthestPointSampling(model_pc, pointCloudSize);
+			viewer.data().add_points(model_pc.leftCols(3), model_pc.rightCols(3));
 
-			// Apply pseudo RANSAC to segment point cloud per primitive.
-			double ratio = lmu::ransacWithSim(modelPC, params, model);
-			std::cout << "RANSAC Sim Ratio: " << ratio << std::endl;
+			viewer.data().add_points(g_pc.leftCols(3), g_pc.rightCols(3));
+
+			viewer.data().set_mesh(g_mesh.vertices, g_mesh.indices);
 			
-			// Split cylinders.
-			auto prims = lmu::allDistinctFunctions(model);
-			std::vector<lmu::ImplicitFunctionPtr> splittedPrims;
-			for (const auto& prim : prims)
+			viewer.data().lines = g_lines;
+			viewer.data().show_lines = true;
+
+			goto VIEWER;
+					
+			auto prim_ops = model.childs();
+			
+			// Assign points to primitive operations.
+
+			std::unordered_map<int, std::vector<int>> point_indices_per_prim_op;
+			for (int i = 0; i < model_pc.rows(); ++i)
 			{
-				if (prim->type() == lmu::ImplicitFunctionType::Cylinder)
-				{
-					auto res = splitCylinder(prim);
-					splittedPrims.insert(splittedPrims.end(), res.begin(), res.end());
+				int closest_prim_op_idx = -1;
+				double closest_prim_op_dist = std::numeric_limits<double>::max();
+
+				Eigen::Vector3d p = model_pc.row(i).leftCols(3).transpose();
+				Eigen::Vector3d n = model_pc.row(i).rightCols(3).transpose();
+
+				for (int j = 0; j < prim_ops.size(); ++j)
+				{				
+					double abs_d = std::abs(prim_ops[j].signedDistance(p));
+					if (abs_d < closest_prim_op_dist)
+					{
+						closest_prim_op_idx = j;
+						closest_prim_op_dist = abs_d;
+					}
 				}
-				else
+				point_indices_per_prim_op[closest_prim_op_idx].push_back(i);
+			}
+
+			// Assign per-primitive operation points to closest primitive in primitive op. 
+			
+			std::unordered_map<lmu::ImplicitFunctionPtr, std::vector<int>> point_indices_per_prim;
+			for (const auto& pi : point_indices_per_prim_op)
+			{				
+				for (int i = 0; i < pi.second.size(); ++i)
 				{
-					splittedPrims.push_back(prim);
+					int point_index = pi.second[i];
+					Eigen::Vector3d p = model_pc.row(point_index).leftCols(3).transpose();
+					Eigen::Vector3d n = model_pc.row(point_index).rightCols(3).transpose();
+
+					lmu::ImplicitFunctionPtr closest_prim = nullptr;
+					double closest_prim_dist = std::numeric_limits<double>::max();
+
+					for (const auto& prim : prim_ops[pi.first].childsCRef())
+					{
+						double abs_d = std::abs(prim.signedDistance(p));
+						if (abs_d < closest_prim_dist)
+						{
+							closest_prim = prim.function();
+							closest_prim_dist = abs_d;
+						}
+					}
+					point_indices_per_prim[closest_prim].push_back(point_index);
 				}
 			}
-			prims = splittedPrims;
+
+			model_pc = lmu::normalize(model_pc);
+			model_pc = lmu::add_gaussian_noise(model_pc, 0.001, 0.001);
+
+			std::unordered_map<lmu::ImplicitFunctionPtr, std::vector<Eigen::Matrix<double, 1, 6>>> points_per_prim;
+			for (const auto& pp : point_indices_per_prim)
+			{
+				std::transform(pp.second.begin(), pp.second.end(), std::back_inserter(points_per_prim[pp.first]),
+					[&model_pc](int i) {return model_pc.row(i); });
+			}
+			
+			for (const auto& pair : points_per_prim)
+			{
+				pair.first->setPoints(lmu::pointCloudFromVector(pair.second));
+			}
+			
+			// Save primitives. 
+
+			std::cout << "Output point cloud: " << model_pc.rows() << std::endl;
 
 			auto primFile = outputFolder + std::to_string(iter) + "_prim.prim";
 			std::ofstream ps(primFile);
 
 			//Write primitive point clouds to file.
-			i = 0;
+			int i = 0;
 			int pointIdx = 0;
 			std::unordered_map<lmu::ImplicitFunctionType, int> primitiveIds;
 			std::vector<Eigen::Matrix<double, 1, 8>> points;
+			auto prims = lmu::allDistinctFunctions(model);
 			for (const auto& prim : prims)
 			{
 				//writePrimitive(prim, outputFolder, iter, primitiveIds);
@@ -300,9 +468,10 @@ int main(int argc, char** argv)
 #ifdef WITH_VIEWER_GUI
 				double c = (double)i / (double)prims.size();
 				viewer.data().add_points(prim->pointsCRef().leftCols(3),
-					Eigen::RowVector3d(c, 0, 0).replicate(prim->pointsCRef().rows(), 1));
+				Eigen::RowVector3d(c, 0, 0).replicate(prim->pointsCRef().rows(), 1));
 #endif
 			}
+			
 
 			//auto mesh2 = lmu::computeMesh(model, Eigen::Vector3i(50, 50, 50));
 			//viewer.data().set_mesh(mesh2.vertices, mesh2.indices);
@@ -319,10 +488,10 @@ int main(int argc, char** argv)
 				s << std::endl;
 			}
 			
-		}
-		*/
+		} 
 
 #ifdef WITH_VIEWER_GUI
+		VIEWER:
 		viewer.data().point_size = 5.0;
 		viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 		viewer.launch();

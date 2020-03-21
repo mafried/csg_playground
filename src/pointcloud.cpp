@@ -186,6 +186,46 @@ void lmu::scalePointCloud(PointCloud & pc, double scaleFactor)
 	}
 }
 
+lmu::PointCloud lmu::add_gaussian_noise(const PointCloud& pc, double pos_std_dev, double n_std_dev)
+{
+	auto new_pc = pc;
+
+	std::random_device rd{};
+	std::mt19937 gen{ rd() };
+
+	for (int i = 0; i < pc.rows(); i++)
+	{
+		for (int j = 0; j < pc.cols(); j++)
+		{
+			auto std_dev = j < 3 ? pos_std_dev : n_std_dev;
+			auto& v = new_pc(i,j);
+
+			std::normal_distribution<> d{ v, std_dev };
+
+			double new_v = d(gen);
+			//std::cout << delta << std::endl;
+
+			v = new_v;
+		}
+
+		Eigen::Vector3d n(new_pc.row(i).rightCols(3).transpose());
+		Eigen::Vector3d p(new_pc.row(i).leftCols(3).transpose());
+
+		new_pc.row(i) << p.transpose(), n.normalized().transpose();
+	}
+
+	return new_pc;
+}
+
+lmu::PointCloud lmu::normalize(const PointCloud& pc, double factor)
+{
+	auto new_pc = pc;
+
+	scalePointCloud(new_pc, factor);
+
+	return new_pc;
+}
+
 lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)
 {
 	size_t numRows;
@@ -502,13 +542,13 @@ std::vector<std::tuple<Eigen::Vector3d, lmu::PointCloud>> lmu::kMeansClustering(
 	real.kMeans();
 	
 	pcl::Kmeans::Centroids pclCentroids = real.get_centroids();
-	std::cout << "centroid count: " << pclCentroids.size() << std::endl;
+	//std::cout << "centroid count: " << pclCentroids.size() << std::endl;
 	std::vector<Eigen::Vector3d> centroids(pclCentroids.size());
 	for (int i = 0; i < pclCentroids.size(); i++)
 	{
 		centroids[i] = Eigen::Vector3d(pclCentroids[i][0], pclCentroids[i][1], pclCentroids[i][2]);
 
-		std::cout << "Centroid: " << centroids[i] << std::endl;
+		//std::cout << "Centroid: " << centroids[i] << std::endl;
 	}
 	std::vector<std::vector<size_t>> clusters(centroids.size());
 
