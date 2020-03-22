@@ -69,6 +69,8 @@ namespace lmu
 
 	void scaleMesh(Mesh& mesh, double largestDim);
 
+	Mesh to_canonical_frame(const Mesh& m);
+	
 	enum class ImplicitFunctionType
 	{
 		Sphere = 0,

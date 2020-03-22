@@ -31,7 +31,7 @@ namespace lmu
   void scalePointCloud(PointCloud& pc, double scaleFactor = 1.0);
 
   PointCloud add_gaussian_noise(const PointCloud& pc, double pos_std_dev, double n_std_dev);
-  PointCloud normalize(const PointCloud& pc, double factor = 1.0);
+  PointCloud to_canonical_frame(const PointCloud& pc);
 
   PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
 

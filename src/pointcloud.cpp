@@ -217,13 +217,17 @@ lmu::PointCloud lmu::add_gaussian_noise(const PointCloud& pc, double pos_std_dev
 	return new_pc;
 }
 
-lmu::PointCloud lmu::normalize(const PointCloud& pc, double factor)
+lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc)
 {
-	auto new_pc = pc;
+	Eigen::Vector3d min = pc.leftCols(3).colwise().minCoeff();
+	Eigen::Vector3d max = pc.leftCols(3).colwise().maxCoeff();
+		
+	lmu::PointCloud centered_pc = pc;
+	
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).rowwise() - min.transpose();
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() / (max-min).transpose().array();
 
-	scalePointCloud(new_pc, factor);
-
-	return new_pc;
+	return centered_pc;
 }
 
 lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)

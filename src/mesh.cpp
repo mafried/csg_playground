@@ -586,6 +586,19 @@ void lmu::scaleMesh(Mesh& mesh, double largestDim)
 	mesh.vertices = mesh.vertices / factor * largestDim;
 }
 
+lmu::Mesh lmu::to_canonical_frame(const Mesh& m)
+{
+	Eigen::Vector3d min = m.vertices.colwise().minCoeff();
+	Eigen::Vector3d max = m.vertices.colwise().maxCoeff();
+
+	lmu::Mesh centered_m = m;
+
+	centered_m.vertices  = centered_m.vertices.rowwise() - min.transpose();
+	centered_m.vertices = centered_m.vertices.array().rowwise() / (max - min).transpose().array();
+
+	return centered_m;
+}
+
 std::string lmu::iFTypeToString(ImplicitFunctionType type)
 {
 	switch (type)
