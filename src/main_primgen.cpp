@@ -19,7 +19,7 @@ lmu::Mesh g_mesh;
 lmu::PointCloud g_pc;
 Eigen::MatrixXd g_lines;
 
-#define WITH_VIEWER_GUI
+//#define WITH_VIEWER_GUI
 
 void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& directory, int iteration, std::unordered_map<lmu::ImplicitFunctionType, int>& primitiveIds)
 {
@@ -171,7 +171,7 @@ int main(int argc, char** argv)
 
 	try
 	{
-		if (argc != 2)
+		if (argc < 2)
 		{
 			std::cerr << "Must have a config ini file path as argument." << std::endl;
 			return -1;
@@ -181,6 +181,7 @@ int main(int argc, char** argv)
 		// Load config.
 
 		auto config_file = std::string(argv[1]);
+		auto file_counter = argc >= 2 ? std::atoi(argv[2]) : 0;
 
 		lmu::ParameterSet s(config_file);
 
@@ -363,7 +364,7 @@ int main(int argc, char** argv)
 
 			std::cout << "Output point cloud: " << model_pc.rows() << " Dims: " << (model_pc.leftCols(3).colwise().maxCoeff() - model_pc.leftCols(3).colwise().minCoeff()) << std::endl;
 
-			auto primFile = output_folder + std::to_string(iter) + "_prim.prim";
+			auto primFile = output_folder + std::to_string(file_counter + iter) + "_prim.prim";
 			std::ofstream ps(primFile);
 
 
@@ -400,7 +401,7 @@ int main(int argc, char** argv)
 #endif
 			}
 						
-			auto pcFile = output_folder + std::to_string(iter) +"_pc.xyz";
+			auto pcFile = output_folder + std::to_string(file_counter + iter) +"_pc.xyz";
 			std::cout << "Write point cloud to " << pcFile << "." << std::endl;
 			std::ofstream s(pcFile);
 			s << points.size() << " " << 8 << std::endl;

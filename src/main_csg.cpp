@@ -1,229 +1,289 @@
 #define BOOST_PARAMETER_MAX_ARITY 12
 
+#include <igl/readOFF.h>
+#include <igl/opengl/glfw/Viewer.h>
 #include <igl/writeOBJ.h>
 
 #include <Eigen/Core>
 #include <iostream>
 #include <tuple>
 #include <chrono>
-#include <string>
 
-#include "mesh.h"
-#include "ransac.h"
-#include "pointcloud.h"
-#include "collision.h"
-#include "congraph.h"
-
-//#include "tests.h"
-
-#include "csgnode_evo.h"
-#include "csgnode_evo_v2.h"
+#include "csgnode.h"
 #include "csgnode_helper.h"
-#include "evolution.h"
-#include "curvature.h"
-#include "dnf.h"
-#include "statistics.h"
-#include "constants.h"
-#include "params.h"
+#include "primitives.h"
+#include "primitive_extraction.h"
+#include "pointcloud.h"
+#include "cluster.h"
 
 
-using namespace lmu;
+lmu::ManifoldSet g_manifoldSet;
+int g_manifoldIdx = 0;
+lmu::PointCloud g_res_pc;
+bool g_show_res = false;
+lmu::PrimitiveSet g_primitiveSet;
+int g_prim_idx = 0;
 
-
-/*
-enum class ApproachType
+lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
-  None = 0,
-  BaselineGA, 
-  Partition
-};
-*/
+	if (ps.empty())
+		return lmu::Mesh();
 
+	lmu::PrimitiveSet filtered_ps;
+	if (primitive_idx < 0)
+		filtered_ps = ps;
+	else
+		filtered_ps.push_back(ps[primitive_idx]);
 
-enum class PartitionType {
-  none=0,
-  pi, //prime implicant
-  piWithPruning,
-  ap // articulation point
-};
+	int vRows = 0;
+	int iRows = 0;
+	for (const auto& p : filtered_ps)
+	{
+		auto mesh = p.imFunc->createMesh();
+		vRows += mesh.vertices.rows();
+		iRows += mesh.indices.rows();
+	}
 
+	Eigen::MatrixXi indices(iRows, 3);
+	Eigen::MatrixXd vertices(vRows, 3);
+	int vOffset = 0;
+	int iOffset = 0;
+	for (const auto& p : filtered_ps)
+	{
+		auto mesh = p.imFunc->createMesh();
 
-enum class CSGRecoveryType {
-  ga=0, 
-  shapiro
-};
+		Eigen::MatrixXi newIndices(mesh.indices.rows(), 3);
+		newIndices << mesh.indices;
 
+		newIndices.array() += vOffset;
 
-static void usage(const char* pname) {
-  std::cout << "Usage:" << std::endl;
-  std::cout << pname << " points.xyz shapes.prim params.ini"
-	    << " partitionType recoveryType outBasename" 
-	    << std::endl;
-  std::cout << std::endl;
-  std::cout << "Example: " << pname 
-	    << " model.xyz model.prim params.ini none|pi|piWithPruning|ap ga|ga2|shapiro model" << std::endl;
+		indices.block(iOffset, 0, mesh.indices.rows(), 3) << newIndices;
+		vertices.block(vOffset, 0, mesh.vertices.rows(), 3) << mesh.vertices;
+
+		vOffset += mesh.vertices.rows();
+		iOffset += mesh.indices.rows();
+	}
+
+	return lmu::Mesh(vertices, indices);
 }
 
+void update(igl::opengl::glfw::Viewer& viewer)
+{
+}
+
+bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
+{
+	switch (key)
+	{
+	default:
+		return false;
+	case '-':
+		viewer.core.camera_dnear -= 0.1;
+		return true;
+	case '+':
+		viewer.core.camera_dnear += 0.1;
+		return true;
+	case '1':
+		g_manifoldIdx++;
+		if (g_manifoldSet.size() <= g_manifoldIdx)
+			g_manifoldIdx = 0;
+		break;
+
+	case '2':
+		g_manifoldIdx--;
+		if (g_manifoldIdx < 0)
+			g_manifoldIdx = g_manifoldSet.empty() ? 0 : g_manifoldSet.size() - 1;
+		break;
+	case '3':
+		g_show_res = !g_show_res;
+		break;
+	case '4':
+		g_prim_idx--;
+		if (g_prim_idx < 0)
+			g_prim_idx = g_primitiveSet.size() - 1;
+		break;
+	case '5':
+		g_prim_idx++;
+		if (g_prim_idx >= g_primitiveSet.size())
+			g_prim_idx = 0;
+		break;
+	case '6':
+		g_prim_idx = -1;
+		break;
+	case '7':
+		std::cout << "Serialize meshes" << std::endl;
+		std::string basename = "out_mesh";
+		for (int i = 0; i < g_primitiveSet.size(); ++i) {
+			auto mesh = computeMeshFromPrimitives(g_primitiveSet, i);
+			if (!mesh.empty()) {
+				std::string mesh_name = basename + std::to_string(i) + ".obj";
+				igl::writeOBJ(mesh_name, mesh.vertices, mesh.indices);
+			}
+		}
+		break;
+	}
+
+	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
+	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
+
+	std::cout << "Show Result: " << g_show_res << std::endl;
+
+	viewer.data().clear();
+
+	viewer.data().set_points(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+	update(viewer);
+
+
+	if (!g_manifoldSet.empty())
+	{
+		for (int i = 0; i < g_manifoldSet.size(); ++i)
+		{
+			//if (i != g_manifoldIdx)
+			//{
+			//	Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+			//	cm.setZero();
+			//	viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			//}
+			//else
+			//{
+			Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+
+			for (int j = 0; j < cm.rows(); ++j)
+			{
+				Eigen::Vector3d c;
+				switch ((int)(g_manifoldSet[i]->type))
+				{
+				case 4:
+					c = Eigen::Vector3d(1, 0, 0);
+					break;
+				case 0:
+					c = Eigen::Vector3d(0, 1, 0);
+					break;
+				case 1:
+					c = Eigen::Vector3d(1, 1, 0);
+					break;
+				case 2:
+					c = Eigen::Vector3d(1, 0, 1);
+					break;
+				case 3:
+					c = Eigen::Vector3d(0, 0, 1);
+					break;
+				}
+				cm.row(j) << c.transpose();
+			}
+
+			viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			//}
+		}
+	}
+
+
+	auto mesh = computeMeshFromPrimitives(g_primitiveSet, g_prim_idx);
+	if (!mesh.empty())
+		viewer.data().set_mesh(mesh.vertices, mesh.indices);
+
+	update(viewer);
+	return true;
+}
 
 int main(int argc, char *argv[])
 {
-  using namespace Eigen;
-  using namespace std;
+	using namespace Eigen;
+	using namespace std;
 
-  if (argc != 7) {
-    usage(argv[0]);
-    return -1;
-  }
+	igl::opengl::glfw::Viewer viewer;
+	viewer.mouse_mode = igl::opengl::glfw::Viewer::MouseMode::Rotation;
+	viewer.callback_key_down = &key_down;
 
-  CSGNode node(nullptr);
+	// Initialize
+	update(viewer);
 
-  ParameterSet params(argv[3]);
-  params.print();
-  
-  //double samplingStepSize = params.getDouble("Sampling", "StepSize", 0.0);
-  //double maxDistance = params.getDouble("Sampling", "MaxDistance", 0.03);
-  //double maxAngleDistance = params.getDouble("Sampling", "MaxAngleDistance", M_PI / 18.0);
-  //double errorSigma = params.getDouble("Sampling", "ErrorSigma", 0.01);
-  double connectionGraphSamplingStepSize = params.getDouble("Sampling", "ConnectionGraphSamplingStepSize", 0.01);
-  
-  std::string pcName = argv[1]; // "model.xyz";
+	bool use_clusters = false;
 
-  auto pointClouds = lmu::readPointCloudXYZPerFunc(pcName, 1.0);
 
-  std::string primName = argv[2]; // "model.prim";
+	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
+	std::string m = { "test1" };
 
-  std::vector<ImplicitFunctionPtr> shapes, filteredShapes; 
-  shapes = lmu::fromFilePRIM(primName);
-  
-  for (const auto& s : shapes)
-  {
-	  s->setPoints(pointClouds[s->name()]);
+	ofstream f;
+	f.open("ransac_info.txt");
 
-	  if (s->points().rows() == 0)
-	  {
-		  std::cout << "WARNING: Primitive " << s->name() << " has no points and is filtered out." << std::endl;
-	  }
-	  else
-	  {
-		  filteredShapes.push_back(s);
-	  }
-  }
-  shapes = filteredShapes;
-  
-  std::cout << "Compute Connection Graph" << std::endl;
-  
-  auto dims = lmu::computeDimensions(shapes);
-  auto graph = lmu::createConnectionGraph(shapes);// , /*std::get<0>(dims), std::get<1>(dims),*/ connectionGraphSamplingStepSize);
-	
-  for (const auto& f1 : shapes)
-  {
-	  std::cout << f1->name() << " connected with: ";
+	try
+	{		
+		f << m << std::endl;
 
-	  for (const auto& f2 : shapes)
-	  {
-		  if (lmu::areConnected(graph, f1, f2))
-		  {
-			  std::cout << " " << f2->name();
-		  }
-	  }
+		std::string path = "C:/Projekte/visigrapp2020/data/" + m;
+						
 
-	  std::cout << std::endl;
-  }
+		// Primitive estimation based on clusters.
+		std::vector<lmu::Cluster> clusters;
+		if (use_clusters)
+		{
+			clusters = lmu::readClusterFromFile(path + "/clusters.txt", 1.0);
+		}
+		else
+		{
+			auto pc = lmu::readPointCloud(path + "/pc.txt");
+			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
+			clusters = { cl };
+		}
 
-  lmu::writeConnectionGraph("connectionGraph.dot", graph);
+		auto params = lmu::RansacParams();
+		params.probability = 0.05;//0.1;
+		params.min_points = 200;
+		params.normal_threshold = 0.9;
+		params.cluster_epsilon = 0.1;// 0.2;
+		params.epsilon = 0.01;// 0.2;
 
-  std::cout << "CONNECTION GRAPH Vertices: " << numVertices(graph) << " , Edges: " << numEdges(graph) << std::endl;
-   
-  CSGNode res = op<Union>();
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
-  double gradientStepSize = params.getDouble("Sampling", "GradientStepSize", 0.001);
-  double distThreshold = params.getDouble("Sampling", "DistanceThreshold", 0.9);
-  double angleThreshold = params.getDouble("Sampling", "AngleThreshold", 0.9);
-  bool usePointSelection = params.getBool("Sampling", "UsePointSelection", true);
-  SampleParams p{ gradientStepSize, distThreshold, angleThreshold };
-  
-  if (usePointSelection)
-  {
-	  lmu::filterPoints(shapes, graph, gradientStepSize);
-  }
+		g_manifoldSet = ransacRes.manifolds;
 
-  std::string partitionType = argv[4];
-  std::string recoveryType = argv[5];
+		f << ransacRes.manifolds.size() << " ";
 
-  // Some comments:
-  // * currently I am not using any parallelism options 
-  // * for the GA: connectionGraph is set to Graph() (same as for the GA used for 
-  // WSCG18 as far as I understand), but then it means it can not be used 
-  // for the max-size computation for the trees.
-  // * should we call optimizeCSGNodeStructure for each recoveryType? 
-  
-  if (partitionType == "none") 
-  {
-    if (recoveryType == "shapiro") {
-      auto dnf = lmu::computeShapiro(shapes,true, graph, p);
-      res = lmu::DNFtoCSGNode(dnf);
-    } else if (recoveryType == "ga") {
-      res = createCSGNodeWithGA(shapes, params, graph);
-      optimizeCSGNodeStructure(res);
-	//} else if (recoveryType == "ga2") {
-	  //res = createCSGNodeWithGAV2(graph, params);
-	  //optimizeCSGNodeStructure(res); Some issues here
-    } else {
-      std::cerr << "Invalid recovery type" << std::endl;
-      usage(argv[0]);
-      return -1;
-    }
-  } else {
-    // First compute the partition based on the partition type
-    std::vector<lmu::Graph> partitions;
-    if (partitionType == "pi") {
-      partitions = lmu::getUnionPartitionsByPrimeImplicants(graph, p);
-    } else if (partitionType == "piWithPruning") {
-      partitions = lmu::getUnionPartitionsByPrimeImplicantsWithPruning(graph, p);
-    } else if (partitionType == "ap") {
-      partitions = lmu::getUnionPartitionsByArticulationPoints(graph);
-	} else if (partitionType == "clique") {
-		partitions = lmu::getCliquePartitions(graph);
-    } else {
-      std::cerr << "Invalid partition type" << std::endl;
-      usage(argv[0]);
-      return -1;
-    }
+		lmu::TimeTicker t;
 
-    // Then call Shapiro or GA with partitions
-    if (recoveryType == "shapiro") {
-      res = lmu::computeShapiroWithPartitions(partitions, p);
-    } else if (recoveryType == "ga") {
-      res = lmu::computeGAWithPartitions(partitions, params);
-	//} else if (recoveryType == "ga2") {
-	//	res = lmu::computeGAWithPartitionsV2(partitions, params);
+		t.tick();
+			
+		f << std::endl;
+
+		// Farthest point sampling applied to all manifolds.
+		for (const auto& m : ransacRes.manifolds)
+		{
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			f << std::endl;
+		}		
+
+		t.tick();
+
+		std::cout << "FPS: " << t.current << "ms" << std::endl;
+
+
+		// Extract primitives 
+		auto res = lmu::extractPrimitivesWithGA(ransacRes);
+		lmu::PrimitiveSet primitives = res.primitives;
+		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
+
+		for (const auto& p : primitives)
+			std::cout << "Primitive: " << p << std::endl;
+		
+		g_primitiveSet = primitives;
+
+		// Extract CSG tree 
+
+		// TODO
+
+		f.close();
 	}
-	else {
-      std::cerr << "Invalid recovery type" << std::endl;
-      usage(argv[0]);
-      return -1;
-    }
-  }
+	catch (const std::exception& ex)
+	{
+		std::cout << "ERROR: " << ex.what() << std::endl;
+	}
 
+_LAUNCH:
 
-  std::string outBasename = argv[6];
-  lmu::writeNode(res, outBasename + "_tree.dot");
+	viewer.data().point_size = 5.0;
+	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 
-  auto mesh = lmu::computeMesh(res, Eigen::Vector3i(200, 200, 200));
+	viewer.launch();
 
-  igl::writeOBJ(outBasename + "_mesh.obj", mesh.vertices, mesh.indices);
-
-  
-  //std::cout << lmu::espressoExpression(dnf) << std::endl;
-	
-  //std::cout << "Before: " << pointCloud.rows() << std::endl;
-  //pointCloud = lmu::filterPrimitivePointsByCurvature(shapes, 0.01, 7 , FilterBehavior::FILTER_CURVY_SURFACES), true;
-  //std::cout << "After: " << pointCloud.rows() << std::endl;
-
-  //pointCloud = getSIFTKeypoints(pointCloud, 0.01, 0.001, 3, 4, false);
-  //auto colors = lmu::computeCurvature(pointCloud.leftCols(3), node, 0.01, true);
-  //std::cout << "Considered Clause " << g_clause << std::endl;
-
-
-  return 0;
 }
