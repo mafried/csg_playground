@@ -24,7 +24,7 @@ bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
 int g_prim_idx = 0;
 
-lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
+lmu::Mesh computeMeshFromPrimitives2(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
 	if (ps.empty())
 		return lmu::Mesh();
@@ -114,7 +114,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		std::cout << "Serialize meshes" << std::endl;
 		std::string basename = "out_mesh";
 		for (int i = 0; i < g_primitiveSet.size(); ++i) {
-			auto mesh = computeMeshFromPrimitives(g_primitiveSet, i);
+			auto mesh = computeMeshFromPrimitives2(g_primitiveSet, i);
 			if (!mesh.empty()) {
 				std::string mesh_name = basename + std::to_string(i) + ".obj";
 				igl::writeOBJ(mesh_name, mesh.vertices, mesh.indices);
@@ -178,7 +178,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	}
 
 
-	auto mesh = computeMeshFromPrimitives(g_primitiveSet, g_prim_idx);
+	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
 		viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
@@ -226,6 +226,42 @@ int main(int argc, char *argv[])
 			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
 			clusters = { cl };
 		}
+
+		/*
+		auto in_pc = lmu::to_canonical_frame(clusters[0].pc);
+		
+		double voxel_size = 0.01;
+		double distance_epsilon = 0.001;
+
+		auto m = make_shared<lmu::ModelSDF>(in_pc, voxel_size, 0.1);
+		auto ms = lmu::ManifoldSet();
+		
+		auto box_t = Eigen::Affine3d(Eigen::Translation3d(Eigen::Vector3d(0, 0, 0)));
+		//box_t.rotate(Eigen::AngleAxis<double>(1.0, Vector3d::UnitX()));
+		auto box = std::make_shared<lmu::IFBox>(box_t, Eigen::Vector3d(0.2,0.1,0.1),0, "");
+		auto box_prim = lmu::Primitive(box, ms, lmu::PrimitiveType::Box);
+		lmu::PrimitiveSet ps; 
+		ps.push_back(box_prim);
+
+		lmu::PrimitiveSetRanker ranker(in_pc, ms, ps, distance_epsilon, 16, voxel_size, m);
+
+
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+		auto scores = ranker.get_per_prim_geo_score(ps, voxel_size / 2.0, distance_epsilon, *m, points);
+		std::cout << "Score: " << scores[0] << std::endl;
+		
+		auto mesh = box->meshCRef();
+		viewer.data().set_mesh(mesh.vertices, mesh.indices);
+		
+		auto out_pc = in_pc;//m->to_pc();
+		viewer.data().set_points(out_pc.leftCols(3), out_pc.rightCols(3));
+		auto box_pc = lmu::pointCloudFromVector(points);
+		viewer.data().add_points(box_pc.leftCols(3), box_pc.rightCols(3));
+
+
+		goto _LAUNCH;
+		*/
+
 
 		auto params = lmu::RansacParams();
 		params.probability = 0.05;//0.1;
@@ -282,7 +318,7 @@ int main(int argc, char *argv[])
 _LAUNCH:
 
 	viewer.data().point_size = 5.0;
-	viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
+	viewer.core.background_color = Eigen::Vector4f(0.5, 0.5, 0.5, 0.5);
 
 	viewer.launch();
 

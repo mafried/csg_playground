@@ -221,11 +221,13 @@ lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc)
 {
 	Eigen::Vector3d min = pc.leftCols(3).colwise().minCoeff();
 	Eigen::Vector3d max = pc.leftCols(3).colwise().maxCoeff();
+
+	double diagonal = (max - min).norm();
 		
 	lmu::PointCloud centered_pc = pc;
 	
 	centered_pc.leftCols(3) = centered_pc.leftCols(3).rowwise() - min.transpose();
-	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() / (max-min).transpose().array();
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() / Eigen::Array<double,1,3>(diagonal, diagonal, diagonal);// (max - min).transpose().array();
 
 	return centered_pc;
 }

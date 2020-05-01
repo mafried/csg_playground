@@ -124,6 +124,12 @@ namespace lmu
 			// unless the result is subnormal
 			|| std::fabs(x - y) < std::numeric_limits<T>::min();
 	}
+
+	inline bool almost_equal(double x, double y, double epsilon)
+	{
+		return std::abs(x - y) <= epsilon * std::abs(x);
+		// see Knuth section 4.2.2 pages 217-218
+	}
 }
 
 #endif
