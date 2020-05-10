@@ -6,13 +6,16 @@
 
 #include <vector>
 
+typedef struct _object PyObject;
+
 namespace lmu
 {
 	struct PrimitiveSetRank
 	{
-		PrimitiveSetRank(double geo, double size, double combined, 
+		PrimitiveSetRank(double geo, double per_prim_geo_sum, double size, double combined,
 			const std::vector<double>& per_primitive_geo_scores = std::vector<double>()) :
 			geo(geo),
+			per_prim_geo_sum(per_prim_geo_sum),
 			size(size),
 			combined(combined),
 			per_primitive_geo_scores(per_primitive_geo_scores)
@@ -25,13 +28,14 @@ namespace lmu
 		}
 
 		explicit PrimitiveSetRank(double v) :
-			PrimitiveSetRank(v, v, v)
+			PrimitiveSetRank(v, v, v, v)
 		{
 		}
 
 		static const PrimitiveSetRank Invalid;
 
 		double geo;
+		double per_prim_geo_sum;
 		double size;
 		double combined;
 		std::vector<double> per_primitive_geo_scores;
@@ -131,10 +135,12 @@ namespace lmu
 		mutable std::random_device rndDevice;
 	};
 	
+	struct PrimitiveSetRanker;
 	struct GAResult
 	{
 		PrimitiveSet primitives; 
 		ManifoldSet manifolds; 
+		std::shared_ptr<PrimitiveSetRanker> ranker;
 	};
 
 	struct SDFValue
@@ -151,25 +157,26 @@ namespace lmu
 
 	struct ModelSDF
 	{
-		ModelSDF(const PointCloud& pc, double voxel_size, double block_size);
+		ModelSDF(const PointCloud& pc, double voxel_size, double block_radius, double sigma_sq);
+
 		~ModelSDF();
 
 		double distance(const Eigen::Vector3d& p) const;
 		SDFValue sdf_value(const Eigen::Vector3d& p) const;
-
 
 		Mesh to_mesh() const;
 		PointCloud to_pc() const;
 
 	private: 
 
-		void fill_block(const Eigen::Vector3d& p, const Eigen::Vector3d& n, int block_size, float& min_v, float& max_v);
+		void fill_block(const Eigen::Vector3d& p, const Eigen::Vector3d& n, int block_size, float& min_w, float& max_w);
 
 		SDFValue* data;
 		Eigen::Vector3i grid_size;
 		Eigen::Vector3d origin;
 		Eigen::Vector3d size;
 		double voxel_size;
+		double sigma_sq;
 		int n;
 	};
 
@@ -178,11 +185,13 @@ namespace lmu
 		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
 			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, const std::shared_ptr<ModelSDF>& model_sdf);
 
-		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
+		PrimitiveSetRank rank(const PrimitiveSet& ps, bool debug = false) const;
 
-		std::vector<double> get_per_prim_geo_score(const PrimitiveSet& ps, double cell_size, double distance_epsilon, const ModelSDF& model_sdf, std::vector<Eigen::Matrix<double, 1, 6>>& points) const;
+		std::vector<double> get_per_prim_geo_score(const PrimitiveSet& ps, std::vector<Eigen::Matrix<double, 1, 6>>& points, bool debug = false) const;
 
 		std::string info() const;
+
+		std::shared_ptr<ModelSDF> model_sdf;
 		
 	private:
 
@@ -193,7 +202,6 @@ namespace lmu
 		ManifoldSet ms;
 		double distanceEpsilon;
 		double cell_size;
-		std::shared_ptr<ModelSDF> model_sdf;
 		int maxPrimitiveSetSize;
 	};
 
@@ -223,7 +231,7 @@ namespace lmu
 		PrimitiveSetTournamentSelector, PrimitiveSetIterationStopCriterion, PrimitiveSetPopMan>;
 
 
-	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult);
+	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
 	lmu::Primitive createSpherePrimitive(const ManifoldPtr& m);
@@ -231,6 +239,20 @@ namespace lmu
 	
 	double estimateCylinderHeightFromPointCloud(const Manifold& m);
 	ManifoldPtr estimateSecondCylinderPlaneFromPointCloud(const Manifold& m, const Manifold& firstPlane);
+
+	struct OutlierDetector
+	{
+		OutlierDetector(const std::string& python_module_path);
+		~OutlierDetector();
+
+		PrimitiveSet remove_outliers(const PrimitiveSet& ps, const PrimitiveSetRank& psr) const;
+
+	private:
+		PyObject *od_method_name, *od_module, *od_dict, *od_method;		
+	};
+
+	CSGNode generate_tree(const GAResult& res, double cutout_threshold, double sampling_grid_size);
+
 }
 
 #endif 

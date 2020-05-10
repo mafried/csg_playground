@@ -673,3 +673,15 @@ std::ostream& lmu::operator <<(std::ostream& os, const Primitive& p)
 
 	return os;
 }
+
+lmu::PrimitiveSet lmu::PrimitiveSet::without_duplicates() const
+{
+	PrimitiveSet ps;
+	std::unordered_map<size_t, Primitive> p_map;
+	for (const auto& p : *this)
+		p_map[p.hash(0)] = p;
+	for (const auto& kp : p_map)
+		ps.push_back(kp.second);
+
+	return ps;
+}

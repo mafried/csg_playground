@@ -170,7 +170,7 @@ namespace lmu
 
 		friend std::ostream& operator<<(std::ostream& os, const Primitive& p);
 
-	private:
+	
 		Primitive() :
 			Primitive(nullptr, ManifoldSet(), PrimitiveType::None)
 		{
@@ -188,6 +188,8 @@ namespace lmu
 			}		
 			return s;
 		}
+
+		PrimitiveSet without_duplicates() const;
 	};
 
 	struct RansacParams 

@@ -167,6 +167,11 @@ namespace lmu
 			_invTrans = transform.inverse();
 		}
 
+		void setName(const std::string& n)
+		{
+			_name = n;
+		}
+
 		Eigen::Vector4d signedDistanceAndGradient(const Eigen::Vector3d& worldP, double h = 0.001)
 		{
 			//world -> local

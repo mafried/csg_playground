@@ -20,9 +20,12 @@
 lmu::ManifoldSet g_manifoldSet;
 int g_manifoldIdx = 0;
 lmu::PointCloud g_res_pc;
+lmu::PointCloud g_sdf_model_pc;
 bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
 int g_prim_idx = 0;
+std::shared_ptr<lmu::PrimitiveSetRanker> g_ranker = nullptr;
+bool g_show_sdf = false;
 
 lmu::Mesh computeMeshFromPrimitives2(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
@@ -89,6 +92,10 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 			g_manifoldIdx = 0;
 		break;
 
+	case '8':
+		g_show_sdf = !g_show_sdf;
+		break;
+
 	case '2':
 		g_manifoldIdx--;
 		if (g_manifoldIdx < 0)
@@ -126,11 +133,23 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
 	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
 
+	lmu::PrimitiveSet ps;
+	ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
+	std::vector<Eigen::Matrix<double, 1, 6>> points;
+	std::cout << "Primitive score: " << g_ranker->get_per_prim_geo_score(ps, points, true)[0] << std::endl;
+
 	std::cout << "Show Result: " << g_show_res << std::endl;
 
 	viewer.data().clear();
 
-	viewer.data().set_points(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+	if (g_show_sdf)
+		viewer.data().set_points(g_sdf_model_pc.leftCols(3), g_sdf_model_pc.rightCols(3));
+	
+	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
+
+	auto points_pc = lmu::pointCloudFromVector(points);
+	viewer.data().add_points(points_pc.leftCols(3), points_pc.rightCols(3));
+
 	update(viewer);
 
 
@@ -172,7 +191,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				cm.row(j) << c.transpose();
 			}
 
-			viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			//viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			//}
 		}
 	}
@@ -181,7 +200,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
 		viewer.data().set_mesh(mesh.vertices, mesh.indices);
-
+		
 	update(viewer);
 	return true;
 }
@@ -198,11 +217,11 @@ int main(int argc, char *argv[])
 	// Initialize
 	update(viewer);
 
-	bool use_clusters = false;
+	bool use_clusters = true;
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test1" };
+	std::string m = { "test12" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -213,6 +232,8 @@ int main(int argc, char *argv[])
 
 		std::string path = "C:/Projekte/visigrapp2020/data/" + m;
 						
+		// read complete point cloud
+		auto pc = lmu::readPointCloud(path + "/pc.txt");
 
 		// Primitive estimation based on clusters.
 		std::vector<lmu::Cluster> clusters;
@@ -222,10 +243,28 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			auto pc = lmu::readPointCloud(path + "/pc.txt");
 			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
 			clusters = { cl };
 		}
+
+		// Scale input pc.
+		pc = lmu::to_canonical_frame(pc);
+
+		// Scale cluster point clouds to canonical frame defined by complete point cloud.
+		std::vector<lmu::PointCloud> cluster_pcs;
+		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs),[](const auto& c) { return c.pc; });
+		auto merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
+		for (auto& c : clusters)
+		{
+			c.pc = lmu::to_canonical_frame(c.pc, &merged_cluster_pc);
+		}
+
+		// Check if everything went right with the pc transformation.
+		cluster_pcs.clear();
+		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
+		merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
+		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
+		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
 
 		/*
 		auto in_pc = lmu::to_canonical_frame(clusters[0].pc);
@@ -268,9 +307,9 @@ int main(int argc, char *argv[])
 		params.min_points = 200;
 		params.normal_threshold = 0.9;
 		params.cluster_epsilon = 0.1;// 0.2;
-		params.epsilon = 0.01;// 0.2;
+		params.epsilon = 0.005;// 0.2;
 
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 5, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
 
@@ -295,7 +334,7 @@ int main(int argc, char *argv[])
 
 
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes);
+		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc);
 		lmu::PrimitiveSet primitives = res.primitives;
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
 
@@ -303,10 +342,20 @@ int main(int argc, char *argv[])
 			std::cout << "Primitive: " << p << std::endl;
 		
 		g_primitiveSet = primitives;
+		g_ranker = res.ranker;
+		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
+		//viewer.data().set_points(g_sdf_model_pc.leftCols(3), g_sdf_model_pc.rightCols(3));
+
+		g_res_pc = pc;
 
 		// Extract CSG tree 
+		auto node = lmu::generate_tree(res, 0.9, 0.05);
 
-		// TODO
+		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1));
+		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+		lmu::toJSONFile(node, "ex_node.json");
+
+		lmu::writeNode(node, "extracted_node.gv");
 
 		f.close();
 	}
