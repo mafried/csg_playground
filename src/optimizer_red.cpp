@@ -76,6 +76,13 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCl
 	// Intersection 
 	case lmu::CSGNodeOperationType::Intersection:
 	{
+		if (n.childsCRef().size() == 1)
+		{
+			p("I:1P");
+			n = op1;
+			break;
+		}
+
 		const auto& op2 = n.childsCRef()[1];
 
 		if (has_empty_marker(op1) || has_empty_marker(op2)) { p("I:ES"); n = empty_set; }
@@ -95,6 +102,13 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCl
 	// Union 
 	case lmu::CSGNodeOperationType::Union:
 	{
+		if (n.childsCRef().size() == 1)
+		{
+			p("U:1P");
+			n = op1;
+			break;
+		}
+
 		const auto& op2 = n.childsCRef()[1];
 
 		if (has_empty_marker(op1) && has_empty_marker(op2)) { p("U:ES"); n = empty_set; }

@@ -1180,7 +1180,7 @@ bool is_cut_out(const lmu::Primitive& p, const lmu::CSGNode& geo, double cutout_
 			Eigen::Vector3d pos = m->pc.row(i).leftCols(3).transpose();
 			Eigen::Vector3d normal = m->pc.row(i).rightCols(3).transpose().normalized();
 
-			Eigen::Vector3d gradient = (-1.0)*geo.signedDistanceAndGradient(pos).bottomRows(3).normalized();
+			Eigen::Vector3d gradient = /*(-1.0)**/geo.signedDistanceAndGradient(pos).bottomRows(3).normalized();
 
 			//std::cout << normal << "|" << gradient << std::endl;
 			if (gradient.dot(normal) < 0.0)// >= 0.0)
@@ -1193,20 +1193,58 @@ bool is_cut_out(const lmu::Primitive& p, const lmu::CSGNode& geo, double cutout_
 	double score = ((double)other_dir_points / (double)points);
 
 	std::cout << "Score: " << score << std::endl;
-
-		
+			
 	return score >= cutout_threshold;
 }
 
-lmu::CSGNode lmu::generate_tree(const GAResult& res, double cutout_threshold, double sampling_grid_size)
+double rank_node(const lmu::CSGNode& n, const lmu::PointCloud& pc)
 {
-	// Remove duplicate primitives and primitives that 
-	auto primitives = res.primitives; //TODO
+	double score = 0.0;
 
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d p = pc.row(i).leftCols(3).transpose(); 
+
+		score += std::abs(n.signedDistance(p));
+	}
+
+	std::cout << "Rank Score: " << score << std::endl;
+	
+	return score; 
+}
+
+double rank_node(const lmu::CSGNode& n, const lmu::ModelSDF& m)
+{
+	double score = 0.0;
+
+	for (int x = 0; x < m.grid_size.x(); ++x)
+	{
+		for (int y = 0; y < m.grid_size.y(); ++y)
+		{
+			for (int z = 0; z < m.grid_size.z(); ++z)
+			{
+				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * m.voxel_size + m.origin;
+
+				auto v = m.sdf_value(p);
+
+				auto nd = n.signedDistance(p);
+
+				score += std::abs(v.v - nd) * v.w;
+			}
+		}
+	}
+
+	std::cout << "Rank Score: " << score << std::endl;
+
+	return score;
+}
+
+lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_pc, double cutout_threshold, double sampling_grid_size)
+{	
 	std::vector<CSGNode> diff_prims;
 	std::vector<CSGNode> union_prims;
 	int i = 0;
-	for (const auto& p : primitives)
+	for (const auto& p : res.primitives)
 	{
 		p.imFunc->setName("P" + std::to_string(i++));
 		auto geo = geometry(p.imFunc);
@@ -1224,7 +1262,43 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, double cutout_threshold, do
 
 	node = to_binary_tree(node);
 
-	//node = remove_redundancies(node, sampling_grid_size, lmu::PointCloud());
+	// Remove duplicate primitives and primitives that 
+	// TODO
+
+	// Find nearest planes to cylinder caps and use them with cylinders
+	// TODO
+
+	// After Redundancy Removal: check for each primitive involved, if it is needed or if the overal node score (against voxel grid or point cloud) is better or the same without it.
+	// TODO
+
+	// Fix the weird -1.0 * gradient issue
+	// TODO
+
+	auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+	igl::writeOBJ("ex_node_bef.obj", m.vertices, m.indices);
+
+	node = remove_redundancies(node, sampling_grid_size, lmu::PointCloud());
+
+	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
+	const auto e = 0.0001;
+	auto prims = lmu::allDistinctFunctions(node);
+	double best_rank = rank_node(node,  *res.ranker->model_sdf);
+	
+	for (const auto& prim : prims)
+	{
+		auto n = node;
+
+		lmu::visit(n, [&prim](lmu::CSGNode& c) {if (c.function() == prim) c = empty_set; });
+		n = remove_redundancies(n, sampling_grid_size, lmu::PointCloud());
+
+		double cur_rank = rank_node(n,  *res.ranker->model_sdf);
+		if (best_rank - cur_rank > e) // smaller is better.
+		{
+			std::cout << "Primitive " << prim->name() << " does not contribute and thus is removed." << std::endl;
+			best_rank = cur_rank;
+			node = n; 
+		}
+	}
 	
 	return node;
 }
@@ -1438,6 +1512,9 @@ lmu::OutlierDetector::~OutlierDetector()
 
 lmu::PrimitiveSet lmu::OutlierDetector::remove_outliers(const PrimitiveSet& ps, const PrimitiveSetRank& psr) const
 {
+	if (ps.size() <= 1)
+		return ps;
+
 	PyObject *arg, *res;
 
 	std::ostringstream oss;

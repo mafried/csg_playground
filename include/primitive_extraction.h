@@ -167,15 +167,17 @@ namespace lmu
 		Mesh to_mesh() const;
 		PointCloud to_pc() const;
 
+		Eigen::Vector3i grid_size;
+		Eigen::Vector3d origin;
+		double voxel_size;
+
 	private: 
 
 		void fill_block(const Eigen::Vector3d& p, const Eigen::Vector3d& n, int block_size, float& min_w, float& max_w);
 
 		SDFValue* data;
-		Eigen::Vector3i grid_size;
-		Eigen::Vector3d origin;
 		Eigen::Vector3d size;
-		double voxel_size;
+
 		double sigma_sq;
 		int n;
 	};
@@ -251,7 +253,7 @@ namespace lmu
 		PyObject *od_method_name, *od_module, *od_dict, *od_method;		
 	};
 
-	CSGNode generate_tree(const GAResult& res, double cutout_threshold, double sampling_grid_size);
+	CSGNode generate_tree(const GAResult& res, const lmu::PointCloud& inp_pc, double cutout_threshold, double sampling_grid_size);
 
 }
 

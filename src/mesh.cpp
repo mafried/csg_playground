@@ -127,7 +127,7 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	//Eigen::MatrixXd fn; 
 	//igl::per_face_normals(upsampledMesh.vertices, upsampledMesh.indices, fn);
-	igl::per_vertex_normals(upsampledMesh.vertices, upsampledMesh.indices, upsampledMesh.normals);
+	//igl::per_vertex_normals(upsampledMesh.vertices, upsampledMesh.indices, upsampledMesh.normals);
 
 	return upsampledMesh;
 }
@@ -157,7 +157,7 @@ Mesh meshFromGeometry(const std::vector<Eigen::RowVector3d>& vertices, const std
 
 	lmu::transform(mesh);
 
-	igl::per_vertex_normals(mesh.vertices, mesh.indices, mesh.normals);
+	//igl::per_vertex_normals(mesh.vertices, mesh.indices, mesh.normals);
 	
 	return mesh;
 }

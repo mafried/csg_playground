@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test12" };
+	std::string m = { "test1" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -249,6 +249,10 @@ int main(int argc, char *argv[])
 
 		// Scale input pc.
 		pc = lmu::to_canonical_frame(pc);
+		viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
+
+		
+		//goto _LAUNCH;
 
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
 		std::vector<lmu::PointCloud> cluster_pcs;
@@ -265,6 +269,10 @@ int main(int argc, char *argv[])
 		merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
 		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
 		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
+
+		//viewer.data().set_points(pc.leftCols(3),pc.rightCols(3));
+		//goto _LAUNCH;
+
 
 		/*
 		auto in_pc = lmu::to_canonical_frame(clusters[0].pc);
@@ -349,7 +357,7 @@ int main(int argc, char *argv[])
 		g_res_pc = pc;
 
 		// Extract CSG tree 
-		auto node = lmu::generate_tree(res, 0.9, 0.05);
+		auto node = lmu::generate_tree(res, pc, 0.9, 0.05);
 
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1));
 		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
