@@ -158,6 +158,7 @@ namespace lmu
 	struct ModelSDF
 	{
 		ModelSDF(const PointCloud& pc, double voxel_size, double block_radius, double sigma_sq);
+		ModelSDF(const PointCloud& pc, double voxel_size);
 
 		~ModelSDF();
 

@@ -503,27 +503,61 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 
 #include <igl/writeOBJ.h>
 
+#include <CGAL/poisson_surface_reconstruction.h>
+#include <CGAL/Inverse_index.h>
+
+typedef std::pair<Point_3, Vector_3> Pwn;
+
 Mesh lmu::createFromPointCloud(const PointCloud & pc)
 {
-	std::vector<Facet> facets;
-
-	std::vector<Point_3> points;
+	std::vector<Pwn> points;
 	points.reserve(pc.rows());
 	for (int i = 0; i < pc.rows(); ++i)
 	{
 		Eigen::RowVector3d p = pc.row(i).leftCols(3);
-		points.push_back(Point_3(p.x(), p.y(), p.z()));
+		Eigen::RowVector3d n = pc.row(i).rightCols(3);
+		points.push_back(std::make_pair(Point_3(p.x(), p.y(), p.z()), Vector_3(n.x(), n.y(), n.z())));
 	}
-	CGAL::advancing_front_surface_reconstruction(points.begin(), points.end(),std::back_inserter(facets));
 	
-	Eigen::MatrixXd vertices(points.size(), 3);
-	for (int i = 0; i < points.size(); ++i)
-		vertices.row(i) << points[i].x(), points[i].y(), points[i].z();
+	//CGAL::advancing_front_surface_reconstruction(points.begin(), points.end(),std::back_inserter(facets));
+	
+	Polyhedron_3 output_mesh;
 
-	std::cout << "Facets: " << facets.size() << std::endl;
-	Eigen::MatrixXi indices(facets.size(), 3);
-	for (int i = 0; i < facets.size(); ++i)
-		indices.row(i) << facets[i][0], facets[i][1], facets[i][2];
+	double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
+		(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
+	if (CGAL::poisson_surface_reconstruction_delaunay
+	(points.begin(), points.end(),
+		CGAL::First_of_pair_property_map<Pwn>(),
+		CGAL::Second_of_pair_property_map<Pwn>(),
+		output_mesh, average_spacing))
+	{
+		std::ofstream out("kitten_poisson-20-30-0.375.off");
+		out << output_mesh;
+	}
+		
+	Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
+	int i = 0;
+	for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
+		vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
+
+	typedef typename Polyhedron_3::Vertex_const_iterator                  VCI;
+	typedef CGAL::Inverse_index< VCI> Index;
+	Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
+
+	Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
+	i = 0;
+	for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
+	{
+		auto hc = it->facet_begin();
+		auto hc_end = hc;
+		std::size_t n = circulator_size(hc);
+		int j = 0;
+		do {
+			indices.coeffRef(i,j++) = index[VCI(hc->vertex())];
+			++hc;
+		} while (hc != hc_end);
+		i++;
+	}
 
 	
 	igl::writeOBJ("mesh_out.obj", vertices, indices);

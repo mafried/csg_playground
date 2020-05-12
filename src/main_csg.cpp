@@ -134,9 +134,11 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
 
 	lmu::PrimitiveSet ps;
-	ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
+	if(g_primitiveSet.size() > 0)
+		ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
+	
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
-	std::cout << "Primitive score: " << g_ranker->get_per_prim_geo_score(ps, points, true)[0] << std::endl;
+	std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
 
 	std::cout << "Show Result: " << g_show_res << std::endl;
 
@@ -173,7 +175,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				switch ((int)(g_manifoldSet[i]->type))
 				{
 				case 4:
-					c = Eigen::Vector3d(1, 0, 0);
+					c = Eigen::Vector3d(1, 1, 1);
 					break;
 				case 0:
 					c = Eigen::Vector3d(0, 1, 0);
@@ -191,7 +193,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				cm.row(j) << c.transpose();
 			}
 
-			//viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			//}
 		}
 	}
@@ -221,7 +223,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test1" };
+	std::string m = { "test2" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -270,7 +272,7 @@ int main(int argc, char *argv[])
 		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
 		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
 
-		//viewer.data().set_points(pc.leftCols(3),pc.rightCols(3));
+		//viewer.data().set_points(merged_cluster_pc.leftCols(3), merged_cluster_pc.rightCols(3));
 		//goto _LAUNCH;
 
 
@@ -311,13 +313,13 @@ int main(int argc, char *argv[])
 
 
 		auto params = lmu::RansacParams();
-		params.probability = 0.05;//0.1;
-		params.min_points = 200;
+		params.probability = 0.001;//0.1;
+		params.min_points = 50;
 		params.normal_threshold = 0.9;
-		params.cluster_epsilon = 0.1;// 0.2;
-		params.epsilon = 0.005;// 0.2;
+		params.cluster_epsilon = 0.02;// 0.2;
+		params.epsilon = 0.02;// 0.2;
 
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 5, lmu::RansacMergeParams(0.02, 0.9, 0.62831));
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.005, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
 
@@ -328,6 +330,8 @@ int main(int argc, char *argv[])
 		t.tick();
 			
 		f << std::endl;
+
+		//goto _LAUNCH;
 
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
@@ -359,8 +363,8 @@ int main(int argc, char *argv[])
 		// Extract CSG tree 
 		auto node = lmu::generate_tree(res, pc, 0.9, 0.05);
 
-		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1));
-		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+		//auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1));
+		//igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
 		lmu::toJSONFile(node, "ex_node.json");
 
 		lmu::writeNode(node, "extracted_node.gv");

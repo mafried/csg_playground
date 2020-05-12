@@ -97,7 +97,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	double geoWeightGA = 5.0;
 	double perPrimGeoWeightGA = 0.1;
 	
-	lmu::PrimitiveSetGA::Parameters paramsGA1(10, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
 
 	// Initialize polytope creator.
 	initializePolytopeCreator();
@@ -107,22 +107,28 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	auto manifoldsForCreator = std::get<1>(staticPrimsAndRestManifolds);
 	auto staticPrimitives = std::get<0>(staticPrimsAndRestManifolds);
 
+	std::cout << "# Static Primitives: " << staticPrimitives.size() << std::endl;
+
+
 	// get union of all non-static manifold pointclouds.
 	std::vector<PointCloud> pointClouds;
 	std::transform(manifoldsForCreator.begin(), manifoldsForCreator.end(), std::back_inserter(pointClouds),
 		[](const ManifoldPtr m) {return m->pc; });
 	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
 
-	double cell_size = 0.02;
-	double max_dist = 0.03;
+	double cell_size = 0.05;
+	double max_dist = 0.05;
 	double block_radius = 0.1;
-	double sigma_sq = 0.0005;
+	double sigma_sq = 0.005;
 
-	auto model_sdf = std::make_shared<ModelSDF>(full_pc, cell_size, block_radius, sigma_sq);
+
+	//auto model_sdf = std::make_shared<ModelSDF>(/*full_pc*/non_static_pointcloud, cell_size, block_radius, sigma_sq);
+	auto model_sdf = std::make_shared<ModelSDF>(full_pc, cell_size);
+
 	 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(20, PrimitiveSetRank(0.00001), 20);
+	PrimitiveSetIterationStopCriterion criterion(100, PrimitiveSetRank(0.00001), 100);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.55, 0.15, 0.15, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, model_sdf);
@@ -149,9 +155,11 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 		std::cout << s << " " << std::endl;
 	std::cout << std::endl;
 	auto primitives = od.remove_outliers(res.population[0].creature, res.population[0].rank);
+
+	std::cout << "Before: " << res.population[0].creature.size() << " After: " << primitives.size() << std::endl;
 	
 	GAResult result;
-	result.primitives = primitives;// .without_duplicates();
+	result.primitives = primitives.without_duplicates();
 	result.primitives.insert(result.primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 	result.manifolds = ransacRes.manifolds;
 	result.ranker = ranker;
@@ -1229,10 +1237,15 @@ double rank_node(const lmu::CSGNode& n, const lmu::ModelSDF& m)
 
 				auto nd = n.signedDistance(p);
 
-				score += std::abs(v.v - nd) * v.w;
+				auto d = std::abs(v.v - nd) * v.w;
+
+				score += d;
 			}
 		}
 	}
+
+	score = std::isnan(score) ? 
+		 std::numeric_limits<double>::max() : score;
 
 	std::cout << "Rank Score: " << score << std::endl;
 
@@ -1250,9 +1263,9 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 		auto geo = geometry(p.imFunc);
 	
 
-		if (is_cut_out(p, geo, cutout_threshold))
-			diff_prims.push_back(geo);
-		else
+		//if (is_cut_out(p, geo, cutout_threshold))
+		//	diff_prims.push_back(geo);
+		//else
 			union_prims.push_back(geo);
 	}
 
@@ -1274,15 +1287,17 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 	// Fix the weird -1.0 * gradient issue
 	// TODO
 
-	auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+	/*
+	auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 	igl::writeOBJ("ex_node_bef.obj", m.vertices, m.indices);
 
+	
 	node = remove_redundancies(node, sampling_grid_size, lmu::PointCloud());
 
 	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
-	const auto e = 0.0001;
+	const auto e = 0.000001;
 	auto prims = lmu::allDistinctFunctions(node);
-	double best_rank = rank_node(node,  *res.ranker->model_sdf);
+	double best_rank = rank_node(node, *res.ranker->model_sdf);
 	
 	for (const auto& prim : prims)
 	{
@@ -1291,14 +1306,19 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 		lmu::visit(n, [&prim](lmu::CSGNode& c) {if (c.function() == prim) c = empty_set; });
 		n = remove_redundancies(n, sampling_grid_size, lmu::PointCloud());
 
-		double cur_rank = rank_node(n,  *res.ranker->model_sdf);
+		double cur_rank = rank_node(n, *res.ranker->model_sdf);
 		if (best_rank - cur_rank > e) // smaller is better.
 		{
-			std::cout << "Primitive " << prim->name() << " does not contribute and thus is removed." << std::endl;
+			std::cout << "Primitive " << prim->name() << " of type " << iFTypeToString(prim->type())  << " does not contribute and thus is removed." << std::endl;
 			best_rank = cur_rank;
 			node = n; 
 		}
 	}
+
+	m = lmu::computeMesh(node, Eigen::Vector3i(70, 70, 70), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+	igl::writeOBJ("ex_node_aft.obj", m.vertices, m.indices);*/
+
+	
 	
 	return node;
 }
@@ -1341,6 +1361,84 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, double block_ra
 	// Normalize weights
 	//for (int i = 0; i < n; ++i)
 	//	data[i].w = (data[i].w - min_w) / (max_w - min_w);
+}
+
+#include "igl/signed_distance.h"
+#include <igl/per_vertex_normals.h>
+#include <igl/per_edge_normals.h>
+#include <igl/per_face_normals.h>
+
+lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
+	data(nullptr),
+	voxel_size(voxel_size)
+{
+	const double border_factor = 4.0;
+
+	Eigen::Vector3d border(voxel_size, voxel_size, voxel_size);
+	border *= border_factor;
+
+	Eigen::Vector3d dims = computeAABBDims(pc) + border * 2.0;
+	origin = Eigen::Vector3d(pc.leftCols(3).colwise().minCoeff()) - border;
+
+	std::cout << "Border: " << border.transpose() << std::endl;
+	std::cout << "Dims: " << dims.transpose() << std::endl;
+	std::cout << "Voxel size: " << voxel_size << std::endl;
+
+	grid_size = Eigen::Vector3i(std::ceil(dims.x() / voxel_size), std::ceil(dims.y() / voxel_size), std::ceil(dims.z() / voxel_size));
+	if (grid_size.x() > 1000 || grid_size.y() > 1000 || grid_size.z() > 1000)
+		std::cout << "Too large model size: " << grid_size.transpose() << std::endl;
+	std::cout << "Grid size: " << grid_size.transpose() << std::endl;
+
+	n = grid_size.x() * grid_size.y() * grid_size.z();
+	data = new SDFValue[n];
+
+	size = Eigen::Vector3d((double)grid_size.x() * voxel_size, (double)grid_size.y() * voxel_size, (double)grid_size.z() * voxel_size);
+	
+	std::cout << "Create mesh" << std::endl;
+	auto mesh = lmu::createFromPointCloud(pc);
+	
+	Eigen::VectorXd d;
+	Eigen::VectorXi i;
+	Eigen::MatrixXd norm, c;
+
+	igl::AABB<Eigen::MatrixXd, 3> tree;
+	Eigen::MatrixXd fn, vn, en; //note that _vn is the same as mesh's _normals. TODO
+	Eigen::MatrixXi e;
+	Eigen::VectorXi emap;
+
+	std::cout << "Fill with signed distance values. " << std::endl;
+
+	tree.init(mesh.vertices, mesh.indices);
+
+	igl::per_face_normals(mesh.vertices, mesh.indices, fn);
+	igl::per_vertex_normals(mesh.vertices, mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, fn, vn);
+	igl::per_edge_normals(mesh.vertices, mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, fn, en, e, emap);
+
+	Eigen::MatrixXd points(n, 3);
+
+	int idx = 0;
+	for (int x = 0; x < grid_size.x(); ++x)
+	{
+		for (int y = 0; y < grid_size.y(); ++y)
+		{
+			for (int z = 0; z < grid_size.z(); ++z)
+			{
+				int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+
+				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin;
+				
+				points.row(idx++) << p.transpose();
+			}
+		}
+	}
+
+	igl::signed_distance_pseudonormal(points, mesh.vertices, mesh.indices, tree, fn, vn, en, emap, d, i, c, norm);
+
+	for (int j = 0; j < n; ++j)
+	{
+		data[j] = SDFValue(d.coeff(j,0), 1.0);
+	}
+
 }
 
 lmu::ModelSDF::~ModelSDF()
