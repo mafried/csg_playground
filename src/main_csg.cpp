@@ -201,7 +201,16 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
+	{
 		viewer.data().set_mesh(mesh.vertices, mesh.indices);
+
+		auto aabb = g_primitiveSet[g_prim_idx >= 0 ? g_prim_idx : 0].imFunc->aabb();
+
+		viewer.data().add_points(aabb.c.transpose(), Eigen::Vector3d(1,0,0).transpose());
+		viewer.data().add_points((aabb.c - aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
+		viewer.data().add_points((aabb.c + aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
+
+	}
 		
 	update(viewer);
 	return true;
@@ -223,7 +232,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test2" };
+	std::string m = { "test15" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -313,7 +322,7 @@ int main(int argc, char *argv[])
 
 
 		auto params = lmu::RansacParams();
-		params.probability = 0.001;//0.1;
+		params.probability = 0.1;//0.1;
 		params.min_points = 50;
 		params.normal_threshold = 0.9;
 		params.cluster_epsilon = 0.02;// 0.2;

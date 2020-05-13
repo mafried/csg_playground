@@ -208,11 +208,14 @@ lmu::AABB lmu::aabb_from_node(const lmu::CSGNode& n)
 }
 
 lmu::AABB lmu::aabb_from_primitives(const std::vector<lmu::ImplicitFunctionPtr>& prims)
-{
-	lmu::AABB aabb;
-	for (const auto& p : prims)
-	{
-		aabb = aabb.setunion(p->aabb());
+{	
+	if (prims.size() == 1)
+		return prims[0]->aabb();
+
+	lmu::AABB aabb = prims[0]->aabb();
+	for (int i = 1; i < prims.size(); ++i)
+	{	
+		aabb = aabb.setunion(prims[i]->aabb());
 	}
 	return aabb;
 }
@@ -221,7 +224,9 @@ bool lmu::_is_empty_set(const lmu::CSGNode& n, double sampling_grid_size,
 	const Eigen::Vector3d& min, const Eigen::Vector3d& max)
 {
 	if ((max - min).cwiseAbs().minCoeff() <= sampling_grid_size)
+	{
 		return true;
+	}
 
 	//std::cout << max.transpose() << " " << min.transpose() << std::endl;
 	

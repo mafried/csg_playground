@@ -128,7 +128,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(10, PrimitiveSetRank(0.00001), 10);
+	PrimitiveSetIterationStopCriterion criterion(50, PrimitiveSetRank(0.00001), 50);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.55, 0.15, 0.15, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, model_sdf);
@@ -152,11 +152,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	// Filter
 	//OutlierDetector od("C:/Projekte/outlier_detector");
 	ThresholdOutlierDetector od(0.9);
+	SimilarityFilter sf(0.0, cell_size);
 
 	for (double s : res.population[0].rank.per_primitive_geo_scores)
 		std::cout << s << " " << std::endl;
 	std::cout << std::endl;
-	auto primitives = od.remove_outliers(res.population[0].creature, res.population[0].rank);
+	auto primitives = sf.filter(od.remove_outliers(res.population[0].creature, res.population[0].rank));
 
 	std::cout << "Before: " << res.population[0].creature.size() << " After: " << primitives.size() << std::endl;
 	
@@ -1696,7 +1697,7 @@ lmu::ThresholdOutlierDetector::ThresholdOutlierDetector(double threshold) :
 {
 }
 
-lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const PrimitiveSet & ps, const PrimitiveSetRank & psr) const
+lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const PrimitiveSet& ps, const PrimitiveSetRank& psr) const
 {
 	PrimitiveSet filtered_ps;
 	for (int i = 0; i < ps.size(); ++i)
@@ -1710,4 +1711,66 @@ lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const Primitive
 	}
 
 	return filtered_ps;
+}
+
+lmu::SimilarityFilter::SimilarityFilter(double epsilon, double voxel_size) : 
+	epsilon(epsilon),
+	voxel_size(voxel_size)
+{
+}
+
+bool similar_prim(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size)
+{
+	auto n1 = lmu::geometry(p1.imFunc);
+	auto n2 = lmu::geometry(p2.imFunc);
+
+	static lmu::EmptySetLookup esLookup;
+
+	return is_empty_set(lmu::opDiff({ n1, n2 }), 0.01, lmu::PointCloud(), esLookup) &&
+		   is_empty_set(lmu::opDiff({ n2, n1 }), 0.01, lmu::PointCloud(), esLookup);
+}
+
+lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps)
+{
+	std::vector<std::unordered_set<int>> sim_classes;
+
+	for (int i = 0; i < ps.size(); ++i)
+	{
+		for (int j = i + 1; j < ps.size(); ++j)
+		{
+			if (similar_prim(ps[i], ps[j], voxel_size))
+			{
+				/*
+				std::cout << i << " and " << j << " are similar." << std::endl;
+				std::cout << "i => min: " << (ps[i].imFunc->aabb().c - ps[i].imFunc->aabb().s).transpose() << " max: " << (ps[i].imFunc->aabb().c + ps[i].imFunc->aabb().s).transpose() << std::endl;
+				std::cout << "j => min: " << (ps[j].imFunc->aabb().c - ps[j].imFunc->aabb().s).transpose() << " max: " << (ps[j].imFunc->aabb().c + ps[j].imFunc->aabb().s).transpose() << std::endl;
+				std::cout << "------------" << std::endl;
+				*/
+
+				bool found = false;
+				for (auto& m : sim_classes)
+				{
+					if (m.find(i) != m.end() || m.find(j) != m.end())
+					{
+						std::cout << i << " and " << j << " are similar." << std::endl;
+						found = true;
+						m.insert(i);
+						m.insert(j);
+						break;
+					}
+				}
+				if (!found)
+					sim_classes.push_back({ i,j });
+			}
+		}
+	}
+
+	PrimitiveSet filtered_set;
+	for (const auto& m : sim_classes)
+	{
+		std::cout << ps[*m.begin()].imFunc->name() << " is added." << std::endl;
+		filtered_set.push_back(ps[*m.begin()]);
+	}
+
+	return filtered_set;
 }

@@ -264,6 +264,19 @@ namespace lmu
 		PyObject *od_method_name, *od_module, *od_dict, *od_method;		
 	};
 
+	struct SimilarityFilter
+	{
+		SimilarityFilter(double epsilon, double voxel_size);
+
+		PrimitiveSet filter(const PrimitiveSet& ps);
+
+	private:
+
+		double epsilon;
+		double voxel_size;
+		
+	};
+
 	CSGNode generate_tree(const GAResult& res, const lmu::PointCloud& inp_pc, double cutout_threshold, double sampling_grid_size);
 
 }

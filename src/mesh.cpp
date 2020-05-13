@@ -909,6 +909,12 @@ lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector
 		_tree.init(_mesh.vertices, _mesh.indices);
 		_hier.set_mesh(_mesh.vertices, _mesh.indices);
 		_hier.grow();
+	
+		Eigen::Vector3d min = _mesh.vertices.colwise().minCoeff();
+		Eigen::Vector3d max = _mesh.vertices.colwise().maxCoeff();
+		Eigen::Vector3d tpos(0.5*(min.x() + max.x()), 0.5*(min.y() + max.y()), 0.5*(min.z() + max.z()));
+
+		_aabb = AABB(tpos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 	}
 }
 

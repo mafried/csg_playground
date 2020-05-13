@@ -6,20 +6,22 @@ bool lmu::is_empty_set(const CSGNode& n, double sampling_grid_size, const lmu::P
 	EmptySetLookup& esLookup)
 {
 	// Check if lookup contains value for node already.
-	size_t node_hash = n.hash(0);
-	auto it = esLookup.find(node_hash);
-	if (it != esLookup.end())
-		return it->second;
+	//size_t node_hash = n.hash(0);
+	//auto it = esLookup.find(node_hash);
+	//if (it != esLookup.end())
+	//	return it->second;
 
 	lmu::AABB aabb = aabb_from_node(n);
 	Eigen::Vector3d min = aabb.c - aabb.s; 
 	Eigen::Vector3d max = aabb.c + aabb.s;
 
+	//std::cout << "min: " << min.transpose() << " max: " << max.transpose() << std::endl;
+
 	bool is_empty = sampling_points.rows() == 0 ? _is_empty_set(n, sampling_grid_size, min, max) :
 		_is_empty_set(n, sampling_points);
 
 	// Store in lookup table.
-	esLookup[node_hash] = is_empty;
+	//esLookup[node_hash] = is_empty;
 
 	return is_empty; 
 }
