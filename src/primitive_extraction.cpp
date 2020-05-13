@@ -128,7 +128,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(100, PrimitiveSetRank(0.00001), 100);
+	PrimitiveSetIterationStopCriterion criterion(10, PrimitiveSetRank(0.00001), 10);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.55, 0.15, 0.15, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, model_sdf);
@@ -150,7 +150,9 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	// ================ TMP ================
 
 	// Filter
-	OutlierDetector od("C:/Projekte/outlier_detector");
+	//OutlierDetector od("C:/Projekte/outlier_detector");
+	ThresholdOutlierDetector od(0.9);
+
 	for (double s : res.population[0].rank.per_primitive_geo_scores)
 		std::cout << s << " " << std::endl;
 	std::cout << std::endl;
@@ -1224,6 +1226,7 @@ double rank_node(const lmu::CSGNode& n, const lmu::PointCloud& pc)
 double rank_node(const lmu::CSGNode& n, const lmu::ModelSDF& m)
 {
 	double score = 0.0;
+	const double too_big = 64.0;
 
 	for (int x = 0; x < m.grid_size.x(); ++x)
 	{
@@ -1245,7 +1248,7 @@ double rank_node(const lmu::CSGNode& n, const lmu::ModelSDF& m)
 	}
 
 	score = std::isnan(score) ? 
-		 std::numeric_limits<double>::max() : score;
+		 too_big : score;
 
 	std::cout << "Rank Score: " << score << std::endl;
 
@@ -1263,9 +1266,9 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 		auto geo = geometry(p.imFunc);
 	
 
-		//if (is_cut_out(p, geo, cutout_threshold))
-		//	diff_prims.push_back(geo);
-		//else
+		if (is_cut_out(p, geo, cutout_threshold))
+			diff_prims.push_back(geo);
+		else
 			union_prims.push_back(geo);
 	}
 
@@ -1287,12 +1290,17 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 	// Fix the weird -1.0 * gradient issue
 	// TODO
 
-	/*
+	lmu::writeNode(node, "extracted_node_bef.gv");
+
 	auto m = lmu::computeMesh(node, Eigen::Vector3i(50, 50, 50), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 	igl::writeOBJ("ex_node_bef.obj", m.vertices, m.indices);
 
+	std::cout << "#Nodes: " << numNodes(node) << std::endl;
+
 	
-	node = remove_redundancies(node, sampling_grid_size, lmu::PointCloud());
+	//node = remove_redundancies(node, 0.01, lmu::PointCloud());
+
+	/*std::cout << "After #Nodes: " << numNodes(node) << std::endl;
 
 	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
 	const auto e = 0.000001;
@@ -1303,20 +1311,35 @@ lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_
 	{
 		auto n = node;
 
+
+		std::cout << "#Nodes: " << numNodes(n) << std::endl;
+
 		lmu::visit(n, [&prim](lmu::CSGNode& c) {if (c.function() == prim) c = empty_set; });
 		n = remove_redundancies(n, sampling_grid_size, lmu::PointCloud());
 
+		std::cout << "After #Nodes: " << numNodes(n) << std::endl;
+
 		double cur_rank = rank_node(n, *res.ranker->model_sdf);
-		if (best_rank - cur_rank > e) // smaller is better.
+
+		if (cur_rank == std::numeric_limits<double>::infinity())
+		{
+			std::cout << "Primitive " << prim->name() << " of type " << iFTypeToString(prim->type()) << " has infinity score." << std::endl;
+			node = n;
+		}		  
+		else if (best_rank - cur_rank > e) // smaller is better.
 		{
 			std::cout << "Primitive " << prim->name() << " of type " << iFTypeToString(prim->type())  << " does not contribute and thus is removed." << std::endl;
 			best_rank = cur_rank;
 			node = n; 
 		}
+		else
+		{
+			std::cout << "Primitive OK" << std::endl;
+		}
 	}
-
+	*/
 	m = lmu::computeMesh(node, Eigen::Vector3i(70, 70, 70), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-	igl::writeOBJ("ex_node_aft.obj", m.vertices, m.indices);*/
+	igl::writeOBJ("ex_node_aft.obj", m.vertices, m.indices);
 
 	
 	
@@ -1566,7 +1589,7 @@ void lmu::ModelSDF::fill_block(const Eigen::Vector3d& p, const Eigen::Vector3d& 
 }
 
 inline lmu::SDFValue::SDFValue() :
-	SDFValue(0.0, -1.0)
+	SDFValue(0.0, 0.0)
 {
 }
 
@@ -1664,6 +1687,27 @@ lmu::PrimitiveSet lmu::OutlierDetector::remove_outliers(const PrimitiveSet& ps, 
 		}
 
 	Py_DECREF(res);
+
+	return filtered_ps;
+}
+
+lmu::ThresholdOutlierDetector::ThresholdOutlierDetector(double threshold) : 
+	threshold(threshold)
+{
+}
+
+lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const PrimitiveSet & ps, const PrimitiveSetRank & psr) const
+{
+	PrimitiveSet filtered_ps;
+	for (int i = 0; i < ps.size(); ++i)
+	if (psr.per_primitive_geo_scores[i] >= threshold)
+	{
+		filtered_ps.push_back(ps[i]);
+	}
+	else
+	{
+		std::cout << "Filtered Primitive at " << i << std::endl;
+	}
 
 	return filtered_ps;
 }
