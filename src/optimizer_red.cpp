@@ -67,6 +67,12 @@ bool process_node(lmu::CSGNode& n, double sampling_grid_size, const lmu::PointCl
 {
 	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
 	static auto const all = lmu::CSGNode(std::make_shared<lmu::NoOperation>("1"));
+	
+	if (n.type() == lmu::CSGNodeType::Operation && n.childsCRef().empty())
+	{
+		n = empty_set;
+		return true;
+	}
 
 	if (!is_valid_op(n)) return false;
 

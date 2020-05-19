@@ -13,6 +13,7 @@
 #include "csgnode_helper.h"
 #include "primitives.h"
 #include "primitive_extraction.h"
+#include "prim_select_ga.h"
 #include "pointcloud.h"
 #include "cluster.h"
 
@@ -232,7 +233,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test15" };
+	std::string m = { "test1" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -323,12 +324,12 @@ int main(int argc, char *argv[])
 
 		auto params = lmu::RansacParams();
 		params.probability = 0.1;//0.1;
-		params.min_points = 50;
+		params.min_points = 30;
 		params.normal_threshold = 0.9;
 		params.cluster_epsilon = 0.02;// 0.2;
 		params.epsilon = 0.02;// 0.2;
 
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.005, 0.9, 0.62831));
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.01, 0.9, 0.62831));
 
 		g_manifoldSet = ransacRes.manifolds;
 
@@ -345,7 +346,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			m->pc = lmu::farthestPointSampling(m->pc, 300);
 			f << std::endl;
 		}		
 
@@ -370,13 +371,20 @@ int main(int argc, char *argv[])
 		g_res_pc = pc;
 
 		// Extract CSG tree 
-		auto node = lmu::generate_tree(res, pc, 0.9, 0.05);
+		auto node = lmu::generate_csg_node(primitives, res.ranker->model_sdf, lmu::CSGNodeGenerationParams(0.5, 0.5, 0.5, true)); 
 
-		//auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1,-1,-1), Eigen::Vector3d(1,1,1));
-		//igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));// Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+		
+		viewer.data().set_points(pc_n.leftCols(3), pc_n.rightCols(3));
+																								//igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+
 		lmu::toJSONFile(node, "ex_node.json");
 
 		lmu::writeNode(node, "extracted_node.gv");
+
+		auto m = lmu::computeMesh(node, Eigen::Vector3i(70, 70, 70), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+
 
 		f.close();
 	}

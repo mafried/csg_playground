@@ -19,9 +19,11 @@ lmu::Mesh g_mesh;
 lmu::PointCloud g_pc;
 Eigen::MatrixXd g_lines;
 
-//#define WITH_VIEWER_GUI
+#define WITH_VIEWER_GUI
 
-void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& directory, int iteration, std::unordered_map<lmu::ImplicitFunctionType, int>& primitiveIds)
+
+
+/*void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& directory, int iteration, std::unordered_map<lmu::ImplicitFunctionType, int>& primitiveIds)
 {
 	auto type = prim->type();
 	auto fileName = directory + std::to_string(iteration) + "_" + lmu::iFTypeToString(type) + std::to_string(primitiveIds[type]) + ".xyz";
@@ -30,7 +32,7 @@ void writePrimitive(const lmu::ImplicitFunctionPtr& prim, const std::string& dir
 	
 	lmu::writePointCloudXYZ(fileName, prim->points());
 	primitiveIds[type] = primitiveIds[type] + 1;
-}
+}*/
 
 lmu::CSGNode create_rnd_polytope(const Eigen::Affine3d& trans, const Eigen::Vector3d& c, double r, int num_planes)
 {
@@ -201,6 +203,8 @@ int main(int argc, char** argv)
 		auto output_sampling_point_cloud_size = s.getInt("Output", "Sampling.PointCloudSize", 1024);
 		auto output_sampling_pos_noise = s.getDouble("Output", "Sampling.PosNoise", 0.0);
 		auto output_sampling_angle_noise = s.getDouble("Output", "Sampling.AngleNoise", 0.0);
+		auto output_cluster_cell_size = s.getDouble("Output", "Cluster.CellSize", 0.5);
+
 
 		auto k = s.getInt("Generator", "K", 1);
 		auto iterations = s.getInt("Generator", "Iterations", 1);
@@ -364,16 +368,17 @@ int main(int argc, char** argv)
 
 			std::cout << "Output point cloud: " << model_pc.rows() << " Dims: " << (model_pc.leftCols(3).colwise().maxCoeff() - model_pc.leftCols(3).colwise().minCoeff()) << std::endl;
 
-			auto primFile = output_folder + std::to_string(file_counter + iter) + "_prim.prim";
-			std::ofstream ps(primFile);
+			//auto primFile = output_folder + std::to_string(file_counter + iter) + "_prim.prim";
+			//std::ofstream ps(primFile);
 
 
 			//Write primitive point clouds to file.
 						
 			int i = 0;
-			int pointIdx = 0;
-			std::unordered_map<lmu::ImplicitFunctionType, int> primitiveIds;
-			std::vector<Eigen::Matrix<double, 1, 8>> points;
+			//int pointIdx = 0;
+			//std::unordered_map<lmu::ImplicitFunctionType, int> primitiveIds;
+			std::vector<Eigen::Matrix<double, 1, 8>> points_prim_clustered;
+			
 			auto prims = lmu::allDistinctFunctions(model);
 			for (const auto& prim : prims)
 			{
@@ -383,15 +388,15 @@ int main(int argc, char** argv)
 				{
 					auto point = Eigen::Matrix<double, 1, 8>();
 					point << prim->pointsCRef().row(j), (double)prim->type(), (double)i;
-					points.push_back(point);
+					points_prim_clustered.push_back(point);
 				}
 
-				ps << (int)prim->type() << std::endl;
-				ps << pointIdx << " " << prim->pointsCRef().rows() << std::endl;
-				ps << prim->serializeTransform() << std::endl;
-				ps << prim->serializeParameters() << std::endl;
+				//ps << (int)prim->type() << std::endl;
+				//ps << pointIdx << " " << prim->pointsCRef().rows() << std::endl;
+				//ps << prim->serializeTransform() << std::endl;
+				//ps << prim->serializeParameters() << std::endl;
 				
-				pointIdx += prim->pointsCRef().rows();
+				//pointIdx += prim->pointsCRef().rows();
 				i++;
 
 #ifdef WITH_VIEWER_GUI
@@ -400,17 +405,72 @@ int main(int argc, char** argv)
 				Eigen::RowVector3d(c, 0, 0).replicate(prim->pointsCRef().rows(), 1));
 #endif
 			}
-						
-			auto pcFile = output_folder + std::to_string(file_counter + iter) +"_pc.xyz";
+
+			auto pcFile = output_folder + std::to_string(file_counter + iter) + "_pc_prim_clustered.xyz";
 			std::cout << "Write point cloud to " << pcFile << "." << std::endl;
 			std::ofstream s(pcFile);
-			s << points.size() << " " << 8 << std::endl;
-			for (int i = 0; i < points.size(); i++)
+			for (int i = 0; i < points_prim_clustered.size(); i++)
 			{
-				for (int j = 0; j < points[i].cols(); j++)
-					s << points[i].col(j) << " ";
+				for (int j = 0; j < points_prim_clustered[i].cols(); j++)
+					s << points_prim_clustered[i].col(j) << " ";
 				s << std::endl;
-			}		
+			}
+
+			std::unordered_map<int, std::vector<Eigen::Matrix<double, 1, 8>>> points_grid_clustered;
+			double d_max = std::numeric_limits<double>::max();
+			Eigen::Vector3d origin(d_max, d_max, d_max);
+			Eigen::Vector3d max(-d_max, -d_max, -d_max);
+			for (int j = 0; j < points_prim_clustered.size(); ++j)
+			{
+				Eigen::Vector3d p = points_prim_clustered[j].leftCols(3);
+				origin.x() = origin.x() > p.x() ? p.x() : origin.x();
+				origin.y() = origin.y() > p.y() ? p.y() : origin.y();
+				origin.z() = origin.z() > p.z() ? p.z() : origin.z();
+
+				max.x() = max.x() < p.x() ? p.x() : max.x();
+				max.y() = max.y() < p.y() ? p.y() : max.y();
+				max.z() = max.z() < p.z() ? p.z() : max.z();
+			}
+			
+			Eigen::Vector3i size = Eigen::Vector3d(((max-origin) / output_cluster_cell_size)).cast<int>() + Eigen::Vector3i(1,1,1);
+
+			std::cout << "SIZE: " << size.transpose() << std::endl;
+			
+			for (int j = 0; j < points_prim_clustered.size(); ++j)
+			{
+				Eigen::Vector3d p = points_prim_clustered[j].leftCols(3);
+
+				Eigen::Vector3i p_int = ((p - origin) / output_cluster_cell_size).cast<int>();
+
+				//x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+				int cluster_idx = p_int.x() + size.x() * p_int.y() + size.x() * size.y() * p_int.z();
+
+				Eigen::Matrix<double, 1, 8> point;
+				point << points_prim_clustered[j].leftCols(7), cluster_idx;
+
+				points_grid_clustered[cluster_idx].push_back(point);
+			}
+									
+			pcFile = output_folder + std::to_string(file_counter + iter) +"_pc_grid_clustered.xyz";
+			std::cout << "Write point cloud to " << pcFile << "." << std::endl;
+			s = std::ofstream(pcFile);
+			for (const auto& kv : points_grid_clustered)
+			{
+				for (const auto& row : kv.second)
+				{
+					for (int j = 0; j < row.cols(); j++)
+						s << row.col(j) << " ";
+					s << std::endl;
+//#ifdef WITH_VIEWER_GUI
+//					
+//					double c = (double)row.coeff(0,7) / (double)points_grid_clustered.size();
+//					viewer.data().add_points(row.leftCols(3), Eigen::RowVector3d(c, 0, 0));
+//#endif
+				}
+			}
+			std::cout << "NUM GRID CLUSTERS: " << points_grid_clustered.size() << std::endl;
+			std::cout << "NUM PRIM CLUSTERS: " << prims.size() << std::endl;
+
 		} 
 
 #ifdef WITH_VIEWER_GUI

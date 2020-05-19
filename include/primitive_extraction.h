@@ -154,10 +154,15 @@ namespace lmu
 		float w;
 	};
 
+	enum class DHType
+	{
+		NONE,
+		INSIDE,
+		OUTSIDE
+	};
 
 	struct ModelSDF
 	{
-		ModelSDF(const PointCloud& pc, double voxel_size, double block_radius, double sigma_sq);
 		ModelSDF(const PointCloud& pc, double voxel_size);
 
 		~ModelSDF();
@@ -168,19 +173,24 @@ namespace lmu
 		Mesh to_mesh() const;
 		PointCloud to_pc() const;
 
+		DHType get_dh_type(const Primitive &p, double t_inside, double t_outside) const;
+
 		Eigen::Vector3i grid_size;
 		Eigen::Vector3d origin;
 		double voxel_size;
-
+		Mesh surface_mesh;
+		SDFValue* data;
 	private: 
 
-		void fill_block(const Eigen::Vector3d& p, const Eigen::Vector3d& n, int block_size, float& min_w, float& max_w);
-
-		SDFValue* data;
+		
 		Eigen::Vector3d size;
 
-		double sigma_sq;
 		int n;
+
+		igl::AABB<Eigen::MatrixXd, 3> tree;
+		Eigen::MatrixXd fn, vn, en; //note that _vn is the same as mesh's _normals. TODO
+		Eigen::MatrixXi e;
+		Eigen::VectorXi emap;
 	};
 
 	struct PrimitiveSetRanker
@@ -247,7 +257,7 @@ namespace lmu
 	{
 		ThresholdOutlierDetector(double threshold);
 
-		PrimitiveSet remove_outliers(const PrimitiveSet& ps, const PrimitiveSetRank& psr) const;
+		PrimitiveSet remove_outliers(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker) const;
 
 	private:
 		double threshold;
