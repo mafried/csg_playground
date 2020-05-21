@@ -160,6 +160,8 @@ namespace lmu
 		INSIDE,
 		OUTSIDE
 	};
+	std::ostream& operator<<(std::ostream& out, const DHType& t);
+
 
 	struct ModelSDF
 	{
@@ -173,7 +175,7 @@ namespace lmu
 		Mesh to_mesh() const;
 		PointCloud to_pc() const;
 
-		DHType get_dh_type(const Primitive &p, double t_inside, double t_outside) const;
+		DHType get_dh_type(const Primitive &p, double t_inside, double t_outside, double voxel_size = 0.0) const;
 
 		Eigen::Vector3i grid_size;
 		Eigen::Vector3d origin;
@@ -196,7 +198,7 @@ namespace lmu
 	struct PrimitiveSetRanker
 	{
 		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
-			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, const std::shared_ptr<ModelSDF>& model_sdf);
+			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps, bool debug = false) const;
 
@@ -216,6 +218,7 @@ namespace lmu
 		double distanceEpsilon;
 		double cell_size;
 		int maxPrimitiveSetSize;
+		bool allow_cube_cutout;
 	};
 
 	struct PrimitiveSetPopMan

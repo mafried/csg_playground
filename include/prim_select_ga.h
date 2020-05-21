@@ -80,15 +80,28 @@ namespace lmu
 
 	struct CSGNodeGenerationParams
 	{
-		CSGNodeGenerationParams(double create_new_prob, double active_prob, double dh_type_prob, bool evolve_dh_type);
+		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, bool evolve_dh_type);
 
 		double create_new_prob;
 		double active_prob;
 		double dh_type_prob;
 		bool evolve_dh_type;
+		bool use_prim_geo_scores_as_active_prob;
 	};
 
-	CSGNode generate_csg_node(const PrimitiveSet& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params);
+	struct PrimitiveDecomposition
+	{
+		PrimitiveDecomposition(const CSGNode& node, const PrimitiveSet& rem_prims);
+
+		CSGNode node;
+		PrimitiveSet remaining_primitives;
+	};
+
+	PrimitiveDecomposition decompose_primitives(const PrimitiveSet& primitives, const ModelSDF& model_sdf, double inside_t, double outside_t, double voxel_size);
+
+	CSGNode integrate_node(const CSGNode& into, const PrimitiveSelection& s);
+
+	CSGNode generate_csg_node(const PrimitiveSet& primitives, const CSGNode& start_node, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params);
 }
 
 #endif

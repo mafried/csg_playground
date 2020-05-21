@@ -140,6 +140,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
 	std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
+	std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], 0.9, 0.1) << std::endl;
 
 	std::cout << "Show Result: " << g_show_res << std::endl;
 
@@ -233,7 +234,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test1" };
+	std::string m = { "test15" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -371,7 +372,30 @@ int main(int argc, char *argv[])
 		g_res_pc = pc;
 
 		// Extract CSG tree 
-		auto node = lmu::generate_csg_node(primitives, res.ranker->model_sdf, lmu::CSGNodeGenerationParams(0.5, 0.5, 0.5, true)); 
+
+		auto node = lmu::opNo();
+
+		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, 0.9, 0.1, 0.01);
+		
+		if (decomposition.remaining_primitives.empty())
+		{
+			node = decomposition.node;
+		}		
+		else
+		{
+			for (const auto& p : decomposition.remaining_primitives)
+				std::cout << "Remaining Prim: " << p.imFunc->name() << std::endl;
+
+			node = lmu::generate_csg_node(decomposition.remaining_primitives, decomposition.node, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, true, 0.5, false));
+
+			auto mr = lmu::computeMesh(decomposition.node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+			igl::writeOBJ("remaining_node.obj", mr.vertices, mr.indices);
+			lmu::writeNode(decomposition.node, "deocomposed_node.gv");
+
+		}
+
+		
+		//auto node = lmu::generate_csg_node(primitives, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, false, 0.5, false)); 
 
 		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));// Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		
@@ -382,9 +406,9 @@ int main(int argc, char *argv[])
 
 		lmu::writeNode(node, "extracted_node.gv");
 
-		auto m = lmu::computeMesh(node, Eigen::Vector3i(70, 70, 70), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
-
+		
 
 		f.close();
 	}

@@ -13,6 +13,25 @@ lmu::PrimitiveSetRank const lmu::PrimitiveSetRank::Invalid = lmu::PrimitiveSetRa
 
 Eigen::VectorXd mesh_sd(const Eigen::MatrixXd& points, const lmu::Mesh& _mesh);
 
+std::ostream& lmu::operator<<(std::ostream& out, const lmu::DHType& t)
+{
+	switch (t)
+	{
+	case DHType::INSIDE:
+		out << "Inside";
+		break;
+	case DHType::OUTSIDE:
+		out << "Outside";
+		break;
+	case DHType::NONE:
+		out << "None";
+		break;
+	}
+
+	return out;
+}
+
+
 std::tuple<lmu::PrimitiveSet, lmu::ManifoldSet> extractStaticManifolds(const lmu::ManifoldSet& manifolds)
 {
 	lmu::PrimitiveSet primitives;
@@ -130,8 +149,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 	double cell_size = 0.05;
 	double max_dist = 0.05;
-	double block_radius = 0.1;
-	double sigma_sq = 0.005;
+	double allow_cube_cutout = true;
 
 
 	//auto model_sdf = std::make_shared<ModelSDF>(/*full_pc*/non_static_pointcloud, cell_size, block_radius, sigma_sq);
@@ -143,7 +161,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	PrimitiveSetIterationStopCriterion criterion(10, PrimitiveSetRank(0.00001), 10);
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.55, 0.15, 0.15, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
 	
-	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, model_sdf);
+	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, allow_cube_cutout, model_sdf);
 
 	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geoWeightGA, perPrimGeoWeightGA, sizeWeightGA, true);
 	PrimitiveSetGA ga;
@@ -640,14 +658,15 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 // ==================== RANKER ====================
 
 lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
-	double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, const std::shared_ptr<ModelSDF>& model_sdf) :
+	double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf) :
 	pc(pc),
 	ms(ms),
 	staticPrimitives(staticPrims),
 	distanceEpsilon(distanceEpsilon),
 	cell_size(cell_size),
 	model_sdf(model_sdf),
-	maxPrimitiveSetSize(maxPrimitiveSetSize)
+	maxPrimitiveSetSize(maxPrimitiveSetSize),
+	allow_cube_cutout(allow_cube_cutout)
 {
 }
 
@@ -848,7 +867,6 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 			{
 
 				Eigen::Matrix<double, 1, 6 > pn;
-
 				auto sdf = model_sdf->sdf_value(p);
 
 				double w = lmu::clamp(sdf.w, 0.0f, 1.0f);
@@ -857,15 +875,11 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 				{
 					inside_voxels += w;
 					pn.row(0) << p.transpose(), 0.0, sdf.w, 0;
-
-					//if (debug)std::cout << "GOOD: " << sdf.v << std::endl;
 				}
 				else
 				{
-					//if (debug)std::cout << "BAD: " << sdf.v << std::endl;
-
 					outside_voxels -= w;
-					pn.row(0) << p.transpose(), 1.0, 0, 0;// -sdf.w, 0, 0;
+					pn.row(0) << p.transpose(), 1.0, 0, 0;
 				}
 
 				points.push_back(pn);
@@ -876,9 +890,16 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 
 		const int lower_voxel_bound = 5;
 
-		double score = all_voxels >= lower_voxel_bound ? std::max(inside_voxels, outside_voxels) / (double)all_voxels : 0.0;
-		//std::cout << "Done. Score: " << score << " all voxels: "<< all_voxels << std::endl;
-	
+		double score = 0.0;
+		if (!allow_cube_cutout && prim.type == PrimitiveType::Box)
+		{
+			score = all_voxels >= lower_voxel_bound ? inside_voxels / (double)all_voxels : 0.0;
+		}
+		else
+		{
+			score = all_voxels >= lower_voxel_bound ? std::max(inside_voxels, outside_voxels) / (double)all_voxels : 0.0;
+		}
+		
 		scores.push_back(score);
 	}
 
@@ -1509,10 +1530,13 @@ lmu::PointCloud lmu::ModelSDF::to_pc() const
 	return pointCloudFromVector(points);
 }
 
-lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, double t_outside) const
+lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, double t_outside, double v_size) const
 {
+	if (v_size == 0.0)
+		v_size = voxel_size;
+
 	std::vector<Eigen::Vector3d> points; 
-	iterate_over_prim_volume(p, voxel_size, [&points](const Eigen::Vector3d& p) { if(!std::isnan(p.x())) points.push_back(p); });
+	iterate_over_prim_volume(p, v_size, [&points](const Eigen::Vector3d& p) { if(!std::isnan(p.x())) points.push_back(p); });
 
 
 	Eigen::MatrixXd point_mat(points.size(), 3);
@@ -1547,7 +1571,7 @@ lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, dou
 		}
 	}
 
-	std::cout << primitiveTypeToString(p.type) << std::endl;
+	std::cout << p.imFunc->name() << std::endl;
 
 	double inside_score = num_points > 0 ? (double)num_inside_points / (double)num_points : 0;
 	std::cout << "inside score: " << inside_score << std::endl;
@@ -1556,7 +1580,11 @@ lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, dou
 
 	bool inside = inside_score >= t_inside;
 
-	return  inside_score >= t_inside ? DHType::INSIDE : inside_score <= t_outside ? DHType::OUTSIDE : DHType::NONE;
+	auto type =  inside_score >= t_inside ? DHType::INSIDE : inside_score <= t_outside ? DHType::OUTSIDE : DHType::NONE;
+
+	std::cout << "type: " << type << std::endl;
+
+	return type;
 }
 
 inline lmu::SDFValue::SDFValue() :
