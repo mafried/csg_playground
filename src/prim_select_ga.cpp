@@ -38,15 +38,12 @@ lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives) :
 	}	
 }
 
-lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives, const ModelSDF& model_sdf, double t_inside, double t_outside) :
+lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types) :
 	prims(primitives)
 {
-	for (const auto& p : *prims)
-	{
-		auto da_type = model_sdf.get_dh_type(p, t_inside, t_outside);
-		selection.push_back(SelectionValue(da_type, true));
-
-		std::cout << "Primitive " << p.imFunc->name() << ": " << (int)da_type << std::endl;
+	for (int i = 0; i < primitives->size(); ++i)
+	{		
+		selection.push_back(SelectionValue(dh_types[i], true));
 	}
 }
 
@@ -359,19 +356,21 @@ std::ostream& lmu::operator<<(std::ostream& out, const SelectionRank& r)
 
 PrimitiveDecomposition lmu::decompose_primitives(const PrimitiveSet& primitives, const ModelSDF& model_sdf, double inside_t, double outside_t, double voxel_size)
 {
-	PrimitiveSet remaining_primitives;
-	std::vector<CSGNode> outside_primitives;
-	std::vector<CSGNode> inside_primitives;
+	PrimitiveSet remaining_primitives, outside_primitives, inside_primitives;
+	std::vector<CSGNode> outside_primitive_nodes;
+	std::vector<CSGNode> inside_primitive_nodes;
 	
 	for (const auto& p : primitives)
 	{
 		switch (model_sdf.get_dh_type(p, inside_t, outside_t, voxel_size))
 		{
 		case DHType::INSIDE:
-			inside_primitives.push_back(geometry(p.imFunc));
+			inside_primitive_nodes.push_back(geometry(p.imFunc));
+			inside_primitives.push_back(p);
 			break;
 		case DHType::OUTSIDE:
-			outside_primitives.push_back(geometry(p.imFunc));
+			outside_primitive_nodes.push_back(geometry(p.imFunc));
+			outside_primitives.push_back(p);
 			break;
 		case DHType::NONE:
 			remaining_primitives.push_back(p);
@@ -380,8 +379,8 @@ PrimitiveDecomposition lmu::decompose_primitives(const PrimitiveSet& primitives,
 	} 
 
 	auto node = opNo();
-	auto left = inside_primitives.size() > 1 ? opUnion(inside_primitives) : inside_primitives.empty()? opNo() : inside_primitives[0];
-	auto right = outside_primitives.size() > 1 ? opUnion(outside_primitives) : outside_primitives.empty() ? opNo() : outside_primitives[0];	
+	auto left = inside_primitive_nodes.size() > 1 ? opUnion(inside_primitive_nodes) : inside_primitive_nodes.empty()? opNo() : inside_primitive_nodes[0];
+	auto right = outside_primitive_nodes.size() > 1 ? opUnion(outside_primitive_nodes) : outside_primitive_nodes.empty() ? opNo() : outside_primitive_nodes[0];
 	
 	if (right.operationType() == CSGNodeOperationType::Noop)
 	{
@@ -392,16 +391,14 @@ PrimitiveDecomposition lmu::decompose_primitives(const PrimitiveSet& primitives,
 		node = opDiff({ left, right });
 	}
 
-	return PrimitiveDecomposition(node, remaining_primitives);
+	return PrimitiveDecomposition(node, remaining_primitives, inside_primitives, outside_primitives);
 }
 
 CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 {
 	auto res = into;
-
 	std::vector<CSGNode> diff_prims;
 	std::vector<CSGNode> union_prims;
-
 	for (int i = 0; i < s.selection.size(); ++i)
 	{
 		if (s.selection[i].active)
@@ -413,100 +410,100 @@ CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 		}
 	}
 
-	if (res.type() == CSGNodeType::Operation)
+	switch (res.operationType())
 	{
-		switch (res.operationType())
+	case CSGNodeOperationType::Difference:
+
+		if (res.childsCRef().size() == 2)
 		{
-		case CSGNodeOperationType::Difference:
-
-			if (res.childsCRef().size() == 2)
+			// Insert union nodes into left hand side. 
+			if ((!union_prims.empty()))
 			{
-				// Insert union nodes into left hand side. 
-				if ((!union_prims.empty()))
+				if (res.childsRef()[0].operationType() == CSGNodeOperationType::Union)
 				{
-					if (res.childsRef()[0].operationType() == CSGNodeOperationType::Union)
-					{
-						res.childsRef()[0].childsRef().insert(res.childsRef()[0].childsRef().end(), union_prims.begin(), union_prims.end());
-					}
-					else
-					{
-						auto n = opUnion({ res.childsRef()[0] });
-						n.childsRef().insert(n.childsRef().end(), union_prims.begin(), union_prims.end());
-						res.childsRef()[0] = n;
-					}
+					res.childsRef()[0].childsRef().insert(res.childsRef()[0].childsRef().end(), union_prims.begin(), union_prims.end());
 				}
-
-				// Insert difference nodes into right hand side.
-				if ((!diff_prims.empty()))
+				else
 				{
-					if (res.childsRef()[1].operationType() == CSGNodeOperationType::Union)
-					{
-						res.childsRef()[1].childsRef().insert(res.childsRef()[1].childsRef().end(), diff_prims.begin(), diff_prims.end());
-					}
-					else
-					{
-						auto n = opUnion({ res.childsRef()[1] });
-						n.childsRef().insert(n.childsRef().end(), diff_prims.begin(), diff_prims.end());
-						res.childsRef()[1] = n;
-					}
+					auto n = opUnion({ res.childsRef()[0] });
+					n.childsRef().insert(n.childsRef().end(), union_prims.begin(), union_prims.end());
+					res.childsRef()[0] = n;
 				}
 			}
-			else
+
+			// Insert difference nodes into right hand side.
+			if ((!diff_prims.empty()))
 			{
-				std::cout << "Difference node is malformed." << std::endl;
+				if (res.childsRef()[1].operationType() == CSGNodeOperationType::Union)
+				{
+					res.childsRef()[1].childsRef().insert(res.childsRef()[1].childsRef().end(), diff_prims.begin(), diff_prims.end());
+				}
+				else
+				{
+					auto n = opUnion({ res.childsRef()[1] });
+					n.childsRef().insert(n.childsRef().end(), diff_prims.begin(), diff_prims.end());
+					res.childsRef()[1] = n;
+				}
 			}
-
-			break;
-		case CSGNodeOperationType::Union:
-
-			res.childsRef().insert(res.childsRef().end(), union_prims.begin(), union_prims.end());
-
-			if (!diff_prims.empty())
-			{
-				res = opDiff({ res, opUnion(diff_prims) });
-			}
-
-			break;
-
-		default:
-			std::cout << "Node configuration not supported." << std::endl;
-			break;
 		}
-	}
-	else 
-	{
-		if (union_prims.empty() && diff_prims.empty())
+		else
 		{
-			// nothing
+			std::cout << "Difference node is malformed." << std::endl;
 		}
-		else if (union_prims.empty())
+
+		break;
+
+	case CSGNodeOperationType::Union:
+
+		res.childsRef().insert(res.childsRef().end(), union_prims.begin(), union_prims.end());
+
+		if (!diff_prims.empty())
 		{
 			res = opDiff({ res, opUnion(diff_prims) });
 		}
-		else if (diff_prims.empty())
-		{
-			res = opUnion({ res });
-			res.childsRef().insert(res.childsRef().end(), union_prims.begin(), union_prims.end());
-		}
-	}
 
+		break;
+
+
+	case CSGNodeOperationType::Noop:
+
+		if (union_prims.empty() && !diff_prims.empty())
+		{
+			res = opDiff({ res, diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0] });
+		}
+		else if (!union_prims.empty() && diff_prims.empty())
+		{		
+			res = union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0];
+		}
+		else
+		{
+			res = opDiff({ union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0], diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0] });
+		}
+
+		break;
+
+	default:
+		std::cout << "Node configuration not supported." << std::endl;
+		break;		
+	}
+	
 	return res;
 }
 
-CSGNode lmu::generate_csg_node(const PrimitiveSet& primitives, const CSGNode& start_node, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params)
+CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params)
 {
-	//if (primitives.empty())
-	//	return lmu::opNo();
-	//if (primitives.size() == 1)
-	//	return lmu::geometry(primitives[0].imFunc);
 
 	SelectionTournamentSelector selector(2);
-	SelectionIterationStopCriterion criterion(1000, SelectionRank(0.00001), 1000);
+	SelectionIterationStopCriterion criterion(1000, SelectionRank(0.00000001), 10000);
+
+	auto primitives = decomposition.get_primitives(params.use_all_prims_for_ga);
+	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);
+	auto start_node = params.use_all_prims_for_ga ? opNo() : decomposition.node;
 	
-	SelectionCreator creator(params.evolve_dh_type ? PrimitiveSelection(&primitives) : PrimitiveSelection(&primitives, *primitive_ranker->model_sdf, 0.9, 0.1), primitive_ranker, params);
+	SelectionCreator creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
 	
 	SelectionRanker ranker(primitive_ranker->model_sdf, start_node);
-	SelectionPopMan pop_man(1, 0.0);
+	SelectionPopMan pop_man(1, 0.01);
 
 	SelectionGA ga;
 	SelectionGA::Parameters ga_params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
@@ -517,7 +514,7 @@ CSGNode lmu::generate_csg_node(const PrimitiveSet& primitives, const CSGNode& st
 	
 	auto node = integrate_node(start_node, res.population[0].creature);
 
-	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
+	node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 
 	return node;
 }
@@ -536,17 +533,53 @@ lmu::SelectionRank::SelectionRank(double geo, double size, double combined) :
 {
 }
 
-lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, bool evolve_dh_type) :
+lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, 
+	double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga) :
 	create_new_prob(create_new_prob),
 	active_prob(active_prob),
 	use_prim_geo_scores_as_active_prob(use_prim_geo_scores_as_active_prob),
 	dh_type_prob(dh_type_prob),
-	evolve_dh_type(evolve_dh_type)
+	evolve_dh_type(evolve_dh_type),
+	use_all_prims_for_ga(use_all_prims_for_ga)
 {
 }
 
-lmu::PrimitiveDecomposition::PrimitiveDecomposition(const CSGNode & node, const PrimitiveSet & rem_prims) : 
+lmu::PrimitiveDecomposition::PrimitiveDecomposition(const CSGNode& node, const PrimitiveSet& rem_prims, const PrimitiveSet& in_prims, const PrimitiveSet& out_prims) :
 	node(node),
-	remaining_primitives(rem_prims)
+	remaining_primitives(rem_prims),
+	inside_primitives(in_prims),
+	outside_primitives(out_prims)
 {
+}
+
+PrimitiveSet lmu::PrimitiveDecomposition::get_primitives(bool all) const
+{	
+	auto all_prims = remaining_primitives;
+
+	if(all)
+	{
+		all_prims.insert(all_prims.end(), inside_primitives.begin(), inside_primitives.end());
+		all_prims.insert(all_prims.end(), outside_primitives.begin(), outside_primitives.end());
+	}
+	
+	return all_prims;
+}
+
+std::vector<DHType> lmu::PrimitiveDecomposition::get_dh_types(bool all) const
+{
+	std::vector<DHType> dh_types;
+
+	std::transform(remaining_primitives.begin(), remaining_primitives.end(), std::back_inserter(dh_types),
+		[](const auto& p) -> DHType { return DHType::NONE; });
+
+	if (all)
+	{
+		std::transform(inside_primitives.begin(), inside_primitives.end(), std::back_inserter(dh_types),
+			[](const auto& p) -> DHType { return DHType::INSIDE; });
+
+		std::transform(outside_primitives.begin(), outside_primitives.end(), std::back_inserter(dh_types),
+			[](const auto& p) -> DHType { return DHType::OUTSIDE; });		
+	}
+	
+	return dh_types;
 }

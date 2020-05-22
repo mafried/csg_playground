@@ -26,8 +26,7 @@ namespace lmu
 	struct PrimitiveSelection
 	{
 		PrimitiveSelection(const PrimitiveSet* primitives);
-
-		PrimitiveSelection(const PrimitiveSet* primitives, const ModelSDF& model_sdf, double t_inside, double t_outside);
+		PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types);
 		
 		const PrimitiveSet* prims;
 		std::vector<SelectionValue> selection;
@@ -80,28 +79,35 @@ namespace lmu
 
 	struct CSGNodeGenerationParams
 	{
-		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, bool evolve_dh_type);
+		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga);
 
 		double create_new_prob;
 		double active_prob;
 		double dh_type_prob;
 		bool evolve_dh_type;
 		bool use_prim_geo_scores_as_active_prob;
+		bool use_all_prims_for_ga;
 	};
 
 	struct PrimitiveDecomposition
 	{
-		PrimitiveDecomposition(const CSGNode& node, const PrimitiveSet& rem_prims);
+		PrimitiveDecomposition(const CSGNode& node, const PrimitiveSet& rem_prims, const PrimitiveSet& in_prims, const PrimitiveSet& out_prims);
 
 		CSGNode node;
 		PrimitiveSet remaining_primitives;
+		PrimitiveSet inside_primitives;
+		PrimitiveSet outside_primitives;
+
+		PrimitiveSet get_primitives(bool all) const;
+		std::vector<DHType> get_dh_types(bool all) const;
+
 	};
 
 	PrimitiveDecomposition decompose_primitives(const PrimitiveSet& primitives, const ModelSDF& model_sdf, double inside_t, double outside_t, double voxel_size);
 
 	CSGNode integrate_node(const CSGNode& into, const PrimitiveSelection& s);
 
-	CSGNode generate_csg_node(const PrimitiveSet& primitives, const CSGNode& start_node, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params);
+	CSGNode generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params);
 }
 
 #endif
