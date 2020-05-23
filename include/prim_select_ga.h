@@ -25,9 +25,10 @@ namespace lmu
 
 	struct PrimitiveSelection
 	{
-		PrimitiveSelection(const PrimitiveSet* primitives);
+		explicit PrimitiveSelection(const PrimitiveSet* primitives);
 		PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types);
-		
+		explicit PrimitiveSelection(const CSGNode& node);
+
 		const PrimitiveSet* prims;
 		std::vector<SelectionValue> selection;
 
@@ -36,7 +37,9 @@ namespace lmu
 		int get_num_active() const;
 
 		size_t hash(size_t seed) const;
-
+		
+		// Needed for node-based creator.
+		CSGNode node;
 	};
 
 	std::ostream& operator<<(std::ostream& out, const PrimitiveSelection& r);
@@ -77,9 +80,16 @@ namespace lmu
 
 	std::ostream& operator<<(std::ostream& out, const SelectionRank& r);
 
+	enum class CreatorStrategy
+	{
+		SELECTION,
+		NODE
+	};
+
 	struct CSGNodeGenerationParams
 	{
-		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga);
+		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, 
+			bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy);
 
 		double create_new_prob;
 		double active_prob;
@@ -87,6 +97,9 @@ namespace lmu
 		bool evolve_dh_type;
 		bool use_prim_geo_scores_as_active_prob;
 		bool use_all_prims_for_ga;
+		int max_tree_depth;
+		double subtree_prob;
+		CreatorStrategy creator_strategy;
 	};
 
 	struct PrimitiveDecomposition
@@ -106,6 +119,7 @@ namespace lmu
 	PrimitiveDecomposition decompose_primitives(const PrimitiveSet& primitives, const ModelSDF& model_sdf, double inside_t, double outside_t, double voxel_size);
 
 	CSGNode integrate_node(const CSGNode& into, const PrimitiveSelection& s);
+	CSGNode integrate_node(const CSGNode& into, const CSGNode& node);
 
 	CSGNode generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params);
 }

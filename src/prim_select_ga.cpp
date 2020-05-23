@@ -19,7 +19,8 @@ size_t lmu::SelectionValue::hash(size_t seed) const
 }
 
 lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives) : 
-	prims(primitives)
+	prims(primitives),
+	node(opNo())
 {
 	std::default_random_engine rnd_engine;
 	std::random_device rnd_device;
@@ -28,23 +29,35 @@ lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives) :
 	std::bernoulli_distribution d{};
 	using parm_t = decltype(d)::param_type;
 
-	
-	for (const auto& p : *primitives)
+	if (primitives)
 	{
-		bool active = d(rnd_engine, parm_t{ 0.5 });
-		DHType dh_type = d(rnd_engine, parm_t{ 0.5 }) ? DHType::INSIDE : DHType::OUTSIDE;
+		for (const auto& p : *primitives)
+		{
+			bool active = d(rnd_engine, parm_t{ 0.5 });
+			DHType dh_type = d(rnd_engine, parm_t{ 0.5 }) ? DHType::INSIDE : DHType::OUTSIDE;
 
-		selection.push_back(SelectionValue(dh_type, active));
-	}	
+			selection.push_back(SelectionValue(dh_type, active));
+		}
+	}
 }
 
 lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types) :
-	prims(primitives)
+	prims(primitives),
+	node(opNo())
 {
-	for (int i = 0; i < primitives->size(); ++i)
-	{		
-		selection.push_back(SelectionValue(dh_types[i], true));
+	if (primitives)
+	{
+		for (int i = 0; i < primitives->size(); ++i)
+		{
+			selection.push_back(SelectionValue(dh_types[i], true));
+		}
 	}
+}
+
+lmu::PrimitiveSelection::PrimitiveSelection(const CSGNode& node) : 
+	node(node),
+	prims(nullptr)
+{
 }
 
 lmu::CSGNode lmu::PrimitiveSelection::to_node() const
@@ -76,10 +89,17 @@ int lmu::PrimitiveSelection::get_num_active() const
 
 size_t lmu::PrimitiveSelection::hash(size_t seed) const
 {	
-	for (const auto& s : selection)
+	if (node.operationType() == CSGNodeOperationType::Noop)
 	{
-		boost::hash_combine(seed, s.dh_type);
-		boost::hash_combine(seed, s.active);
+		for (const auto& s : selection)
+		{
+			boost::hash_combine(seed, s.dh_type);
+			boost::hash_combine(seed, s.active);
+		}
+	}
+	else
+	{
+		seed = node.hash(seed);
 	}
 
 	return seed;
@@ -90,7 +110,7 @@ std::ostream& lmu::operator<<(std::ostream& out, const PrimitiveSelection& ps)
 	int i = 0;
 	for (const auto& s : ps.selection)
 	{
-		out << ps.prims->at(i++).imFunc->name() << ": " << s.active << " " << (s.dh_type == DHType::INSIDE ? "IN" : s.dh_type == DHType::OUTSIDE ? "OUT" : "NONE") << " | ";
+		out << (ps.prims ? ps.prims->at(i++).imFunc->name() : "No name") << ": " << s.active << " " << (s.dh_type == DHType::INSIDE ? "IN" : s.dh_type == DHType::OUTSIDE ? "OUT" : "NONE") << " | ";
 	}
 	out << std::endl;
 
@@ -122,8 +142,7 @@ struct SelectionCreator
 		std::transform(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end(), std::back_inserter(inv_geo_scores),
 			[](double s) -> double { return 1.0 - s; });
 		std::discrete_distribution<int> discrete_d(inv_geo_scores.begin(), inv_geo_scores.end());
-
-
+		
 		if (d(_rndEngine, parm_t{ params.create_new_prob }))
 		{
 			return create();
@@ -135,7 +154,6 @@ struct SelectionCreator
 
 			for (int i = 0; i < num_selections; ++i)
 			{
-
 				int s_idx = params.use_prim_geo_scores_as_active_prob ? discrete_d(_rndEngine) : uniform_d(_rndEngine, p_ud{ 0, num_selections - 1 });
 							
 				new_s.selection[s_idx].active = d(_rndEngine, parm_t{ 0.5 });
@@ -206,7 +224,6 @@ struct SelectionCreator
 
 		//std::cout << "CREATED: " << new_ps << std::endl;
 
-
 		return new_ps;
 	}
 
@@ -227,13 +244,163 @@ struct SelectionCreator
 		mutable std::random_device _rndDevice;
 };
 
+
+struct CSGNodeCreator
+{
+	CSGNodeCreator(const lmu::PrimitiveSelection& ps, const CSGNodeGenerationParams& params) :
+		params(params)
+	{
+		for (const auto& p : *ps.prims)
+			primitives.push_back(p.imFunc);		
+
+		_rndEngine.seed(_rndDevice());
+	}
+
+	PrimitiveSelection mutate(const PrimitiveSelection& ps) const
+	{
+		auto node = ps.node;
+
+		static std::bernoulli_distribution d{};
+		using parm_t = decltype(d)::param_type;
+
+		static std::uniform_int_distribution<> du{};
+		using parmu_t = decltype(du)::param_type;
+
+		static std::uniform_real_distribution<double> dur(-0.1, 0.1);
+		using parmur_t = decltype(dur)::param_type;
+
+		if (d(_rndEngine, parm_t{ params.create_new_prob }))
+		{
+			return create(params.max_tree_depth);
+		}
+		else
+		{
+			int nodeIdx = du(_rndEngine, parmu_t{ 0, numNodes(node) - 1 });
+
+			auto newNode = node;
+
+			CSGNode* subNode = nodePtrAt(newNode, nodeIdx);
+
+			create(*subNode, params.max_tree_depth, 0);
+
+			return PrimitiveSelection(newNode);
+		}
+	}
+
+	std::vector<PrimitiveSelection> crossover(const PrimitiveSelection& ps1, const PrimitiveSelection& ps2) const
+	{
+		auto node1 = ps1.node;
+		auto node2 = ps2.node;
+
+		if (!node1.isValid() || !node2.isValid())
+			return std::vector<PrimitiveSelection> {PrimitiveSelection(node1), PrimitiveSelection(node2)};
+
+		int numNodes1 = numNodes(node1);
+		int numNodes2 = numNodes(node2);
+
+		auto newNode1 = node1;
+		auto newNode2 = node2;
+
+		static std::uniform_int_distribution<> du{};
+		using parmu_t = decltype(du)::param_type;
+
+		int nodeIdx1 = du(_rndEngine, parmu_t{ 0, numNodes1 - 1 });
+		int nodeIdx2 = du(_rndEngine, parmu_t{ 0, numNodes2 - 1 });
+
+		CSGNode* subNode1 = nodePtrAt(newNode1, nodeIdx1);
+		CSGNode* subNode2 = nodePtrAt(newNode2, nodeIdx2);
+
+		std::swap(*subNode1, *subNode2);
+
+		return std::vector<PrimitiveSelection>
+		{
+			PrimitiveSelection(newNode1), PrimitiveSelection(newNode2)
+		};
+	}
+
+	PrimitiveSelection create() const
+	{
+		return create(params.max_tree_depth);
+	}
+
+	PrimitiveSelection create(int max_depth) const
+	{
+		auto node = opNo();
+		create(node, max_depth, 0);
+		return PrimitiveSelection(node);
+	}
+
+	std::string info() const
+	{
+		return std::string();
+	}
+
+private:
+
+	void create(CSGNode& node, int max_depth, int cur_depth) const
+	{
+		static std::bernoulli_distribution db{};
+		using parmb_t = decltype(db)::param_type;
+
+		if (cur_depth >= max_depth)
+		{
+			node = create_rnd_primitive_node();
+		}
+		else
+		{
+			if (db(_rndEngine, parmb_t{ params.subtree_prob }))
+			{
+				node = create_rnd_operation_node();
+
+				auto numAllowedChilds = node.numAllowedChilds();
+				int numChilds = clamp(std::get<1>(numAllowedChilds), std::get<0>(numAllowedChilds), 2); //2 is the maximum number of childs allowed for create
+
+				for (int i = 0; i < numChilds; ++i)
+				{
+					auto child = CSGNode::invalidNode;
+					create(child, max_depth, cur_depth + 1);
+					node.addChild(child);
+				}
+			}
+			else
+			{
+				node = create_rnd_primitive_node();
+			}
+		}
+	}
+
+	CSGNode create_rnd_primitive_node() const
+	{
+		static std::uniform_int_distribution<> du{};
+		using parmu_t = decltype(du)::param_type;
+
+		int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(primitives.size() - 1) });
+		return geometry(primitives[funcIdx]);
+	}
+
+	CSGNode create_rnd_operation_node() const
+	{
+		std::discrete_distribution<> d({ 1, 1, 1, 1 });
+		int op = d(_rndEngine) + 1; //0 is OperationType::Unknown, 6 is OperationType::Invalid.
+
+		return createOperation(static_cast<CSGNodeOperationType>(op));
+	}
+
+	CSGNodeGenerationParams params;
+	std::vector<ImplicitFunctionPtr> primitives;
+
+	mutable std::default_random_engine _rndEngine;
+	mutable std::random_device _rndDevice;
+};
+
 //////////////////////////// RANKER ////////////////////////////
 
 struct SelectionRanker
 {
-	SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf, const CSGNode& start_node) :
+	SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf, const CSGNode& start_node, CreatorStrategy creator_strategy) :
 		model_sdf(model_sdf),
-		start_node(start_node)
+		start_node(start_node),
+		creator_strategy(creator_strategy)
 	{
 	}
 
@@ -243,9 +410,12 @@ struct SelectionRanker
 		//std::cout << "counter: " << counter << std::endl;
 		//counter++;
 
-		auto n = integrate_node(start_node, s);
-
+		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
 		auto d = 0.0;
+
+		//Invalid node?
+		if(numNodes(n) == 0 || n.operationType() == CSGNodeOperationType::Noop)
+			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
 
 		auto grid_size = model_sdf->grid_size;
 		auto voxel_size = model_sdf->voxel_size;
@@ -266,10 +436,11 @@ struct SelectionRanker
 			}
 		}
 
+		auto size = creator_strategy == CreatorStrategy::SELECTION ? (double)s.get_num_active() : numNodes(s.node);
+		
+		auto sr = SelectionRank(d, size, 0.0);
 
-		auto sr = SelectionRank(d, (double)s.get_num_active(), 0.0);
-
-		//std::cout << s << " SCORE: " << sr << std::endl;
+		//std::cout << "Size: " << (numNodes(s.node)) << " Score: " << sr << std::endl;
 		
 		return sr;
 	}
@@ -283,6 +454,7 @@ private:
 
 	std::shared_ptr<ModelSDF> model_sdf;
 	CSGNode start_node;
+	CreatorStrategy creator_strategy;
 };
 
 
@@ -345,6 +517,8 @@ private:
 using SelectionTournamentSelector = TournamentSelector<RankedCreature<PrimitiveSelection, SelectionRank>>;
 using SelectionIterationStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<PrimitiveSelection, SelectionRank>, SelectionRank>;
 using SelectionGA = GeneticAlgorithm<PrimitiveSelection, SelectionCreator, SelectionRanker, SelectionRank,
+	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
+using NodeGA = GeneticAlgorithm<PrimitiveSelection, CSGNodeCreator, SelectionRanker, SelectionRank,
 	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
 
 
@@ -475,7 +649,7 @@ CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 		{		
 			res = union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0];
 		}
-		else
+		else if (!union_prims.empty() && !diff_prims.empty())
 		{
 			res = opDiff({ union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0], diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0] });
 		}
@@ -490,31 +664,61 @@ CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 	return res;
 }
 
+CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
+{
+	if (into.operationType() == CSGNodeOperationType::Noop)
+	{
+		return node;
+	}
+
+	return opUnion({ into, node });
+}
+
 CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params)
 {
+	int tournament_k = 2;
+	int population_size = 150;
+	double mut_prob = 0.4;
+	double cross_prob = 0.4;
+	double geo_weight = 1.0;
+	double size_weight = 0.01;
 
 	SelectionTournamentSelector selector(2);
-	SelectionIterationStopCriterion criterion(1000, SelectionRank(0.00000001), 10000);
+	SelectionIterationStopCriterion criterion(10, SelectionRank(0.00000001), 100);
 
 	auto primitives = decomposition.get_primitives(params.use_all_prims_for_ga);
 	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);
 	auto start_node = params.use_all_prims_for_ga ? opNo() : decomposition.node;
 	
-	SelectionCreator creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
-	
-	SelectionRanker ranker(primitive_ranker->model_sdf, start_node);
-	SelectionPopMan pop_man(1, 0.01);
+	SelectionCreator selection_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
+	CSGNodeCreator node_creator(PrimitiveSelection(&primitives, dh_types), params);
 
-	SelectionGA ga;
-	SelectionGA::Parameters ga_params(150, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
+	SelectionRanker ranker(primitive_ranker->model_sdf, start_node, params.creator_strategy);
+	SelectionPopMan pop_man(geo_weight, size_weight);
 
-	auto res = ga.run(ga_params, selector, creator, ranker, criterion, pop_man);
-
-	std::cout << "RESULT: " << res.population[0].creature << std::endl;
-	
-	auto node = integrate_node(start_node, res.population[0].creature);
-
-	node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
+	auto node = opNo();
+	switch (params.creator_strategy)
+	{
+	case CreatorStrategy::SELECTION:
+		{
+			SelectionGA ga;
+			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
+			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
+			node = integrate_node(start_node, res.population[0].creature); 
+			break;
+		}
+	case CreatorStrategy::NODE:
+		{
+			NodeGA ga;
+			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
+			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
+			node = integrate_node(start_node, res.population[0].creature.node);
+			break;
+		}
+	}
+	writeNode(node, "node_node.gv");
+		
+	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 
 	return node;
 }
@@ -534,13 +738,16 @@ lmu::SelectionRank::SelectionRank(double geo, double size, double combined) :
 }
 
 lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, 
-	double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga) :
+	double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy) :
 	create_new_prob(create_new_prob),
 	active_prob(active_prob),
 	use_prim_geo_scores_as_active_prob(use_prim_geo_scores_as_active_prob),
 	dh_type_prob(dh_type_prob),
 	evolve_dh_type(evolve_dh_type),
-	use_all_prims_for_ga(use_all_prims_for_ga)
+	use_all_prims_for_ga(use_all_prims_for_ga),
+	max_tree_depth(max_tree_depth),
+	subtree_prob(subtree_prob),
+	creator_strategy(creator_strategy)
 {
 }
 

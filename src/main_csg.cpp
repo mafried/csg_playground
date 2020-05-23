@@ -385,7 +385,7 @@ int main(int argc, char *argv[])
 		}		
 		else
 		{				
-			node = lmu::generate_csg_node(decomposition, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, true, 0.5, false, true));
+			node = lmu::generate_csg_node(decomposition, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, true, 0.5, false, false, 25, 0.5, lmu::CreatorStrategy::NODE));
 		}
 
 		
