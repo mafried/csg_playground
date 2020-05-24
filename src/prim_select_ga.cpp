@@ -76,7 +76,22 @@ lmu::CSGNode lmu::PrimitiveSelection::to_node() const
 		}
 	}
 	
-	return opDiff({ opUnion(union_prims), opUnion(diff_prims) });
+	if (union_prims.empty() && diff_prims.empty())
+	{
+		return opNo();
+	}
+	else if (!union_prims.empty() && diff_prims.empty())
+	{
+		return union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0];
+	}
+	else if (union_prims.empty() && !diff_prims.empty())
+	{
+		return opDiff({ opNo(),  diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0]});
+	}
+	else
+	{
+		return opDiff({ opUnion(union_prims), opUnion(diff_prims) });
+	}
 }
 
 int lmu::PrimitiveSelection::get_num_active() const
@@ -247,11 +262,13 @@ struct SelectionCreator
 
 struct CSGNodeCreator
 {
-	CSGNodeCreator(const lmu::PrimitiveSelection& ps, const CSGNodeGenerationParams& params) :
+	CSGNodeCreator(const lmu::PrimitiveSelection& ps, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params) :
 		params(params)
 	{
 		for (const auto& p : *ps.prims)
-			primitives.push_back(p.imFunc);		
+			primitives.push_back(p.imFunc);	
+
+		per_primitive_geo_scores = primitive_ranker->rank(*ps.prims).per_primitive_geo_scores;
 
 		_rndEngine.seed(_rndDevice());
 	}
@@ -374,7 +391,9 @@ private:
 		static std::uniform_int_distribution<> du{};
 		using parmu_t = decltype(du)::param_type;
 
-		int funcIdx = du(_rndEngine, parmu_t{ 0, static_cast<int>(primitives.size() - 1) });
+		std::discrete_distribution<int> discrete_d(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end());
+		
+		int funcIdx = params.use_prim_geo_scores_as_active_prob ? discrete_d(_rndEngine) : du(_rndEngine, parmu_t{ 0, static_cast<int>(primitives.size() - 1) });
 		return geometry(primitives[funcIdx]);
 	}
 
@@ -388,6 +407,8 @@ private:
 
 	CSGNodeGenerationParams params;
 	std::vector<ImplicitFunctionPtr> primitives;
+
+	std::vector<double> per_primitive_geo_scores;
 
 	mutable std::default_random_engine _rndEngine;
 	mutable std::random_device _rndDevice;
@@ -553,16 +574,21 @@ PrimitiveDecomposition lmu::decompose_primitives(const PrimitiveSet& primitives,
 	} 
 
 	auto node = opNo();
-	auto left = inside_primitive_nodes.size() > 1 ? opUnion(inside_primitive_nodes) : inside_primitive_nodes.empty()? opNo() : inside_primitive_nodes[0];
-	auto right = outside_primitive_nodes.size() > 1 ? opUnion(outside_primitive_nodes) : outside_primitive_nodes.empty() ? opNo() : outside_primitive_nodes[0];
-	
-	if (right.operationType() == CSGNodeOperationType::Noop)
+	if (inside_primitive_nodes.empty() && outside_primitive_nodes.empty())
 	{
-		node = left;
+		node = opNo();
+	}
+	else if (!inside_primitive_nodes.empty() && outside_primitive_nodes.empty())
+	{
+		node = inside_primitive_nodes.size() > 1 ? opUnion(inside_primitive_nodes) : inside_primitive_nodes[0];
+	}
+	else if (inside_primitive_nodes.empty() && !outside_primitive_nodes.empty())
+	{
+		node = opDiff({ opNo(),  outside_primitive_nodes.size() > 1 ? opUnion(outside_primitive_nodes) : outside_primitive_nodes[0] });
 	}
 	else
 	{
-		node = opDiff({ left, right });
+		node = opDiff({ opUnion(inside_primitive_nodes), opUnion(outside_primitive_nodes) });
 	}
 
 	return PrimitiveDecomposition(node, remaining_primitives, inside_primitives, outside_primitives);
@@ -596,6 +622,11 @@ CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 				if (res.childsRef()[0].operationType() == CSGNodeOperationType::Union)
 				{
 					res.childsRef()[0].childsRef().insert(res.childsRef()[0].childsRef().end(), union_prims.begin(), union_prims.end());
+				}
+				else if (res.childsRef()[0].operationType() == CSGNodeOperationType::Noop)
+				{
+					std::cout << "HERE " << std::endl;
+					res.childsRef()[0] = union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0];
 				}
 				else
 				{
@@ -669,9 +700,39 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 	if (into.operationType() == CSGNodeOperationType::Noop)
 	{
 		return node;
+	} 
+	else if (node.operationType() == CSGNodeOperationType::Noop)
+	{
+		return into;
 	}
-
-	return opUnion({ into, node });
+	else
+	{
+		if (into.operationType() == CSGNodeOperationType::Difference)
+		{
+			if (into.childsCRef()[0].operationType() == CSGNodeOperationType::Noop)
+			{
+				auto n = into;
+				n.childsRef()[0] = node;
+				return n;
+			}
+			else if (into.childsCRef()[0].operationType() == CSGNodeOperationType::Union)
+			{
+				auto n = into;
+				n.childsRef()[0].childsRef().push_back(node);
+				return n;
+			}
+			else 
+			{
+				auto n = into;
+				n.childsRef()[0] = opUnion({node, n.childsRef()[0] });
+				return n;
+			}
+		}
+		else
+		{
+			return opUnion({ into, node });
+		}
+	}
 }
 
 CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params)
@@ -690,9 +751,6 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);
 	auto start_node = params.use_all_prims_for_ga ? opNo() : decomposition.node;
 	
-	SelectionCreator selection_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
-	CSGNodeCreator node_creator(PrimitiveSelection(&primitives, dh_types), params);
-
 	SelectionRanker ranker(primitive_ranker->model_sdf, start_node, params.creator_strategy);
 	SelectionPopMan pop_man(geo_weight, size_weight);
 
@@ -701,6 +759,7 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 	{
 	case CreatorStrategy::SELECTION:
 		{
+			SelectionCreator selection_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
 			SelectionGA ga;
 			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
@@ -709,6 +768,7 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 		}
 	case CreatorStrategy::NODE:
 		{
+			CSGNodeCreator node_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
 			NodeGA ga;
 			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);

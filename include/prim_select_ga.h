@@ -113,7 +113,6 @@ namespace lmu
 
 		PrimitiveSet get_primitives(bool all) const;
 		std::vector<DHType> get_dh_types(bool all) const;
-
 	};
 
 	PrimitiveDecomposition decompose_primitives(const PrimitiveSet& primitives, const ModelSDF& model_sdf, double inside_t, double outside_t, double voxel_size);

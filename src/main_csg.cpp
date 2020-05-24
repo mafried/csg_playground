@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
 
 
 	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test1" };
+	std::string m = { "test12" };
 
 	ofstream f;
 	f.open("ransac_info.txt");
@@ -373,8 +373,6 @@ int main(int argc, char *argv[])
 
 		// Extract CSG tree 
 
-		bool use_all_prims_in_ga = true;
-
 		auto node = lmu::opNo();
 
 		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, 0.9, 0.1, 0.01);
@@ -384,8 +382,8 @@ int main(int argc, char *argv[])
 			node = decomposition.node;
 		}		
 		else
-		{				
-			node = lmu::generate_csg_node(decomposition, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, true, 0.5, false, false, 25, 0.5, lmu::CreatorStrategy::NODE));
+		{
+			node = lmu::generate_csg_node(decomposition, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, false, 0.5, false, false, 25, 0.5, lmu::CreatorStrategy::SELECTION));
 		}
 
 		
