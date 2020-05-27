@@ -86,7 +86,7 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
-			double minDistanceBetweenParallelPlanes);
+			double minDistanceBetweenParallelPlanes, double polytope_prob);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -108,7 +108,7 @@ namespace lmu
 
 		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, 
 			double angleEpsilon, bool ignoreDirection = false, 
-			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0) const;
+			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0, bool ignorePointDistance = false) const;
 
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
 		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon, double minDistanceToPlanePoint) const;
@@ -122,6 +122,8 @@ namespace lmu
 		ManifoldSet ms;
 		std::unordered_set<ManifoldType> availableManifoldTypes;
 		double intraCrossProb;
+
+		double polytope_prob;
 
 		std::vector<double> mutationDistribution;
 
@@ -198,7 +200,8 @@ namespace lmu
 	struct PrimitiveSetRanker
 	{
 		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
-			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf);
+			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
+			double geo_weight, double per_prim_geo_weight, double size_weight);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps, bool debug = false) const;
 
@@ -219,6 +222,9 @@ namespace lmu
 		double cell_size;
 		int maxPrimitiveSetSize;
 		bool allow_cube_cutout;
+		double geo_weight;	
+		double per_prim_geo_weight;
+		double size_weight;
 	};
 
 	struct PrimitiveSetPopMan
@@ -246,10 +252,32 @@ namespace lmu
 	using PrimitiveSetGA = GeneticAlgorithm<PrimitiveSet, PrimitiveSetCreator, PrimitiveSetRanker, PrimitiveSetRank,
 		PrimitiveSetTournamentSelector, PrimitiveSetIterationStopCriterion, PrimitiveSetPopMan>;
 
+	struct PrimitiveGaParams
+	{
+		double size_weight;// = 0.1;
+		double geo_weight;// = 0.0;
+		double per_prim_geo_weight;// = 1.0;//0.1;
 
-	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc);
+		int maxPrimitiveSetSize;// = 75;
+		double polytope_prob; // = 0.0;
+
+		double cell_size;// = 0.05;
+		double max_dist;// = 0.05;
+		double allow_cube_cutout;// = true;
+
+		int max_iterations; //30
+		int max_count; //30
+
+		double similarity_filter_epsilon; //0.0
+		double filter_threshold; //0.01
+
+	};
+
+	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const PrimitiveGaParams& params);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
+	Primitive createPolytopePrimitive(const ManifoldSet& planes);
+
 	lmu::Primitive createSpherePrimitive(const ManifoldPtr& m);
 	Primitive createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& planes);
 	
@@ -289,9 +317,6 @@ namespace lmu
 		double voxel_size;
 		
 	};
-
-	CSGNode generate_tree(const GAResult& res, const lmu::PointCloud& inp_pc, double cutout_threshold, double sampling_grid_size);
-
 }
 
 #endif 

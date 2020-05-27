@@ -51,6 +51,7 @@ lmu::ManifoldType lmu::fromPrimitiveType(PrimitiveType pt)
 	switch (pt)
 	{
 		case PrimitiveType::Box:
+		case PrimitiveType::Polytope:
 			return ManifoldType::Plane;
 		case PrimitiveType::Sphere: 
 			return ManifoldType::Sphere;
@@ -78,6 +79,8 @@ std::string lmu::primitiveTypeToString(PrimitiveType type)
 		return "Cone";
 	case PrimitiveType::Box:
 		return "Box";
+	case PrimitiveType::Polytope:
+		return "Polytope";
 	default:
 		return "Unknown Primitive Type";
 	}
@@ -94,7 +97,9 @@ lmu::PrimitiveType lmu::primitiveTypeFromString(std::string type)
 	else if (type == "cone")
 		return PrimitiveType::Cone;
 	else if (type == "box")
-		return PrimitiveType::Cone;
+		return PrimitiveType::Box;
+	else if (type == "polytope")
+		return PrimitiveType::Polytope;
 	else
 		return PrimitiveType::None;
 }

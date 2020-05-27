@@ -11,8 +11,6 @@
 
 lmu::PrimitiveSetRank const lmu::PrimitiveSetRank::Invalid = lmu::PrimitiveSetRank(-std::numeric_limits<double>::max());
 
-Eigen::VectorXd mesh_sd(const Eigen::MatrixXd& points, const lmu::Mesh& _mesh);
-
 std::ostream& lmu::operator<<(std::ostream& out, const lmu::DHType& t)
 {
 	switch (t)
@@ -119,15 +117,15 @@ void name_primitives(const lmu::PrimitiveSet& ps)
 		p.imFunc->setName(lmu::primitiveTypeToString(p.type) + std::to_string((counter[p.type]++)));
 }
 
-lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc)
+lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc, const PrimitiveGaParams& params)
 {	
 	double distT = 0.02;
 	double angleT = M_PI / 9.0;
-	int maxPrimitiveSetSize = 75;
+	int maxPrimitiveSetSize = params.maxPrimitiveSetSize;
 	
-	double sizeWeightGA = 0.1;
-	double geoWeightGA = 5.0;
-	double perPrimGeoWeightGA = 0.1;
+	double size_weight = params.size_weight;
+	double geo_weight = params.geo_weight;
+	double per_prim_geo_weight = params.per_prim_geo_weight;//0.1;
 	
 	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, false, Schedule(), Schedule(), true);
 
@@ -147,10 +145,9 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 		[](const ManifoldPtr m) {return m->pc; });
 	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
 
-	double cell_size = 0.05;
-	double max_dist = 0.05;
-	double allow_cube_cutout = true;
-
+	double cell_size = params.cell_size;
+	double max_dist = params.max_dist;
+	double allow_cube_cutout = params.allow_cube_cutout;
 
 	//auto model_sdf = std::make_shared<ModelSDF>(/*full_pc*/non_static_pointcloud, cell_size, block_radius, sigma_sq);
 	auto model_sdf = std::make_shared<ModelSDF>(full_pc, cell_size);
@@ -158,12 +155,13 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
-	PrimitiveSetIterationStopCriterion criterion(10, PrimitiveSetRank(0.00001), 10);
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.55, 0.15, 0.15, 0.0, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001);
+	PrimitiveSetIterationStopCriterion criterion(params.max_count, PrimitiveSetRank(0.00001), params.max_iterations);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, params.polytope_prob);
 	
-	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, allow_cube_cutout, model_sdf);
+	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, allow_cube_cutout, model_sdf, 
+		geo_weight, per_prim_geo_weight, size_weight);
 
-	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geoWeightGA, perPrimGeoWeightGA, sizeWeightGA, true);
+	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, size_weight, true);
 	PrimitiveSetGA ga;
 	auto res = ga.run(paramsGA1, selector, creator, *ranker, criterion, popMan);
 	
@@ -181,8 +179,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 	// Filter
 	//OutlierDetector od("C:/Projekte/outlier_detector");
-	ThresholdOutlierDetector od(0.01);
-	SimilarityFilter sf(0.0, cell_size);
+	ThresholdOutlierDetector od(params.filter_threshold);
+	SimilarityFilter sf(params.similarity_filter_epsilon, cell_size);
 
 	auto primitives = res.population[0].creature;
 	primitives.insert(primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
@@ -207,7 +205,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
-	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes) :
+	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob) :
 	ms(ms),
 	intraCrossProb(intraCrossProb),
 	mutationDistribution(mutationDistribution),
@@ -216,7 +214,8 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
 	angleEpsilon(angleEpsilon),
 	availableManifoldTypes(getAvailableManifoldTypes(ms)),
-	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes)
+	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes),
+	polytope_prob(polytope_prob)
 {
 	rndEngine.seed(rndDevice());
 }
@@ -277,8 +276,8 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 			{
 				std::cout << "Mutation Remove" << std::endl;
 
-				//int idx = getRandomPrimitiveIdx(newPS);
-				//newPS.erase(newPS.begin() + idx);
+				int idx = getRandomPrimitiveIdx(newPS);
+				newPS.erase(newPS.begin() + idx);
 
 				break;
 			}
@@ -389,7 +388,7 @@ std::string lmu::PrimitiveSetCreator::info() const
 
 lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const Eigen::Vector3d& direction,
 	const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection,
-	const Eigen::Vector3d& point, double minimumPointDistance) const
+	const Eigen::Vector3d& point, double minimumPointDistance, bool ignorePointDistance) const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
@@ -399,7 +398,7 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 
 	// Filter manifold list.
 	std::copy_if(ms.begin(), ms.end(), std::back_inserter(candidates),
-		[type, &alreadyUsed, &direction, cos_e, ignoreDirection, &point, minimumPointDistance](const ManifoldPtr& m)
+		[type, &alreadyUsed, &direction, cos_e, ignoreDirection, &point, minimumPointDistance, ignorePointDistance](const ManifoldPtr& m)
 	{
 		//std::cout << (direction.norm() || ignoreDirection) << " " << m->n.norm() << std::endl;
 
@@ -410,7 +409,7 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 			return lmu::manifoldsEqual(*m, *alreadyUsedM, 0.0001);
 		}) == alreadyUsed.end() &&
 			(ignoreDirection || std::abs(direction.dot(m->n)) > cos_e) &&	// same direction (or flipped).
-			std::abs((point - m->p).dot(m->n)) > minimumPointDistance;		// distance between point and plane  
+			(ignorePointDistance || std::abs((point - m->p).dot(m->n)) > minimumPointDistance);	// distance between point and plane  
 	});
 
 	if (candidates.empty())
@@ -486,6 +485,9 @@ lmu::PrimitiveType lmu::PrimitiveSetCreator::getRandomPrimitiveType() const
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
+	static std::bernoulli_distribution db{};
+	using parmb_t = decltype(db)::param_type;
+
 	auto n = du(rndEngine, parmu_t{ 0, (int)availableManifoldTypes.size() - 1 });
 	auto it = std::begin(availableManifoldTypes);
 	std::advance(it, n);
@@ -493,7 +495,7 @@ lmu::PrimitiveType lmu::PrimitiveSetCreator::getRandomPrimitiveType() const
 	switch (*it)
 	{
 	case ManifoldType::Plane:
-		return PrimitiveType::Box;
+		return db(rndEngine, parmb_t{ polytope_prob }) ? PrimitiveType::Polytope : PrimitiveType::Box;
 	case ManifoldType::Cylinder:
 		return PrimitiveType::Cylinder;
 	default:
@@ -550,19 +552,26 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		if (!plane)
 			break;
 		planes.push_back(plane);
-
-		/*std::cout << "####################################" << std::endl;
-		if (planes.size() == 6)
-		{
-		for (int i = 0; i < planes.size(); ++i)
-		{
-		std::cout
-		<< "p: " << planes[i]->p.x() << " " << planes[i]->p.y() << " " << planes[i]->p.z()
-		<< " n: " << planes[i]->n.x() << " " << planes[i]->n.y() << " " << planes[i]->n.z() << std::endl;
-		}
-		}*/
-
+		
 		primitive = createBoxPrimitive(planes);
+	}
+	break;
+
+	case PrimitiveType::Polytope:
+	{
+		ManifoldSet planes;
+		int num_planes = du(rndEngine, parmu_t{ 4, 6 }); 
+				
+		for (int i = 0; i < num_planes; ++i)
+		{
+			auto plane = getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+			if (plane)
+			{
+				planes.push_back(plane);
+			}
+		}
+		
+		primitive = createPolytopePrimitive(planes);
 	}
 	break;
 
@@ -612,6 +621,8 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 	static std::bernoulli_distribution db{};
 	using parmb_t = decltype(db)::param_type;
 
+	const auto anyDirection = Eigen::Vector3d(0, 0, 0);
+
 	auto primitive = p;
 
 	switch (primitive.type)
@@ -627,6 +638,21 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 			newPlanes[planePairIdx + 1] = newPlane;
 
 			primitive = createBoxPrimitive(newPlanes);
+		}
+
+		break;
+	}
+
+	case PrimitiveType::Polytope:
+	{
+		int plane_idx = du(rndEngine, parmu_t{ 0, (int)p.ms.size() - 1 });
+		auto new_plane = getManifold(ManifoldType::Plane, anyDirection, p.ms, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true); 
+		if (new_plane)
+		{
+			auto new_planes = ManifoldSet(p.ms);
+			new_planes[plane_idx] = new_plane;
+
+			primitive = createPolytopePrimitive(new_planes);
 		}
 
 		break;
@@ -658,7 +684,8 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 // ==================== RANKER ====================
 
 lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
-	double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf) :
+	double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
+	double geo_weight, double per_prim_geo_weight, double size_weight) :
 	pc(pc),
 	ms(ms),
 	staticPrimitives(staticPrims),
@@ -666,7 +693,10 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc, const Manifold
 	cell_size(cell_size),
 	model_sdf(model_sdf),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
-	allow_cube_cutout(allow_cube_cutout)
+	allow_cube_cutout(allow_cube_cutout),
+	geo_weight(geo_weight),
+	per_prim_geo_weight(per_prim_geo_weight),
+	size_weight(size_weight)
 {
 }
 
@@ -786,10 +816,15 @@ void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std:
 			v0 = v[index[0]]; v1 = v[index[1]]; v2 = v[index[2]];
 		}
 	}
+
+	const double max_len = 50.0;
+
 	double v0_len, v1_len, v2_len;
-	v0_len = v0.norm();
-	v1_len = v1.norm();
-	v2_len = v2.norm();
+	v0_len = std::min(v0.norm(), max_len * cell_size);
+	v1_len = std::min(v1.norm(), max_len * cell_size);
+	v2_len = std::min(v2.norm(), max_len * cell_size);
+
+	//std::cout << "len: " << v0_len << " " << v1_len << " " << v2_len << std::endl;
 
 	v0.normalize(); v1.normalize(); v2.normalize();
 
@@ -809,7 +844,8 @@ void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std:
 				// Compute voxel pos in world coordinates.
 				Eigen::Vector3d p = p0 + v0 * x + v1 * y + v2 * z;
 
-				f(p);
+				//if (prim.imFunc->signedDistance(p) <= 0.0)
+					f(p);
 
 				if (last_z)
 				{
@@ -856,6 +892,12 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 	std::vector<double> scores;
 	for (const auto& prim : ps)
 	{
+		if (per_prim_geo_weight == 0.0)
+		{
+			scores.push_back(0.0);
+			continue;
+		}
+
 		double inside_voxels = 0.0;
 		double outside_voxels = 0.0;
 		int all_voxels = 0;
@@ -863,10 +905,11 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 		iterate_over_prim_volume(prim, cell_size, [&prim, this, &inside_voxels, &outside_voxels, &all_voxels, &points](const Eigen::Vector3d& p)
 		{
 
+			Eigen::Matrix<double, 1, 6 > pn;
+
 			if (prim.imFunc->signedDistance(p) <= 0)
 			{
 
-				Eigen::Matrix<double, 1, 6 > pn;
 				auto sdf = model_sdf->sdf_value(p);
 
 				double w = lmu::clamp(sdf.w, 0.0f, 1.0f);
@@ -881,11 +924,14 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 					outside_voxels -= w;
 					pn.row(0) << p.transpose(), 1.0, 0, 0;
 				}
-
-				points.push_back(pn);
-
 				all_voxels++;
 			}
+			else
+			{
+				pn.row(0) << p.transpose(), 0.5,0.0,0.5;
+			}
+
+			points.push_back(pn);
 		});
 
 		const int lower_voxel_bound = 5;
@@ -914,10 +960,10 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 	
 
 	// Geometry score
-	double geo_score = get_geo_score(ps);
+	double geo_score = geo_weight == 0.0 ? 0.0 : get_geo_score(ps);
 
 	// Size score
-	double size_score = (double)ps.size() / (double)maxPrimitiveSetSize;
+	double size_score = size_score == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	// Per prim score
 		
@@ -1050,6 +1096,53 @@ std::string lmu::PrimitiveSetPopMan::info() const
 	return std::string();
 }
 
+lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
+{
+	if (planes.size() < 4)
+	{
+		return Primitive::None();
+	}
+
+	// Get point that is guaranteed to be inside of the polytope. 
+	// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
+	Eigen::Vector3d inside_point;
+	double num_points = 0.0;
+	for (const auto& p : planes)
+	{
+		if (p->pc.rows() > 0)
+		{
+			inside_point += Eigen::Vector3d(p->pc.row(0).x(), p->pc.row(0).y(), p->pc.row(0).z());
+			num_points += 1.0;
+		}
+	}
+	inside_point /= num_points;
+
+	std::vector<Eigen::Vector3d> p;
+	std::vector<Eigen::Vector3d> n;
+
+	for (int i = 0; i < planes.size(); ++i)
+	{
+		auto new_plane = planes[i];
+
+		// Flip plane normal if inside_point would be outside.
+		double d = (inside_point - new_plane->p).dot(new_plane->n);
+		if (d > 0.0)
+		{
+			new_plane->n = -1.0 * new_plane->n;
+		}
+
+		n.push_back(new_plane->n);
+		p.push_back(new_plane->p);
+	} 
+
+	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
+	if (polytope->empty())
+	{
+		return Primitive::None();
+	}
+	
+	return Primitive(polytope, planes, PrimitiveType::Polytope);
+}
 
 lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 {
@@ -1294,94 +1387,6 @@ double rank_node(const lmu::CSGNode& n, const lmu::ModelSDF& m)
 	return score;
 }
 
-lmu::CSGNode lmu::generate_tree(const GAResult& res, const lmu::PointCloud& inp_pc, double cutout_threshold, double sampling_grid_size)
-{	
-	std::vector<CSGNode> diff_prims;
-	std::vector<CSGNode> union_prims;
-	int i = 0;
-	for (const auto& p : res.primitives)
-	{
-		p.imFunc->setName(primitiveTypeToString(p.type) + "_" + std::to_string(i++));
-		auto geo = geometry(p.imFunc);
-	
-
-		if (res.ranker->model_sdf->get_dh_type(p,0.9, 0.1) == DHType::OUTSIDE)
-			diff_prims.push_back(geo);
-		else
-			union_prims.push_back(geo);
-	}
-
-	CSGNode node = opDiff({ opUnion(union_prims), opUnion(diff_prims) });
-	
-	node = to_binary_tree(node);
-
-	// Remove duplicate primitives and primitives that 
-	// TODO
-
-	// Find nearest planes to cylinder caps and use them with cylinders
-	// TODO
-
-	// After Redundancy Removal: check for each primitive involved, if it is needed or if the overal node score (against voxel grid or point cloud) is better or the same without it.
-	// TODO
-
-	// Fix the weird -1.0 * gradient issue
-	// TODO
-
-	lmu::writeNode(node, "extracted_node_bef.gv");
-
-	auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1.0, -1.0, -1.0), Eigen::Vector3d(1.0, 1.0, 1.0));
-	igl::writeOBJ("ex_node_bef.obj", m.vertices, m.indices);
-
-	std::cout << "#Nodes: " << numNodes(node) << std::endl;
-
-	
-	//node = remove_redundancies(node, 0.01, lmu::PointCloud());
-
-	std::cout << "After #Nodes: " << numNodes(node) << std::endl;
-
-	static auto const empty_set = lmu::CSGNode(std::make_shared<lmu::NoOperation>("0"));
-	const auto e = 0.000001;
-	auto prims = lmu::allDistinctFunctions(node);
-	double best_rank = rank_node(node, *res.ranker->model_sdf);
-	
-	for (const auto& prim : prims)
-	{
-		auto n = node;
-		
-		std::cout << "#Nodes: " << numNodes(n) << std::endl;
-
-		lmu::visit(n, [&prim](lmu::CSGNode& c) {if (c.function() == prim) c = empty_set; });
-		n = remove_redundancies(n, sampling_grid_size, lmu::PointCloud());
-
-		std::cout << "After #Nodes: " << numNodes(n) << std::endl;
-
-		double cur_rank = rank_node(n, *res.ranker->model_sdf);
-
-		if (cur_rank == std::numeric_limits<double>::infinity())
-		{
-			std::cout << "Primitive " << prim->name() << " of type " << iFTypeToString(prim->type()) << " has infinity score." << std::endl;
-			node = n;
-		}		  
-		else if (best_rank - cur_rank > e) // smaller is better.
-		{
-			std::cout << "Primitive " << prim->name() << " of type " << iFTypeToString(prim->type())  << " does not contribute and thus is removed." << std::endl;
-			best_rank = cur_rank;
-			node = n; 
-		}
-		else
-		{
-			std::cout << "Primitive OK" << std::endl;
-		}
-	}
-	
-	m = lmu::computeMesh(node, Eigen::Vector3i(70, 70, 70), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-	igl::writeOBJ("ex_node_aft.obj", m.vertices, m.indices);
-
-	
-	
-	return node;
-}
-
 lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 	data(nullptr),
 	voxel_size(voxel_size)
@@ -1520,7 +1525,7 @@ lmu::PointCloud lmu::ModelSDF::to_pc() const
 				{
 					//std::cout << " " << v.v;
 					Eigen::Matrix<double, 1, 6> point;
-					point << p.transpose(), std::abs(v.v) * 10.0, std::abs(v.v) * 10.0, std::abs(v.v) * 10.0;
+					point << p.transpose(), std::abs(v.v) * 1.0, std::abs(v.v) * 1.0, std::abs(v.v) * 1.0;
 					points.push_back(point);
 				}
 			}

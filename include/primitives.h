@@ -115,14 +115,15 @@ namespace lmu
 	using ManifoldPtr = std::shared_ptr<Manifold>;
 	using ManifoldSet = std::vector<ManifoldPtr>;
 
-	const int numPrimitiveTypes = 5;
+	const int numPrimitiveTypes = 6;
 	enum class PrimitiveType
 	{
 		None = 0,
 		Cylinder, 
 		Sphere,
 		Cone,
-		Box
+		Box,
+		Polytope
 	};
 
 	ManifoldType fromPrimitiveType(PrimitiveType pt);

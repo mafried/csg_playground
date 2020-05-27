@@ -625,7 +625,6 @@ CSGNode lmu::integrate_node(const CSGNode& into, const PrimitiveSelection& s)
 				}
 				else if (res.childsRef()[0].operationType() == CSGNodeOperationType::Noop)
 				{
-					std::cout << "HERE " << std::endl;
 					res.childsRef()[0] = union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0];
 				}
 				else
@@ -741,11 +740,11 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 	int population_size = 150;
 	double mut_prob = 0.4;
 	double cross_prob = 0.4;
-	double geo_weight = 1.0;
-	double size_weight = 0.01;
+	double geo_weight = params.geo_weight;
+	double size_weight = params.size_weight;
 
 	SelectionTournamentSelector selector(2);
-	SelectionIterationStopCriterion criterion(10, SelectionRank(0.00000001), 100);
+	SelectionIterationStopCriterion criterion(params.max_count, SelectionRank(0.00000001), params.max_iterations);
 
 	auto primitives = decomposition.get_primitives(params.use_all_prims_for_ga);
 	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);
@@ -797,7 +796,11 @@ lmu::SelectionRank::SelectionRank(double geo, double size, double combined) :
 {
 }
 
-lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, 
+lmu::CSGNodeGenerationParams::CSGNodeGenerationParams()
+{
+}
+
+lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob,
 	double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy) :
 	create_new_prob(create_new_prob),
 	active_prob(active_prob),

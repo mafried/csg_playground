@@ -9,6 +9,7 @@
 #include <tuple>
 #include <chrono>
 
+#include "params.h"
 #include "csgnode.h"
 #include "csgnode_helper.h"
 #include "primitives.h"
@@ -16,7 +17,6 @@
 #include "prim_select_ga.h"
 #include "pointcloud.h"
 #include "cluster.h"
-
 
 lmu::ManifoldSet g_manifoldSet;
 int g_manifoldIdx = 0;
@@ -211,7 +211,6 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		viewer.data().add_points(aabb.c.transpose(), Eigen::Vector3d(1,0,0).transpose());
 		viewer.data().add_points((aabb.c - aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
 		viewer.data().add_points((aabb.c + aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
-
 	}
 		
 	update(viewer);
@@ -227,32 +226,90 @@ int main(int argc, char *argv[])
 	viewer.mouse_mode = igl::opengl::glfw::Viewer::MouseMode::Rotation;
 	viewer.callback_key_down = &key_down;
 
+	// Load config
+	auto config_file = std::string(argv[1]);
+	std::cout << "--------------------------- CONFIG ---------------------------" << std::endl;
+	std::cout << "Load config from " << config_file << std::endl;
+
+	lmu::ParameterSet s(config_file);
+	
+	auto params = lmu::RansacParams();
+	params.probability = s.getDouble("Ransac", "Probability", 0.1);//0.1;
+	params.min_points = s.getInt("Ransac", "MinPoints", 30);
+	params.normal_threshold = s.getDouble("Ransac", "NormalThreshold", 0.9);
+	params.cluster_epsilon = s.getDouble("Ransac", "ClusterEpsilon", 0.02);// 0.2;
+	params.epsilon = s.getDouble("Ransac", "Epsilon", 0.02);// 0.2;
+	auto ransac_iterations = s.getInt("Ransac", "Iterations", 3);
+
+	auto ransac_params = lmu::RansacMergeParams();
+	ransac_params.angle_threshold = s.getDouble("Ransac", "Merge.AngleThreshold", 0.6283);
+	ransac_params.dist_threshold = s.getDouble("Ransac", "Merge.DistanceThreshold", 0.01);
+	ransac_params.dot_threshold = s.getDouble("Ransac", "Merge.DotThreshold", 0.9);
+
+	auto inside_threshold = s.getDouble("Decomposition", "InsideThreshold", 0.9);
+	auto outside_threshold = s.getDouble("Decomposition", "OutsideThreshold", 0.1);
+	auto voxel_size = s.getDouble("Decomposition", "VoxelSize", 0.01);
+
+	lmu::CSGNodeGenerationParams ng_params;
+	ng_params.create_new_prob = s.getDouble("NodeGeneration", "CreateNewProbability", 0.5);
+	ng_params.active_prob = s.getDouble("NodeGeneration", "ActiveProbability", 0.5);
+	ng_params.dh_type_prob = s.getDouble("NodeGeneration", "DhTypeProbability", 0.5);
+	ng_params.evolve_dh_type = s.getBool("NodeGeneration", "EvolveDhType", false);
+	ng_params.use_prim_geo_scores_as_active_prob = s.getBool("NodeGeneration", "UsePrimitiveGeoScoresAsActiveProbability", false);
+	ng_params.use_all_prims_for_ga = s.getBool("NodeGeneration", "UseAllPrimitivesForGa", false);
+	ng_params.max_tree_depth = s.getInt("NodeGeneration", "MaxTreeDepth", 25);
+	ng_params.subtree_prob = s.getDouble("NodeGeneration", "SubtreeProbability", 0.5);
+	ng_params.creator_strategy = s.getStr("NodeGeneration", "CreatorStrategy", "Selection") == "Node"? lmu::CreatorStrategy::NODE : lmu::CreatorStrategy::SELECTION;
+
+	ng_params.size_weight = s.getDouble("NodeGeneration", "SizeWeight", 0.01);
+	ng_params.geo_weight = s.getDouble("NodeGeneration", "GeoWeight", 1.0);
+	ng_params.max_iterations = s.getInt("NodeGeneration", "MaxIterations", 100); 
+	ng_params.max_count = s.getInt("NodeGeneration", "MaxCount", 10);
+
+	std::string path = s.getStr("Data", "InputFolder", "C:/Projekte/visigrapp2020/data/");
+	std::string out_path = s.getStr("Data", "OutputFolder", "");
+
+	lmu::PrimitiveGaParams prim_params;
+		
+	prim_params.size_weight = s.getDouble("Primitives", "SizeWeight", 0.1);// = 0.1;
+	prim_params.geo_weight = s.getDouble("Primitives", "GeoWeight", 0.0);// = 0.0;
+	prim_params.per_prim_geo_weight = s.getDouble("Primitives", "PerPrimGeoWeight", 1.0);// = 1.0;//0.1;
+
+	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
+	prim_params.polytope_prob = s.getDouble("Primitives", "PolytopeProbability", 0.0); // = 0.0;
+
+	prim_params.cell_size = s.getDouble("Primitives", "VoxelSize", 0.05);// = 0.05;
+	prim_params.max_dist = s.getDouble("Primitives", "MaxDistance", 0.05);// = 0.05;
+	prim_params.allow_cube_cutout = s.getBool("Primitives", "AllowCubeCutout", true);// = true;
+
+	prim_params.max_iterations = s.getInt("Primitives", "MaxIterations", 30); //30
+	prim_params.max_count = s.getInt("Primitives", "MaxCount", 30);; //30
+
+	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilterEpsilon", 0.0); //0.0
+	prim_params.filter_threshold = s.getDouble("Primitives", "FilterThreshold", 0.01); //0.01
+	
+	s.print();
+	std::cout << "--------------------------------------------------------------" << std::endl;
+
+			
 	// Initialize
 	update(viewer);
 
 	bool use_clusters = true;
 
-
-	std::vector<std::string> models = { "test1", "test2", "test8", "test12", "test15" };
-	std::string m = { "test12" };
-
-	ofstream f;
-	f.open("ransac_info.txt");
+	ofstream ransac_f;
+	ransac_f.open(out_path + "ransac_info.txt");
 
 	try
-	{		
-		f << m << std::endl;
-
-		std::string path = "C:/Projekte/visigrapp2020/data/" + m;
-						
+	{							
 		// read complete point cloud
-		auto pc = lmu::readPointCloud(path + "/pc.txt");
+		auto pc = lmu::readPointCloud(path + "pc.txt");
 
 		// Primitive estimation based on clusters.
 		std::vector<lmu::Cluster> clusters;
 		if (use_clusters)
 		{
-			clusters = lmu::readClusterFromFile(path + "/clusters.txt", 1.0);
+			clusters = lmu::readClusterFromFile(path + "clusters.txt", 1.0);
 		}
 		else
 		{
@@ -263,8 +320,7 @@ int main(int argc, char *argv[])
 		// Scale input pc.
 		pc = lmu::to_canonical_frame(pc);
 		viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
-
-		
+				
 		//goto _LAUNCH;
 
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
@@ -282,65 +338,18 @@ int main(int argc, char *argv[])
 		merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
 		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
 		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
-
-		//viewer.data().set_points(merged_cluster_pc.leftCols(3), merged_cluster_pc.rightCols(3));
-		//goto _LAUNCH;
-
-
-		/*
-		auto in_pc = lmu::to_canonical_frame(clusters[0].pc);
 		
-		double voxel_size = 0.01;
-		double distance_epsilon = 0.001;
-
-		auto m = make_shared<lmu::ModelSDF>(in_pc, voxel_size, 0.1);
-		auto ms = lmu::ManifoldSet();
-		
-		auto box_t = Eigen::Affine3d(Eigen::Translation3d(Eigen::Vector3d(0, 0, 0)));
-		//box_t.rotate(Eigen::AngleAxis<double>(1.0, Vector3d::UnitX()));
-		auto box = std::make_shared<lmu::IFBox>(box_t, Eigen::Vector3d(0.2,0.1,0.1),0, "");
-		auto box_prim = lmu::Primitive(box, ms, lmu::PrimitiveType::Box);
-		lmu::PrimitiveSet ps; 
-		ps.push_back(box_prim);
-
-		lmu::PrimitiveSetRanker ranker(in_pc, ms, ps, distance_epsilon, 16, voxel_size, m);
-
-
-		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		auto scores = ranker.get_per_prim_geo_score(ps, voxel_size / 2.0, distance_epsilon, *m, points);
-		std::cout << "Score: " << scores[0] << std::endl;
-		
-		auto mesh = box->meshCRef();
-		viewer.data().set_mesh(mesh.vertices, mesh.indices);
-		
-		auto out_pc = in_pc;//m->to_pc();
-		viewer.data().set_points(out_pc.leftCols(3), out_pc.rightCols(3));
-		auto box_pc = lmu::pointCloudFromVector(points);
-		viewer.data().add_points(box_pc.leftCols(3), box_pc.rightCols(3));
-
-
-		goto _LAUNCH;
-		*/
-
-
-		auto params = lmu::RansacParams();
-		params.probability = 0.1;//0.1;
-		params.min_points = 30;
-		params.normal_threshold = 0.9;
-		params.cluster_epsilon = 0.02;// 0.2;
-		params.epsilon = 0.02;// 0.2;
-
-		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, 3, lmu::RansacMergeParams(0.01, 0.9, 0.62831));
+		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, ransac_iterations, ransac_params);
 
 		g_manifoldSet = ransacRes.manifolds;
 
-		f << ransacRes.manifolds.size() << " ";
+		ransac_f << ransacRes.manifolds.size() << " ";
 
 		lmu::TimeTicker t;
 
 		t.tick();
 			
-		f << std::endl;
+		ransac_f << std::endl;
 
 		//goto _LAUNCH;
 
@@ -348,7 +357,7 @@ int main(int argc, char *argv[])
 		for (const auto& m : ransacRes.manifolds)
 		{
 			m->pc = lmu::farthestPointSampling(m->pc, 300);
-			f << std::endl;
+			ransac_f << std::endl;
 		}		
 
 		t.tick();
@@ -357,9 +366,9 @@ int main(int argc, char *argv[])
 
 
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc);
+		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc, prim_params);
 		lmu::PrimitiveSet primitives = res.primitives;
-		lmu::ManifoldSet manifolds = ransacRes.manifolds;//res.manifolds;
+		lmu::ManifoldSet manifolds = ransacRes.manifolds;
 
 		for (const auto& p : primitives)
 			std::cout << "Primitive: " << p << std::endl;
@@ -375,7 +384,7 @@ int main(int argc, char *argv[])
 
 		auto node = lmu::opNo();
 
-		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, 0.9, 0.1, 0.01);
+		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, inside_threshold, outside_threshold, voxel_size);
 		
 		if (decomposition.remaining_primitives.empty())
 		{
@@ -383,10 +392,9 @@ int main(int argc, char *argv[])
 		}		
 		else
 		{
-			node = lmu::generate_csg_node(decomposition, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, false, 0.5, false, false, 25, 0.5, lmu::CreatorStrategy::SELECTION));
+			node = lmu::generate_csg_node(decomposition, res.ranker, ng_params);
 		}
-
-		
+				
 		//auto node = lmu::generate_csg_node(primitives, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, false, 0.5, false)); 
 
 		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));// Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
@@ -394,14 +402,14 @@ int main(int argc, char *argv[])
 		viewer.data().set_points(pc_n.leftCols(3), pc_n.rightCols(3));
 																								//igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
 
-		lmu::toJSONFile(node, "ex_node.json");
-		lmu::writeNode(node, "ex_node.gv");
+		lmu::toJSONFile(node, out_path + "ex_node.json");
+		lmu::writeNode(node, out_path + "ex_node.gv");
 
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-		igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
+		igl::writeOBJ(out_path + "ex_node.obj", m.vertices, m.indices);
 		
 
-		f.close();
+		ransac_f.close();
 	}
 	catch (const std::exception& ex)
 	{

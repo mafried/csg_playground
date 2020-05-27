@@ -88,6 +88,8 @@ namespace lmu
 
 	struct CSGNodeGenerationParams
 	{
+		CSGNodeGenerationParams();
+
 		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, 
 			bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy);
 
@@ -100,6 +102,12 @@ namespace lmu
 		int max_tree_depth;
 		double subtree_prob;
 		CreatorStrategy creator_strategy;
+
+		double geo_weight; // = 1.0;
+		double size_weight;// = 0.01;
+
+		int max_iterations; //100
+		int max_count; //10
 	};
 
 	struct PrimitiveDecomposition
