@@ -224,7 +224,7 @@ namespace lmu
 		std::string info() const
 		{
 			std::stringstream ss;
-			ss << "No Change Stop Criterion Selector (maxCount=" << _maxCount << ", delta="<< _delta << ", "<< _maxIterations << ")";
+			ss << "No Change Stop Criterion Selector (maxCount=" << _maxCount << ", delta="<< _delta << ", maxIterations="<< _maxIterations << ")";
 			return ss.str();
 		}
 
@@ -374,10 +374,10 @@ namespace lmu
 					stream << "# Best Candidate: " << std::endl;
 
 					stream << bestCreature->info() << std::endl;
-
-					stream << "# iteration    best candidate score    worst candidate score    optimization durations    ranking durations    sorting durations    scm durations" << std::endl;
 				}
 
+				stream << "# iteration    best candidate score    worst candidate score    optimization durations    ranking durations    sorting durations    scm durations" << std::endl;
+				
 				for (int i = 0; i < bestCandidateScores.size(); ++i)
 				{
 					stream << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << optDurations[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;

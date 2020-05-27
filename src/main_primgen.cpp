@@ -19,7 +19,7 @@ lmu::Mesh g_mesh;
 lmu::PointCloud g_pc;
 Eigen::MatrixXd g_lines;
 
-#define WITH_VIEWER_GUI
+//#define WITH_VIEWER_GUI
 
 
 
@@ -147,10 +147,10 @@ lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d
 	case 1:
 		return lmu::opPrim({ lmu::geo<lmu::IFSphere>(trans, dims.x() * primitive_scaling,"") });
 	case 2:
-		return lmu::opPrim({ lmu::geo<lmu::IFTorus>(trans, dims.minCoeff() / 2.0 * primitive_scaling, dims.maxCoeff() / 2.0 * primitive_scaling, "") });
+		return lmu::opPrim({ lmu::geo<lmu::IFTorus>(trans, dims.minCoeff() * primitive_scaling * 0.5, dims.maxCoeff() * primitive_scaling * 0.5, "") });
 	case 3:
 		return lmu::opPrim({ 
-			lmu::geo<lmu::IFCylinder>(trans, dims.minCoeff() / 2.0 * primitive_scaling, 100, ""),
+			lmu::geo<lmu::IFCylinder>(trans, dims.maxCoeff() / 2.0 * primitive_scaling, 100, ""),
 			lmu::geo<lmu::IFPlane>(trans * t1, ""),
 			lmu::geo<lmu::IFPlane>(trans * t2, "")
 			});
@@ -283,7 +283,7 @@ int main(int argc, char** argv)
 			}
 
 			auto model_pc = lmu::computePointCloud(model, 
-				lmu::CSGNodeSamplingParams(output_sampling_max_d, output_sampling_max_angle_d, 0.0, output_sampling_rate, Eigen::Vector3d(-0.5,-0.5,-0.5), Eigen::Vector3d(1.5,1.5,1.5)));
+				lmu::CSGNodeSamplingParams(output_sampling_max_d, output_sampling_max_angle_d, 0.0, output_sampling_rate, Eigen::Vector3d(-0.2,-0.2,-0.2), Eigen::Vector3d(1.2,1.2,1.2)));
 						
 			model_pc = lmu::farthestPointSampling(model_pc, output_sampling_point_cloud_size);
 
@@ -475,7 +475,7 @@ int main(int argc, char** argv)
 
 #ifdef WITH_VIEWER_GUI
 		VIEWER:
-		viewer.data().point_size = 5.0;
+		viewer.data().point_size = 3.0;
 		viewer.core.background_color = Eigen::Vector4f(1, 1, 1, 1);
 		viewer.launch();
 #endif 

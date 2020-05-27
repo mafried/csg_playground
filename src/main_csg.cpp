@@ -287,6 +287,8 @@ int main(int argc, char *argv[])
 
 	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilterEpsilon", 0.0); //0.0
 	prim_params.filter_threshold = s.getDouble("Primitives", "FilterThreshold", 0.01); //0.01
+
+	prim_params.num_elite_injections = s.getInt("Primitives", "NumEliteInjections", 1);
 	
 	s.print();
 	std::cout << "--------------------------------------------------------------" << std::endl;
@@ -297,8 +299,10 @@ int main(int argc, char *argv[])
 
 	bool use_clusters = true;
 
-	ofstream ransac_f;
-	ransac_f.open(out_path + "ransac_info.txt");
+	ofstream res_f, node_ga_f, prim_ga_f;
+	res_f.open(out_path + "result.txt");
+	node_ga_f.open(out_path + "node_ga.txt");
+	prim_ga_f.open(out_path + "prim_ga.txt");
 
 	try
 	{							
@@ -321,8 +325,6 @@ int main(int argc, char *argv[])
 		pc = lmu::to_canonical_frame(pc);
 		viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
 				
-		//goto _LAUNCH;
-
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
 		std::vector<lmu::PointCloud> cluster_pcs;
 		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs),[](const auto& c) { return c.pc; });
@@ -339,34 +341,27 @@ int main(int argc, char *argv[])
 		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
 		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
 		
+		lmu::TimeTicker t;
+
+		// RANSAC 
 		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, ransac_iterations, ransac_params);
 
 		g_manifoldSet = ransacRes.manifolds;
 
-		ransac_f << ransacRes.manifolds.size() << " ";
-
-		lmu::TimeTicker t;
-
-		t.tick();
-			
-		ransac_f << std::endl;
-
-		//goto _LAUNCH;
-
+		res_f << "RANSAC Duration=" << t.tick() << std::endl;
+		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
+				
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
 			m->pc = lmu::farthestPointSampling(m->pc, 300);
-			ransac_f << std::endl;
 		}		
-
-		t.tick();
-
-		std::cout << "FPS: " << t.current << "ms" << std::endl;
-
+		res_f << "FPS Duration=" << t.tick() << std::endl;
 
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc, prim_params);
+		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc, prim_params, prim_ga_f);
+		res_f << "PrimitiveGA Duration=" << t.tick() << std::endl;
+
 		lmu::PrimitiveSet primitives = res.primitives;
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;
 
@@ -376,40 +371,33 @@ int main(int argc, char *argv[])
 		g_primitiveSet = primitives;
 		g_ranker = res.ranker;
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
-		//viewer.data().set_points(g_sdf_model_pc.leftCols(3), g_sdf_model_pc.rightCols(3));
-
 		g_res_pc = pc;
 
 		// Extract CSG tree 
-
+		t.tick();
 		auto node = lmu::opNo();
-
 		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, inside_threshold, outside_threshold, voxel_size);
-		
+		res_f << "Decomposition Duration=" << t.tick() << std::endl;
 		if (decomposition.remaining_primitives.empty())
 		{
 			node = decomposition.node;
 		}		
 		else
 		{
-			node = lmu::generate_csg_node(decomposition, res.ranker, ng_params);
-		}
-				
-		//auto node = lmu::generate_csg_node(primitives, res.ranker, lmu::CSGNodeGenerationParams(0.5, 0.5, false, 0.5, false)); 
-
-		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));// Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
+			t.tick();
+			node = lmu::generate_csg_node(decomposition, res.ranker, ng_params, node_ga_f);
+			res_f << "NodeGa Duration=" << t.tick() << std::endl;
+		}				
+	
+		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));
 		
-		viewer.data().set_points(pc_n.leftCols(3), pc_n.rightCols(3));
-																								//igl::writeOBJ("ex_node.obj", m.vertices, m.indices);
-
-		lmu::toJSONFile(node, out_path + "ex_node.json");
-		lmu::writeNode(node, out_path + "ex_node.gv");
-
+		viewer.data().set_points(pc_n.leftCols(3), pc_n.rightCols(3));											
+		lmu::toJSONFile(node, out_path + "tree.json");
+		lmu::writeNode(node, out_path + "tree.gv");
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-		igl::writeOBJ(out_path + "ex_node.obj", m.vertices, m.indices);
-		
+		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);		
 
-		ransac_f.close();
+		res_f.close();
 	}
 	catch (const std::exception& ex)
 	{
@@ -420,7 +408,5 @@ _LAUNCH:
 
 	viewer.data().point_size = 5.0;
 	viewer.core.background_color = Eigen::Vector4f(0.5, 0.5, 0.5, 0.5);
-
 	viewer.launch();
-
 }

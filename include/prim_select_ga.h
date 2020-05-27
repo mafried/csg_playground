@@ -37,6 +37,11 @@ namespace lmu
 		int get_num_active() const;
 
 		size_t hash(size_t seed) const;
+
+		std::string info() const
+		{
+			return std::string();
+		}
 		
 		// Needed for node-based creator.
 		CSGNode node;
@@ -54,6 +59,11 @@ namespace lmu
 		double geo;
 		double size;
 		double combined;
+
+		double geo_unnormalized;
+		double size_unnormalized;
+
+		void capture_unnormalized();
 
 		friend inline bool operator< (const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined < rhs.combined; }
 		friend inline bool operator> (const SelectionRank& lhs, const SelectionRank& rhs) { return rhs < lhs; }
@@ -128,7 +138,7 @@ namespace lmu
 	CSGNode integrate_node(const CSGNode& into, const PrimitiveSelection& s);
 	CSGNode integrate_node(const CSGNode& into, const CSGNode& node);
 
-	CSGNode generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params);
+	CSGNode generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params, std::ostream& stream);
 }
 
 #endif

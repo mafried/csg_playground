@@ -105,7 +105,7 @@ lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_i
 
 std::ostream & lmu::operator<<(std::ostream & out, const PrimitiveSetRank & r)
 {
-	out << r.geo << " " << r.per_prim_geo_sum << " " << r.size << std::endl;
+	out << "combined: " << r.combined << " geo: " << r.geo << " size: " << r.size << " prim geo avg: " << r.per_primitive_mean_score << " size unnormalized: " << r.size_unnormalized;
 	return out;
 }
 
@@ -117,7 +117,7 @@ void name_primitives(const lmu::PrimitiveSet& ps)
 		p.imFunc->setName(lmu::primitiveTypeToString(p.type) + std::to_string((counter[p.type]++)));
 }
 
-lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc, const PrimitiveGaParams& params)
+lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc, const PrimitiveGaParams& params, std::ostream& stream)
 {	
 	double distT = 0.02;
 	double angleT = M_PI / 9.0;
@@ -161,10 +161,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, max_dist, maxPrimitiveSetSize, cell_size, allow_cube_cutout, model_sdf, 
 		geo_weight, per_prim_geo_weight, size_weight);
 
-	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, size_weight, true);
+	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, size_weight, params.num_elite_injections);
 	PrimitiveSetGA ga;
 	auto res = ga.run(paramsGA1, selector, creator, *ranker, criterion, popMan);
 	
+	res.statistics.save(stream);
+
 	// ================ TMP ================
 	/*std::cout << "Serialize meshes" << std::endl;
 	std::string basename = "mid_out_mesh
@@ -973,7 +975,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 
 	auto per_prim_geo_score_sum = std::accumulate(per_prim_geo_scores.begin(), per_prim_geo_scores.end(), 0.0);
 
-	return PrimitiveSetRank(geo_score, per_prim_geo_score_sum, size_score, 0.0 /*computed later*/, per_prim_geo_scores);
+	auto score = PrimitiveSetRank(geo_score, per_prim_geo_score_sum, size_score, 0.0 /*computed later*/, per_prim_geo_scores);
+
+	score.capture_score_stats();
+
+	return score;
 }
 
 
@@ -986,13 +992,13 @@ std::string lmu::PrimitiveSetRanker::info() const
 
 lmu::PrimitiveSetPopMan::PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, int maxPrimitiveSetSize,
 	double geoWeight, double perPrimGeoWeight, double sizeWeight,
-	bool do_elite_optimization) :
+	int num_elite_injections) :
 	ranker(&ranker),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
 	geoWeight(geoWeight),
 	perPrimGeoWeight(perPrimGeoWeight),
 	sizeWeight(sizeWeight),
-	do_elite_optimization(do_elite_optimization)
+	num_elite_injections(num_elite_injections)
 {
 }
 
@@ -1012,7 +1018,7 @@ void lmu::PrimitiveSetPopMan::manipulateBeforeRanking(std::vector<RankedCreature
 void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
 {
 	// Add a primitive set consisting of primitives with best area score.
-	if (do_elite_optimization)
+	if (num_elite_injections > 0)
 	{
 		int max_primitives = maxPrimitiveSetSize;
 		std::vector<std::pair<const Primitive*, double>> all_primitives;
@@ -1043,7 +1049,8 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 
 			auto rank = ranker->rank(best_primitives);
 
-			population.push_back(RankedCreature<PrimitiveSet, PrimitiveSetRank>(best_primitives, rank));
+			for(int i = 0; i < num_elite_injections; ++i)
+				population.push_back(RankedCreature<PrimitiveSet, PrimitiveSetRank>(best_primitives, rank));
 		}
 	}
 
@@ -1769,4 +1776,10 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps)
 	}
 	
 	return filtered_prims;
+}
+
+void lmu::PrimitiveSetRank::capture_score_stats()
+{
+	per_primitive_mean_score = accumulate(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end(), 0.0) / (double)per_primitive_geo_scores.size();
+	size_unnormalized = size;
 }

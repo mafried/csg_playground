@@ -461,7 +461,7 @@ struct SelectionRanker
 		
 		auto sr = SelectionRank(d, size, 0.0);
 
-		//std::cout << "Size: " << (numNodes(s.node)) << " Score: " << sr << std::endl;
+		sr.capture_unnormalized();
 		
 		return sr;
 	}
@@ -545,7 +545,7 @@ using NodeGA = GeneticAlgorithm<PrimitiveSelection, CSGNodeCreator, SelectionRan
 
 std::ostream& lmu::operator<<(std::ostream& out, const SelectionRank& r)
 {
-	std::cout << "combined: " << r.combined << " geo: " << r.geo << " size: " << r.size << std::endl;
+	out << "combined: " << r.combined << " geo: " << r.geo << " size: " << r.size << " geo unnormalized: " << r.geo_unnormalized << " size unnormalized: " << r.size_unnormalized;
 	return out;
 }
 
@@ -734,7 +734,8 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 	}
 }
 
-CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params)
+CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params,
+	std::ostream& stream)
 {
 	int tournament_k = 2;
 	int population_size = 150;
@@ -763,6 +764,7 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
 			node = integrate_node(start_node, res.population[0].creature); 
+			res.statistics.save(stream);
 			break;
 		}
 	case CreatorStrategy::NODE:
@@ -772,11 +774,11 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
 			node = integrate_node(start_node, res.population[0].creature.node);
+			res.statistics.save(stream);
 			break;
 		}
 	}
-	writeNode(node, "node_node.gv");
-		
+	
 	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 
 	return node;
@@ -794,6 +796,12 @@ lmu::SelectionRank::SelectionRank(double geo, double size, double combined) :
 	size(size),
 	combined(combined)
 {
+}
+
+void lmu::SelectionRank::capture_unnormalized()
+{
+	geo_unnormalized = geo;
+	size_unnormalized = size;
 }
 
 lmu::CSGNodeGenerationParams::CSGNodeGenerationParams()

@@ -40,6 +40,11 @@ namespace lmu
 		double combined;
 		std::vector<double> per_primitive_geo_scores;
 
+		double per_primitive_mean_score;
+		double size_unnormalized;
+
+		void capture_score_stats();
+
 		operator double() const { return combined; }
 		
 		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined < rhs.combined; }
@@ -231,7 +236,7 @@ namespace lmu
 	{
 		PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, int maxPrimitiveSetSize,
 			double geoWeight, double perPrimGeoWeight, double sizeWeight,
-			bool do_elite_optimization);
+			int num_elite_injections);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const;
 		void manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const;
@@ -240,7 +245,7 @@ namespace lmu
 		double geoWeight;
 		double perPrimGeoWeight;
 		double sizeWeight;
-		bool do_elite_optimization;
+		int num_elite_injections;
 		int maxPrimitiveSetSize;
 
 		const PrimitiveSetRanker* ranker;
@@ -271,9 +276,11 @@ namespace lmu
 		double similarity_filter_epsilon; //0.0
 		double filter_threshold; //0.01
 
+		int num_elite_injections;
+
 	};
 
-	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const PrimitiveGaParams& params);
+	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const PrimitiveGaParams& params, std::ostream& stream);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
 	Primitive createPolytopePrimitive(const ManifoldSet& planes);

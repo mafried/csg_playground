@@ -190,6 +190,11 @@ namespace lmu
 			return s;
 		}
 
+		std::string info() const
+		{
+			return std::string();
+		}
+
 		PrimitiveSet without_duplicates() const;
 	};
 
