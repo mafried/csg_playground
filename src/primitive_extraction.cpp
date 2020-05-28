@@ -936,8 +936,8 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 			points.push_back(pn);
 		});
 
-		const int lower_voxel_bound = 5;
-
+		const int lower_voxel_bound = 1;
+		
 		double score = 0.0;
 		if (!allow_cube_cutout && prim.type == PrimitiveType::Box)
 		{
@@ -1219,7 +1219,7 @@ lmu::Primitive lmu::createSpherePrimitive(const lmu::ManifoldPtr& m)
 
 lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& planes)
 {
-	double const height_epsilon = 0.05;
+	double const height_epsilon = 0.0;
 
 	switch (planes.size())
 	{
@@ -1574,7 +1574,7 @@ lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, dou
 	{
 		if (p.imFunc->signedDistance(points[i]) <= 0.0)
 		{
-			if (d.coeff(i, 0) <= 0.0)
+			if (d.coeff(i, 0) <= voxel_size)
 			{
 				num_inside_points++;
 			}
@@ -1719,7 +1719,7 @@ lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const Primitive
 	}
 	else
 	{
-		std::cout << "Filtered Primitive at " << i << ". Type: " << primitiveTypeToString(ps[i].type) << std::endl;
+		std::cout << "Filtered Primitive at " << i << ". Type: " << primitiveTypeToString(ps[i].type) << " Score: " << psr.per_primitive_geo_scores[i] << " Threshold: " << threshold << std::endl;
 	}
 
 	return filtered_ps;
