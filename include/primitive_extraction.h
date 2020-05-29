@@ -155,10 +155,10 @@ namespace lmu
 		static const float max_distance;
 
 		SDFValue();
-		SDFValue(float v, float w);
+		SDFValue(float d, Eigen::Vector3f& n);
 
-		float v;
-		float w;
+		float d;
+		Eigen::Vector3f n;
 	};
 
 	enum class DHType
@@ -182,7 +182,7 @@ namespace lmu
 		Mesh to_mesh() const;
 		PointCloud to_pc() const;
 
-		DHType get_dh_type(const Primitive &p, double t_inside, double t_outside, double voxel_size = 0.0) const;
+		DHType get_dh_type(const Primitive &p, double t_inside, double t_outside, double voxel_size, std::vector<Eigen::Matrix<double, 1, 6>>& points, bool debug = false) const;
 
 		Eigen::Vector3i grid_size;
 		Eigen::Vector3d origin;
@@ -266,7 +266,8 @@ namespace lmu
 		int maxPrimitiveSetSize;// = 75;
 		double polytope_prob; // = 0.0;
 
-		double cell_size;// = 0.05;
+		double ranker_voxel_size;// = 0.05;
+		double sdf_voxel_size;
 		double max_dist;// = 0.05;
 		double allow_cube_cutout;// = true;
 

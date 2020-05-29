@@ -28,6 +28,10 @@ int g_prim_idx = 0;
 std::shared_ptr<lmu::PrimitiveSetRanker> g_ranker = nullptr;
 bool g_show_sdf = false;
 
+double g_voxel_size = 0.0;
+double g_t_inside = 0.0;
+double g_t_outside = 0.0;
+
 lmu::Mesh computeMeshFromPrimitives2(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
 	if (ps.empty())
@@ -140,7 +144,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
 	std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
-	std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], 0.9, 0.1) << std::endl;
+
+	points.clear();
+	std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], g_t_inside, g_t_outside, g_voxel_size, points, true) << std::endl;
 
 	std::cout << "Show Result: " << g_show_res << std::endl;
 
@@ -250,6 +256,10 @@ int main(int argc, char *argv[])
 	auto outside_threshold = s.getDouble("Decomposition", "OutsideThreshold", 0.1);
 	auto voxel_size = s.getDouble("Decomposition", "VoxelSize", 0.01);
 
+	g_voxel_size = voxel_size;
+	g_t_inside = inside_threshold;
+	g_t_outside = outside_threshold;
+
 	lmu::CSGNodeGenerationParams ng_params;
 	ng_params.create_new_prob = s.getDouble("NodeGeneration", "CreateNewProbability", 0.5);
 	ng_params.active_prob = s.getDouble("NodeGeneration", "ActiveProbability", 0.5);
@@ -278,12 +288,13 @@ int main(int argc, char *argv[])
 	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
 	prim_params.polytope_prob = s.getDouble("Primitives", "PolytopeProbability", 0.0); // = 0.0;
 
-	prim_params.cell_size = s.getDouble("Primitives", "VoxelSize", 0.05);// = 0.05;
+	prim_params.sdf_voxel_size = s.getDouble("Primitives", "SdfVoxelSize", 0.05);// = 0.05;
+	prim_params.ranker_voxel_size = s.getDouble("Primitives", "RankerVoxelSize", 0.05);// = 0.05;
 	prim_params.max_dist = s.getDouble("Primitives", "MaxDistance", 0.05);// = 0.05;
 	prim_params.allow_cube_cutout = s.getBool("Primitives", "AllowCubeCutout", true);// = true;
 
 	prim_params.max_iterations = s.getInt("Primitives", "MaxIterations", 30); //30
-	prim_params.max_count = s.getInt("Primitives", "MaxCount", 30);; //30
+	prim_params.max_count = s.getInt("Primitives", "MaxCount", 30); //30
 
 	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilterEpsilon", 0.0); //0.0
 	prim_params.filter_threshold = s.getDouble("Primitives", "FilterThreshold", 0.01); //0.01

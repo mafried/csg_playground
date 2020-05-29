@@ -430,7 +430,7 @@ struct SelectionRanker
 		//static int counter = 0;
 		//std::cout << "counter: " << counter << std::endl;
 		//counter++;
-
+		
 		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
 		auto d = 0.0;
 
@@ -448,16 +448,25 @@ struct SelectionRanker
 			{
 				for (int z = 0; z < grid_size.z(); ++z)
 				{
-					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin;
+					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin; //+ Eigen::Vector3d(voxel_size * 0.5, voxel_size * 0.5, voxel_size * 0.5);
 
-					auto v = model_sdf->sdf_value(p);
+					int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+					
+					auto v = model_sdf->data[idx];
 
-					d += std::abs(v.v - n.signedDistance(p));					
+					auto sd_gr = n.signedDistanceAndGradient(p);
+					double sd = sd_gr.x();
+					Eigen::Vector3f gr = sd_gr.bottomRows(3).cast<float>();
+
+					//d += std::abs(v.v - sd);
+					if (sd * v.d < 0 && gr.dot(v.n) >= 0.0) d += 1.0;
 				}
 			}
 		}
 
-		auto size = creator_strategy == CreatorStrategy::SELECTION ? (double)s.get_num_active() : numNodes(s.node);
+		//std::cout << s << " D: " << d << std::endl;
+
+		auto size = creator_strategy == CreatorStrategy::SELECTION ? (double)s.get_num_active() :(double) numNodes(s.node);
 		
 		auto sr = SelectionRank(d, size, 0.0);
 
@@ -497,7 +506,7 @@ struct SelectionPopMan
 	{
 		// Re-normalize scores and compute combined score. 
 		SelectionRank max_r(-std::numeric_limits<double>::max()), min_r(std::numeric_limits<double>::max());
-
+				
 		for (auto& s : population)
 		{
 			max_r.size = std::max(max_r.size, s.rank.size);
@@ -554,10 +563,13 @@ PrimitiveDecomposition lmu::decompose_primitives(const PrimitiveSet& primitives,
 	PrimitiveSet remaining_primitives, outside_primitives, inside_primitives;
 	std::vector<CSGNode> outside_primitive_nodes;
 	std::vector<CSGNode> inside_primitive_nodes;
+
+	std::vector<Eigen::Matrix<double, 1, 6>> debug_points;
+
 	
 	for (const auto& p : primitives)
 	{
-		switch (model_sdf.get_dh_type(p, inside_t, outside_t, voxel_size))
+		switch (model_sdf.get_dh_type(p, inside_t, outside_t, voxel_size, debug_points, false))
 		{
 		case DHType::INSIDE:
 			inside_primitive_nodes.push_back(geometry(p.imFunc));
@@ -761,10 +773,32 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 		{
 			SelectionCreator selection_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
 			SelectionGA ga;
-			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
+			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, true, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
 			node = integrate_node(start_node, res.population[0].creature); 
-			res.statistics.save(stream);
+			res.statistics.save(stream, &res.population[0].creature);
+
+			auto ps = res.population[0].creature;
+			
+			/*
+			for (int i = 0; i < ps.prims->size(); ++i)
+			{
+				if (ps.prims->at(i).type == PrimitiveType::Cylinder)
+				{
+					ps.selection[i] = SelectionValue(DHType::INSIDE, true);
+				}
+			}
+
+
+			std::cout << "RANK BEST: " << ranker.rank(res.population[0].creature) << std::endl;
+
+			std::cout << "RANK TEST: " << ranker.rank(ps) << std::endl;
+			std::cout << ps << std::endl;
+
+			//node = ps.to_node();
+			*/
+
+
 			break;
 		}
 	case CreatorStrategy::NODE:
@@ -774,11 +808,11 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
 			node = integrate_node(start_node, res.population[0].creature.node);
-			res.statistics.save(stream);
+			res.statistics.save(stream, &res.population[0].creature);
 			break;
 		}
 	}
-	
+
 	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 
 	return node;
