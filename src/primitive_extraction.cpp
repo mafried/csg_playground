@@ -1334,14 +1334,26 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 	std::cout << "Grid size: " << grid_size.transpose() << std::endl;
 
 	n = grid_size.x() * grid_size.y() * grid_size.z();
-	data = new SDFValue[n];
 
 	size = Eigen::Vector3d((double)grid_size.x() * voxel_size, (double)grid_size.y() * voxel_size, (double)grid_size.z() * voxel_size);
 	
 	std::cout << "Create mesh" << std::endl;
 
-	surface_mesh = lmu::createFromPointCloud(pc);
+	recreate_from_mesh(lmu::createFromPointCloud(pc));	
+}
+
+lmu::ModelSDF::~ModelSDF()
+{
+	delete[] data;
+}
+
+void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
+{
+	delete[] data;
+	data = new SDFValue[n];
 	
+	surface_mesh = m;
+
 	tree.init(surface_mesh.vertices, surface_mesh.indices);
 
 	igl::per_face_normals(surface_mesh.vertices, surface_mesh.indices, fn);
@@ -1349,7 +1361,7 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 	igl::per_edge_normals(surface_mesh.vertices, surface_mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, fn, en, e, emap);
 
 	std::cout << "Fill with signed distance values. " << std::endl;
-	
+
 	Eigen::MatrixXd points(n, 3);
 	int idx = 0;
 	for (int x = 0; x < grid_size.x(); ++x)
@@ -1361,7 +1373,7 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 				int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
 
 				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin;
-				
+
 				points.row(idx++) << p.transpose();
 			}
 		}
@@ -1380,11 +1392,6 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 
 		data[j] = SDFValue(sd, n);
 	}
-}
-
-lmu::ModelSDF::~ModelSDF()
-{
-	delete[] data;
 }
 
 lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const

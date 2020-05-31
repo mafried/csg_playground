@@ -2,6 +2,10 @@
 #include "csgnode_helper.h"
 #include "optimizer_red.h"
 
+#include "mesh.h"
+#include <igl/writeOBJ.h>
+
+
 using namespace lmu;
 
 lmu::SelectionValue::SelectionValue(DHType dh_type, bool active) : 
@@ -425,23 +429,25 @@ struct SelectionRanker
 	{
 	}
 
-	SelectionRank rank(const PrimitiveSelection& s) const
+	SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const
 	{
 		//static int counter = 0;
 		//std::cout << "counter: " << counter << std::endl;
 		//counter++;
 		
-		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
+		auto n = creator_strategy == CreatorStrategy::SELECTION ? s.to_node() /*integrate_node(start_node, s)*/ : integrate_node(start_node, s.node);
 		auto d = 0.0;
 
 		//Invalid node?
-		if(numNodes(n) == 0 || n.operationType() == CSGNodeOperationType::Noop)
-			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
+		//if(numNodes(n) == 0 || n.operationType() == CSGNodeOperationType::Noop)
+		//	return SelectionRank(-std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
 
 		auto grid_size = model_sdf->grid_size;
 		auto voxel_size = model_sdf->voxel_size;
 		auto origin = model_sdf->origin;
 
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+		
 		for (int x = 0; x < grid_size.x(); ++x)
 		{
 			for (int y = 0; y < grid_size.y(); ++y)
@@ -455,11 +461,35 @@ struct SelectionRanker
 					auto v = model_sdf->data[idx];
 
 					auto sd_gr = n.signedDistanceAndGradient(p);
-					double sd = sd_gr.x();
 					Eigen::Vector3f gr = sd_gr.bottomRows(3).cast<float>();
 
+					Eigen::Matrix<double, 1, 6> point;
+
+					if (v.d > voxel_size && sd_gr.x() > voxel_size)
+						continue;
+					
+					Eigen::Vector3d p1 = p - (double)v.d * v.n.normalized().cast<double>();
+					Eigen::Vector3d p2 = p - sd_gr.x() * sd_gr.bottomRows(3).normalized();
+					
+					double abs_dist = (p2 - p1).norm();
+
 					//d += std::abs(v.v - sd);
-					if (sd * v.d < 0 && gr.dot(v.n) >= 0.0) d += 1.0;
+					if (abs_dist < voxel_size && gr.dot(v.n) >= 0.0)
+					{
+						d += 1.0;
+
+						//point << p.transpose(), 0.0, 1.0, 0.0;
+
+					}
+					else
+					{
+						point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
+					}
+
+
+					if(debug)
+						points.push_back(point);
+
 				}
 			}
 		}
@@ -469,6 +499,8 @@ struct SelectionRanker
 		auto size = creator_strategy == CreatorStrategy::SELECTION ? (double)s.get_num_active() :(double) numNodes(s.node);
 		
 		auto sr = SelectionRank(d, size, 0.0);
+
+		sr.points = points;
 
 		sr.capture_unnormalized();
 		
@@ -525,7 +557,7 @@ struct SelectionPopMan
 			ps.rank.geo = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
 			ps.rank.size = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-			ps.rank.combined = (1.0 - ps.rank.geo) * geo_weight - ps.rank.size * size_weight;
+			ps.rank.combined = ps.rank.geo * geo_weight - ps.rank.size * size_weight;
 			
 
 			//std::cout << ps.creature << " : " << ps.rank;
@@ -746,7 +778,7 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 	}
 }
 
-CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params,
+lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params,
 	std::ostream& stream)
 {
 	int tournament_k = 2;
@@ -766,7 +798,13 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 	SelectionRanker ranker(primitive_ranker->model_sdf, start_node, params.creator_strategy);
 	SelectionPopMan pop_man(geo_weight, size_weight);
 
-	auto node = opNo();
+	auto refined_mesh = refine(primitive_ranker->model_sdf->surface_mesh, primitives);
+	primitive_ranker->model_sdf->recreate_from_mesh(refined_mesh);
+
+	igl::writeOBJ("mesh_out_refined.obj", primitive_ranker->model_sdf->surface_mesh.vertices, primitive_ranker->model_sdf->surface_mesh.indices);
+
+	NodeGenerationResult gen_res(opNo());
+
 	switch (params.creator_strategy)
 	{
 	case CreatorStrategy::SELECTION:
@@ -775,12 +813,9 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 			SelectionGA ga;
 			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, true, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
-			node = integrate_node(start_node, res.population[0].creature); 
 			res.statistics.save(stream, &res.population[0].creature);
 
 			auto ps = res.population[0].creature;
-			
-			/*
 			for (int i = 0; i < ps.prims->size(); ++i)
 			{
 				if (ps.prims->at(i).type == PrimitiveType::Cylinder)
@@ -788,17 +823,16 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 					ps.selection[i] = SelectionValue(DHType::INSIDE, true);
 				}
 			}
-
-
-			std::cout << "RANK BEST: " << ranker.rank(res.population[0].creature) << std::endl;
-
+			
+			gen_res.node = integrate_node(start_node, res.population[0].creature);
+			
+			auto rank = ranker.rank(res.population[0].creature, true);
+			gen_res.points = rank.points;
+			
+			std::cout << "RANK BEST: " << rank << std::endl;
 			std::cout << "RANK TEST: " << ranker.rank(ps) << std::endl;
 			std::cout << ps << std::endl;
-
-			//node = ps.to_node();
-			*/
-
-
+			
 			break;
 		}
 	case CreatorStrategy::NODE:
@@ -807,7 +841,7 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 			NodeGA ga;
 			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
-			node = integrate_node(start_node, res.population[0].creature.node);
+			gen_res.node = integrate_node(start_node, res.population[0].creature.node);
 			res.statistics.save(stream, &res.population[0].creature);
 			break;
 		}
@@ -815,7 +849,35 @@ CSGNode lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, cons
 
 	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 
-	return node;
+	return gen_res;
+}
+
+Mesh lmu::refine(const Mesh& m, const PrimitiveSet& ps)
+{
+	auto res = m;
+
+	for (int i = 0; i < res.vertices.rows(); ++i)
+	{
+		Eigen::Vector3d v = res.vertices.row(i).transpose();
+
+		Eigen::Vector4d sd_gr(std::numeric_limits<double>::max(), 0.0, 0.0, 0.0);
+		for (const auto& p : ps)
+		{
+			auto p_sd_gr = p.imFunc->signedDistanceAndGradient(v);
+
+			if (std::abs(sd_gr.x()) > std::abs(p_sd_gr.x()))
+			{
+				sd_gr = p_sd_gr;
+			}			
+		}
+				
+		Eigen::Vector3d delta = sd_gr.bottomRows(3).normalized() * sd_gr.x() * -1.0;
+		Eigen::Vector3d new_v = v + delta;
+
+		res.vertices.row(i) << new_v.transpose();
+	}
+
+	return res;
 }
 
 lmu::SelectionRank::SelectionRank(double v) :
@@ -894,4 +956,10 @@ std::vector<DHType> lmu::PrimitiveDecomposition::get_dh_types(bool all) const
 	}
 	
 	return dh_types;
+}
+
+lmu::NodeGenerationResult::NodeGenerationResult(const CSGNode & node, const std::vector<Eigen::Matrix<double, 1, 6>>& points) : 
+	node(node),
+	points(points)
+{
 }

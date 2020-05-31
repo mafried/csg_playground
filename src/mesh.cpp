@@ -525,45 +525,53 @@ Mesh lmu::createFromPointCloud(const PointCloud & pc)
 
 	double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
 		(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
+
+	//average_spacing *= 0.1;
+
+	std::cout << "Poisson surface average spacing: " << average_spacing << std::endl;
+	
 	if (CGAL::poisson_surface_reconstruction_delaunay
 	(points.begin(), points.end(),
 		CGAL::First_of_pair_property_map<Pwn>(),
 		CGAL::Second_of_pair_property_map<Pwn>(),
 		output_mesh, average_spacing))
-	{
-		std::ofstream out("kitten_poisson-20-30-0.375.off");
-		out << output_mesh;
+	{		
+
+		Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
+		int i = 0;
+		for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
+			vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
+
+		typedef typename Polyhedron_3::Vertex_const_iterator                  VCI;
+		typedef CGAL::Inverse_index< VCI> Index;
+		Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
+
+		Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
+		i = 0;
+		for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
+		{
+			auto hc = it->facet_begin();
+			auto hc_end = hc;
+			std::size_t n = circulator_size(hc);
+			int j = 0;
+			do {
+				indices.coeffRef(i, j++) = index[VCI(hc->vertex())];
+				++hc;
+			} while (hc != hc_end);
+			i++;
+		}
+
+
+		igl::writeOBJ("mesh_out.obj", vertices, indices);
+
+
+		return Mesh(vertices, indices);
 	}
-		
-	Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
-	int i = 0;
-	for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
-		vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
-
-	typedef typename Polyhedron_3::Vertex_const_iterator                  VCI;
-	typedef CGAL::Inverse_index< VCI> Index;
-	Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
-
-	Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
-	i = 0;
-	for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
+	else
 	{
-		auto hc = it->facet_begin();
-		auto hc_end = hc;
-		std::size_t n = circulator_size(hc);
-		int j = 0;
-		do {
-			indices.coeffRef(i,j++) = index[VCI(hc->vertex())];
-			++hc;
-		} while (hc != hc_end);
-		i++;
+		std::cout << "Unable to create Poisson surface mesh." << std::endl;
+		return Mesh();
 	}
-
-	
-	igl::writeOBJ("mesh_out.obj", vertices, indices);
-
-	
-	return Mesh(vertices, indices);
 }
 
 double lmu::computeMeshArea(const Mesh & m)

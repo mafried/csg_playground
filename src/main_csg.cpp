@@ -320,6 +320,11 @@ int main(int argc, char *argv[])
 		// read complete point cloud
 		auto pc = lmu::readPointCloud(path + "pc.txt");
 
+		//viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
+
+		//goto _LAUNCH;
+
+
 		// Primitive estimation based on clusters.
 		std::vector<lmu::Cluster> clusters;
 		if (use_clusters)
@@ -396,13 +401,18 @@ int main(int argc, char *argv[])
 		else
 		{
 			t.tick();
-			node = lmu::generate_csg_node(decomposition, res.ranker, ng_params, node_ga_f);
+			
+			auto gen_res = lmu::generate_csg_node(decomposition, res.ranker, ng_params, node_ga_f);
+			node = gen_res.node;
+			auto points_pc = lmu::pointCloudFromVector(gen_res.points);
+			viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
+
 			res_f << "NodeGa Duration=" << t.tick() << std::endl;
 		}				
 	
 		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));
-		
-		viewer.data().set_points(pc_n.leftCols(3), pc_n.rightCols(3));											
+		viewer.data().add_points(pc_n.leftCols(3), pc_n.rightCols(3));
+
 		lmu::toJSONFile(node, out_path + "tree.json");
 		lmu::writeNode(node, out_path + "tree.gv");
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));

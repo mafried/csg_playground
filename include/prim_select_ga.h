@@ -63,6 +63,8 @@ namespace lmu
 		double geo_unnormalized;
 		double size_unnormalized;
 
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+
 		void capture_unnormalized();
 
 		friend inline bool operator< (const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined < rhs.combined; }
@@ -138,7 +140,17 @@ namespace lmu
 	CSGNode integrate_node(const CSGNode& into, const PrimitiveSelection& s);
 	CSGNode integrate_node(const CSGNode& into, const CSGNode& node);
 
-	CSGNode generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params, std::ostream& stream);
+	struct NodeGenerationResult
+	{
+		NodeGenerationResult(const CSGNode& node, const std::vector<Eigen::Matrix<double, 1, 6>>& points = std::vector<Eigen::Matrix<double, 1, 6>>());
+
+		CSGNode node;
+		std::vector<Eigen::Matrix<double, 1, 6>> points;
+	};
+	
+	NodeGenerationResult generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params, std::ostream& stream);
+
+	Mesh refine(const Mesh& m, const PrimitiveSet& ps);
 }
 
 #endif

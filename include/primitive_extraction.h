@@ -176,6 +176,8 @@ namespace lmu
 
 		~ModelSDF();
 
+		void recreate_from_mesh(const Mesh& m);
+
 		double distance(const Eigen::Vector3d& p) const;
 		SDFValue sdf_value(const Eigen::Vector3d& p) const;
 
@@ -189,8 +191,8 @@ namespace lmu
 		double voxel_size;
 		Mesh surface_mesh;
 		SDFValue* data;
-	private: 
 
+	private:
 		
 		Eigen::Vector3d size;
 
