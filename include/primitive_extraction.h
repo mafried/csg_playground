@@ -327,6 +327,11 @@ namespace lmu
 		double voxel_size;
 		
 	};
+
+	struct CapOptimizer
+	{
+		CSGNode optimize_caps(const PrimitiveSet& ps, const CSGNode& inp_node);
+	};
 }
 
 #endif 

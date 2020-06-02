@@ -485,8 +485,7 @@ struct SelectionRanker
 					{
 						point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
 					}
-
-
+					
 					if(debug)
 						points.push_back(point);
 

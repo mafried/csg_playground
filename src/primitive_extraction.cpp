@@ -1734,3 +1734,65 @@ void lmu::PrimitiveSetRank::capture_score_stats()
 	per_primitive_mean_score = accumulate(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end(), 0.0) / (double)per_primitive_geo_scores.size();
 	size_unnormalized = size;
 }
+
+lmu::CSGNode lmu::CapOptimizer::optimize_caps(const PrimitiveSet& ps, const CSGNode& inp_node)
+{
+	auto res_node = inp_node;
+
+	// Collect planes
+	std::vector<ImplicitFunctionPtr> planes;
+	for (const auto& p : ps)
+	{
+		if (p.type == PrimitiveType::Box)
+		{
+			auto box = dynamic_cast<IFBox*>(p.imFunc.get());
+			
+		}
+		else if (p.type == PrimitiveType::Polytope)
+		{
+			auto poly = dynamic_cast<IFPolytope*>(p.imFunc.get());
+			auto n = poly->n();
+			auto p = poly->p();
+			for (int i = 0; i < poly->n().size(); ++i)
+				planes.push_back(std::make_shared<IFPlane>(p[i], n[i], ""));
+		}
+	}
+
+	for (const auto& p : ps)
+	{
+		if (p.type == PrimitiveType::Cylinder)
+		{
+			ImplicitFunctionPtr closest_top_plane;
+			ImplicitFunctionPtr closest_bottom_plane;
+			double closest_top_plane_sd = std::numeric_limits<double>::max();
+			double closest_bottom_plane_sd = std::numeric_limits<double>::max();
+			
+			for (const auto& plane : planes)
+			{
+				auto cyl = dynamic_cast<IFCylinder*>(p.imFunc.get());
+
+				Eigen::Vector3d bottom_p = cyl->transform() * Eigen::Vector3d(0, -cyl->height() / 2, 0);
+				Eigen::Vector3d top_p = cyl->transform() * Eigen::Vector3d(0, cyl->height() / 2, 0);
+
+				auto bottom_sd = std::abs(plane->signedDistance(bottom_p));
+				auto top_sd = std::abs(plane->signedDistance(top_p));
+
+				if (closest_bottom_plane_sd > bottom_sd)
+				{
+					closest_bottom_plane_sd = bottom_sd;
+					closest_bottom_plane = plane;
+				}
+
+				if (closest_top_plane_sd > top_sd)
+				{
+					closest_top_plane_sd = top_sd;
+					closest_top_plane = plane;
+				}
+			}
+
+			//TODO
+		}
+	}
+
+	return res_node;
+}

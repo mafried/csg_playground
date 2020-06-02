@@ -543,6 +543,9 @@ namespace lmu
 		bool empty() const;
 		
 		virtual Mesh createMesh() const override;
+		
+		std::vector<Eigen::Vector3d> p() const;
+		std::vector<Eigen::Vector3d> n() const;
 
 	protected:
 
@@ -609,6 +612,7 @@ namespace lmu
 	struct IFPlane : public ImplicitFunction
 	{
 		IFPlane(const Eigen::Affine3d& transform, const std::string& name);
+		IFPlane(const Eigen::Vector3d& p, const Eigen::Vector3d& n, const std::string& name);
 
 		virtual ImplicitFunctionType type() const override;
 
@@ -622,6 +626,10 @@ namespace lmu
 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;
 		virtual double signedDistanceLocal(const Eigen::Vector3d& localP) override;
+
+	private:
+
+		Eigen::Affine3d get_transform_from(const Eigen::Vector3d& p, const Eigen::Vector3d& n) const;
 	};
 
 

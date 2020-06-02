@@ -951,6 +951,16 @@ Mesh lmu::IFPolytope::createMesh() const
 	return _mesh;//createPolytope(_transform, _p, _n);
 }
 
+std::vector<Eigen::Vector3d> lmu::IFPolytope::p() const
+{
+	return _p;
+}
+
+std::vector<Eigen::Vector3d> lmu::IFPolytope::n() const
+{
+	return _n;
+}
+
 Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, double h)
 {
 	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);
@@ -1204,6 +1214,11 @@ lmu::IFPlane::IFPlane(const Eigen::Affine3d& transform, const std::string& name)
 {
 }
 
+lmu::IFPlane::IFPlane(const Eigen::Vector3d & p, const Eigen::Vector3d & n, const std::string & name) : 
+	ImplicitFunction(get_transform_from(p,n), lmu::Mesh(), name)
+{
+}
+
 ImplicitFunctionType lmu::IFPlane::type() const
 {
 	return ImplicitFunctionType::Plane;
@@ -1240,6 +1255,15 @@ double lmu::IFPlane::signedDistanceLocal(const Eigen::Vector3d& localP)
 
 	//std::cout << "D: " << d << std::endl;
 	return d; 
+}
+
+Eigen::Affine3d lmu::IFPlane::get_transform_from(const Eigen::Vector3d& p, const Eigen::Vector3d& n) const
+{
+	const auto c_n = Eigen::Vector3d(1.0, 0.0, 0.0);
+	
+	Eigen::Affine3d trans = Eigen::Translation3d(p) * Eigen::Quaterniond().setFromTwoVectors(c_n, n).toRotationMatrix();
+	
+	return trans;
 }
 
 
