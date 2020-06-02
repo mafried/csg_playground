@@ -622,6 +622,10 @@ namespace lmu
 
 		virtual Mesh createMesh() const override;
 
+		Eigen::Vector3d p() const;
+		Eigen::Vector3d n() const;
+
+
 	protected:
 
 		virtual Eigen::Vector3d gradientLocal(const Eigen::Vector3d& localP, double h) override;

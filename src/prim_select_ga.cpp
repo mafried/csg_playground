@@ -797,10 +797,12 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 	SelectionRanker ranker(primitive_ranker->model_sdf, start_node, params.creator_strategy);
 	SelectionPopMan pop_man(geo_weight, size_weight);
 
-	auto refined_mesh = refine(primitive_ranker->model_sdf->surface_mesh, primitives);
-	primitive_ranker->model_sdf->recreate_from_mesh(refined_mesh);
-
-	igl::writeOBJ("mesh_out_refined.obj", primitive_ranker->model_sdf->surface_mesh.vertices, primitive_ranker->model_sdf->surface_mesh.indices);
+	if (params.use_mesh_refinement)
+	{
+		auto refined_mesh = refine(primitive_ranker->model_sdf->surface_mesh, primitives);
+		primitive_ranker->model_sdf->recreate_from_mesh(refined_mesh);
+		igl::writeOBJ("mesh_out_refined.obj", primitive_ranker->model_sdf->surface_mesh.vertices, primitive_ranker->model_sdf->surface_mesh.indices);
+	}
 
 	NodeGenerationResult gen_res(opNo());
 
@@ -813,25 +815,7 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, true, Schedule(), Schedule(), true);
 			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
 			res.statistics.save(stream, &res.population[0].creature);
-
-			auto ps = res.population[0].creature;
-			for (int i = 0; i < ps.prims->size(); ++i)
-			{
-				if (ps.prims->at(i).type == PrimitiveType::Cylinder)
-				{
-					ps.selection[i] = SelectionValue(DHType::INSIDE, true);
-				}
-			}
-			
-			gen_res.node = integrate_node(start_node, res.population[0].creature);
-			
-			auto rank = ranker.rank(res.population[0].creature, true);
-			gen_res.points = rank.points;
-			
-			std::cout << "RANK BEST: " << rank << std::endl;
-			std::cout << "RANK TEST: " << ranker.rank(ps) << std::endl;
-			std::cout << ps << std::endl;
-			
+			gen_res.node = integrate_node(start_node, res.population[0].creature);			
 			break;
 		}
 	case CreatorStrategy::NODE:
@@ -845,6 +829,9 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 			break;
 		}
 	}
+
+	CapOptimizer cap_opt(params.cap_plane_adjustment_max_dist);
+	gen_res.node = cap_opt.optimize_caps(decomposition.get_primitives(true), gen_res.node);
 
 	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
 

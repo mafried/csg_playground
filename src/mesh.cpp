@@ -1239,6 +1239,16 @@ Mesh lmu::IFPlane::createMesh() const
 	return _mesh;
 }
 
+Eigen::Vector3d lmu::IFPlane::p() const
+{
+	return _transform * Eigen::Vector3d(0, 0, 0);
+}
+
+Eigen::Vector3d lmu::IFPlane::n() const
+{
+	return _transform * Eigen::Vector3d(1.0, 0.0, 0.0) - _transform * Eigen::Vector3d(0, 0, 0);
+}
+
 Eigen::Vector3d lmu::IFPlane::gradientLocal(const Eigen::Vector3d& localP, double h)
 {
 	double dx = (signedDistanceLocal(Eigen::Vector3d(localP.x() + h, localP.y(), localP.z())) - signedDistanceLocal(Eigen::Vector3d(localP.x() - h, localP.y(), localP.z()))) / (2.0 * h);

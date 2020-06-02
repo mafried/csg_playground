@@ -908,7 +908,6 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 
 			if (prim.imFunc->signedDistance(p) <= 0)
 			{
-
 				auto sdf = model_sdf->sdf_value(p);
 								
 				if (sdf.d < distanceEpsilon)
@@ -934,6 +933,7 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 		const int lower_voxel_bound = 1;
 		
 		double score = 0.0;
+
 		if (!allow_cube_cutout && prim.type == PrimitiveType::Box)
 		{
 			score = all_voxels >= lower_voxel_bound ? inside_voxels / (double)all_voxels : 0.0;
@@ -1735,62 +1735,138 @@ void lmu::PrimitiveSetRank::capture_score_stats()
 	size_unnormalized = size;
 }
 
+lmu::CapOptimizer::CapOptimizer(double cap_plane_adjustment_max_dist) : 
+	cap_plane_adjustment_max_dist(cap_plane_adjustment_max_dist)
+{
+}
+
 lmu::CSGNode lmu::CapOptimizer::optimize_caps(const PrimitiveSet& ps, const CSGNode& inp_node)
 {
 	auto res_node = inp_node;
 
-	// Collect planes
-	std::vector<ImplicitFunctionPtr> planes;
-	for (const auto& p : ps)
+	// Collect planes.
+	std::vector<std::shared_ptr<IFPlane>> planes;
+	for (const auto& prim : ps)
 	{
-		if (p.type == PrimitiveType::Box)
+		std::vector<Eigen::Vector3d> _p;
+		std::vector<Eigen::Vector3d> _n;
+
+		if (prim.type == PrimitiveType::Polytope || prim.type == PrimitiveType::Box)
 		{
-			auto box = dynamic_cast<IFBox*>(p.imFunc.get());
-			
+			auto poly = dynamic_cast<IFPolytope*>(prim.imFunc.get());
+			auto p_n = poly->n();
+			auto p_p = poly->p();
+			_n.insert(_n.end(), p_n.begin(), p_n.end());
+			_p.insert(_p.end(), p_p.begin(), p_p.end());
 		}
-		else if (p.type == PrimitiveType::Polytope)
+		else if (prim.type == PrimitiveType::Cylinder)
 		{
-			auto poly = dynamic_cast<IFPolytope*>(p.imFunc.get());
-			auto n = poly->n();
-			auto p = poly->p();
-			for (int i = 0; i < poly->n().size(); ++i)
-				planes.push_back(std::make_shared<IFPlane>(p[i], n[i], ""));
+			for (const auto m : prim.ms)
+			{
+				if (m->type == ManifoldType::Plane)
+				{
+					_n.push_back(m->n);
+					_p.push_back(m->p);
+				}
+			}
+		}
+		
+		for (int i = 0; i < _n.size(); ++i)
+		{			
+			auto plane = std::make_shared<IFPlane>(_p[i], _n[i], "");
+			planes.push_back(plane);
 		}
 	}
 
+	// Find closest planes for capped primitives.
 	for (const auto& p : ps)
 	{
 		if (p.type == PrimitiveType::Cylinder)
 		{
-			ImplicitFunctionPtr closest_top_plane;
-			ImplicitFunctionPtr closest_bottom_plane;
-			double closest_top_plane_sd = std::numeric_limits<double>::max();
-			double closest_bottom_plane_sd = std::numeric_limits<double>::max();
+			std::shared_ptr<IFPlane> closest_top_plane;
+			std::shared_ptr<IFPlane> closest_bottom_plane;
+			double closest_top_plane_d = std::numeric_limits<double>::max();
+			double closest_bottom_plane_d = std::numeric_limits<double>::max();
 			
+			auto cyl = dynamic_cast<IFCylinder*>(p.imFunc.get());
+			const auto max_height = 2.0;
+
+			// point on the top and bottom of the cylinder.
+			Eigen::Vector3d bottom_p = cyl->transform() * Eigen::Vector3d(0, -cyl->height() / 2, 0);
+			Eigen::Vector3d top_p = cyl->transform() * Eigen::Vector3d(0, cyl->height() / 2, 0);
+					
+			// find suitable bottom and top cap planes.
 			for (const auto& plane : planes)
-			{
-				auto cyl = dynamic_cast<IFCylinder*>(p.imFunc.get());
+			{	
+				auto bottom_plane = plane->signedDistanceAndGradient(bottom_p);
+				auto top_plane = plane->signedDistanceAndGradient(top_p);
 
-				Eigen::Vector3d bottom_p = cyl->transform() * Eigen::Vector3d(0, -cyl->height() / 2, 0);
-				Eigen::Vector3d top_p = cyl->transform() * Eigen::Vector3d(0, cyl->height() / 2, 0);
+				auto bottom_cyl = cyl->signedDistanceAndGradient(bottom_p);
+				auto top_cyl = cyl->signedDistanceAndGradient(top_p);
 
-				auto bottom_sd = std::abs(plane->signedDistance(bottom_p));
-				auto top_sd = std::abs(plane->signedDistance(top_p));
+				auto bottom_d = std::abs(bottom_plane.x());
+				auto top_d = std::abs(top_plane.x());
 
-				if (closest_bottom_plane_sd > bottom_sd)
+				if (closest_bottom_plane_d > bottom_d)// && bottom_plane.bottomRows(3).dot(bottom_cyl.bottomRows(3)) > 0.0)
 				{
-					closest_bottom_plane_sd = bottom_sd;
+					closest_bottom_plane_d = bottom_d;
 					closest_bottom_plane = plane;
 				}
 
-				if (closest_top_plane_sd > top_sd)
+				if (closest_top_plane_d > top_d)// && top_plane.bottomRows(3).dot(top_cyl.bottomRows(3)) > 0.0)
 				{
-					closest_top_plane_sd = top_sd;
+					closest_top_plane_d = top_d;
 					closest_top_plane = plane;
+
+					//std::cout << " topd: " << top_d;
 				}
+				//std::cout << std::endl;
 			}
 
-			//TODO
+			std::cout << "closest top d: " << closest_top_plane_d << " closest bottom d: " << closest_bottom_plane_d << std::endl;
+
+			if (!closest_top_plane || !closest_bottom_plane)
+			{
+				std::cout << "Could not find better top and bottom plane for primitive." << std::endl;
+				continue;
+			}
+			if (closest_top_plane.get() == closest_bottom_plane.get())
+			{
+				std::cout << "Both planes are the same which is not possible." << std::endl;
+				continue;
+			}
+
+			if (closest_top_plane_d > cap_plane_adjustment_max_dist || closest_bottom_plane_d > cap_plane_adjustment_max_dist)
+			{
+				std::cout << "At least one of the planes is farther away than allowed (allowed: " << cap_plane_adjustment_max_dist << ")." << std::endl;
+				continue;
+			}
+
+			lmu::visit(res_node, [&closest_top_plane, &closest_bottom_plane, cyl, max_height](CSGNode& n) 
+			{
+				if (n.function().get() == cyl)
+				{
+					Eigen::Vector3d cyl_center = cyl->transform() * Eigen::Vector3d(0, 0, 0);
+					
+					// Check if normal needs to be flipped.
+					Eigen::Vector3d top_n = closest_top_plane->n() * (closest_top_plane->signedDistance(cyl_center) < 0.0 ? -1.0 : 1.0);
+					Eigen::Vector3d bottom_n = closest_bottom_plane->n() * (closest_bottom_plane->signedDistance(cyl_center) < 0.0 ? -1.0 : 1.0);
+
+					//std::cout << "cyl center: " << cyl_center.transpose() << std::endl;
+					//std::cout << top_p.transpose() << " | " << bottom_p.transpose() << std::endl;
+					//std::cout << top_n.transpose() << " | " << bottom_n.transpose() << std::endl;
+					//std::cout << std::endl;
+
+					// Create new cylinder primitive with top and bottom planes and replace old one with it.
+					std::cout << "Create new cylinder for " << cyl->name() << std::endl;
+					n = lmu::opPrim(
+					{ 						
+						geo<IFCylinder>(cyl->transform(), cyl->radius(), max_height, cyl->name()),
+						geo<IFPlane>(closest_top_plane->p(), top_n, cyl->name() + "_Top"),
+						geo<IFPlane>(closest_bottom_plane->p(), bottom_n, cyl->name() + "_Bottom")
+					});
+				}
+			});
 		}
 	}
 

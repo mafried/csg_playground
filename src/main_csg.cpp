@@ -158,7 +158,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 
 	auto points_pc = lmu::pointCloudFromVector(points);
-	viewer.data().add_points(points_pc.leftCols(3), points_pc.rightCols(3));
+	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 
 	update(viewer);
 
@@ -275,6 +275,9 @@ int main(int argc, char *argv[])
 	ng_params.geo_weight = s.getDouble("NodeGeneration", "GeoWeight", 1.0);
 	ng_params.max_iterations = s.getInt("NodeGeneration", "MaxIterations", 100); 
 	ng_params.max_count = s.getInt("NodeGeneration", "MaxCount", 10);
+	ng_params.cap_plane_adjustment_max_dist = s.getDouble("NodeGeneration", "CapPlaneAdjustmentMaxDistance", 0.0);
+	ng_params.use_mesh_refinement = s.getBool("NodeGeneration", "UseMeshRefinement", false);
+
 
 	std::string path = s.getStr("Data", "InputFolder", "C:/Projekte/visigrapp2020/data/");
 	std::string out_path = s.getStr("Data", "OutputFolder", "");
@@ -304,7 +307,6 @@ int main(int argc, char *argv[])
 	s.print();
 	std::cout << "--------------------------------------------------------------" << std::endl;
 
-			
 	// Initialize
 	update(viewer);
 
@@ -409,12 +411,13 @@ int main(int argc, char *argv[])
 
 			res_f << "NodeGa Duration=" << t.tick() << std::endl;
 		}				
-	
-		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));
-		viewer.data().add_points(pc_n.leftCols(3), pc_n.rightCols(3));
 
 		lmu::toJSONFile(node, out_path + "tree.json");
 		lmu::writeNode(node, out_path + "tree.gv");
+
+		auto pc_n = lmu::computePointCloud(node,lmu::CSGNodeSamplingParams(0.02,0.9, 0.02, 0.02));
+		viewer.data().add_points(pc_n.leftCols(3), pc_n.rightCols(3));
+
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);		
 

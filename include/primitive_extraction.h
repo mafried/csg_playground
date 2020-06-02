@@ -330,7 +330,12 @@ namespace lmu
 
 	struct CapOptimizer
 	{
+		CapOptimizer(double cap_plane_adjustment_max_dist);
+
 		CSGNode optimize_caps(const PrimitiveSet& ps, const CSGNode& inp_node);
+
+	private: 
+		double cap_plane_adjustment_max_dist;
 	};
 }
 

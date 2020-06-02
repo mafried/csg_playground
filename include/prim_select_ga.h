@@ -120,6 +120,9 @@ namespace lmu
 
 		int max_iterations; //100
 		int max_count; //10
+
+		double cap_plane_adjustment_max_dist;
+		bool use_mesh_refinement;
 	};
 
 	struct PrimitiveDecomposition
