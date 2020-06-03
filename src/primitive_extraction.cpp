@@ -155,7 +155,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, 
 		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes);
 	
-	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, 
+	auto ranker = std::make_shared<PrimitiveSetRanker>(farthestPointSampling(non_static_pointcloud,params.num_geo_score_samples), ransacRes.manifolds, staticPrimitives, params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, 
 		params.allow_cube_cutout, model_sdf, 
 		geo_weight, per_prim_geo_weight, size_weight);
 
@@ -180,7 +180,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	// Filter
 	//OutlierDetector od("C:/Projekte/outlier_detector");
 	ThresholdOutlierDetector od(params.filter_threshold);
-	SimilarityFilter sf(params.similarity_filter_epsilon, params.sdf_voxel_size);
+	SimilarityFilter sf(params.similarity_filter_epsilon, params.sdf_voxel_size, params.similarity_filter_similarity_only, params.similarity_filter_perfectness_t);
 
 	auto primitives = res.population[0].creature;
 	primitives.insert(primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
@@ -189,7 +189,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 	primitives = od.remove_outliers(primitives, *ranker);
 
-	primitives = sf.filter(primitives);
+	primitives = sf.filter(primitives, *ranker);
 
 	name_primitives(primitives);
 	
@@ -1693,34 +1693,35 @@ lmu::PrimitiveSet lmu::ThresholdOutlierDetector::remove_outliers(const Primitive
 
 #include "optimizer_red.h"
 
-lmu::SimilarityFilter::SimilarityFilter(double epsilon, double voxel_size) : 
+lmu::SimilarityFilter::SimilarityFilter(double epsilon, double voxel_size, bool similarity_only, double perfectness_t) :
 	epsilon(epsilon),
-	voxel_size(voxel_size)
+	voxel_size(voxel_size),
+	similarity_only(similarity_only),
+	perfectness_t(perfectness_t)
 {
 }
 
-bool first_fully_in_second(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size)
-{
-	auto n1 = lmu::geometry(p1.imFunc);
-	auto n2 = lmu::geometry(p2.imFunc);
-
-	static lmu::EmptySetLookup esLookup;
-
-	return is_empty_set(lmu::opDiff({ n1, n2 }), 0.01, lmu::PointCloud(), esLookup);
-}
-
-bool are_similar(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size)
+bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, bool similarity_only, const lmu::PrimitiveSetRanker& ranker, double perfectness_t)
 {
 	auto n1 = lmu::geometry(p1.imFunc);
 	auto n2 = lmu::geometry(p2.imFunc);
 
 	static lmu::EmptySetLookup esLookup;
 
-	return is_empty_set(lmu::opDiff({ n1, n2 }), 0.01, lmu::PointCloud(), esLookup) &&
-		is_empty_set(lmu::opDiff({ n2, n1 }), 0.01, lmu::PointCloud(), esLookup);
+	std::vector<Eigen::Matrix<double, 1, 6>> pts;
+	lmu::PrimitiveSet ps;
+	ps.push_back(p2);
+	bool container_is_imperfect_primitive = ranker.get_per_prim_geo_score(ps, pts)[0] < perfectness_t;
+
+	return similarity_only || container_is_imperfect_primitive ?
+
+		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup) &&
+		is_empty_set(lmu::opDiff({ n2, n1 }), voxel_size, lmu::PointCloud(), esLookup)
+		:
+		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup);
 }
 
-lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps)
+lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker)
 {
 	PrimitiveSet filtered_prims;
 
@@ -1730,7 +1731,7 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps)
 
 		for(const auto& fp : filtered_prims)
 		{
-			if (are_similar(p, fp, voxel_size))
+			if (are_similar_or_contain_one_another(p, fp, 0.01, similarity_only, ranker, perfectness_t))
 			{
 				std::cout << "filtered redundant primitive" << std::endl;
 				add = false;

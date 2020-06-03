@@ -283,8 +283,11 @@ namespace lmu
 		double similarity_filter_epsilon; //0.0
 		double filter_threshold; //0.01
 
-		int num_elite_injections;
+		bool similarity_filter_similarity_only;
+		double similarity_filter_perfectness_t;
 
+		int num_geo_score_samples;
+		int num_elite_injections;
 	};
 
 	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const PrimitiveGaParams& params, std::ostream& stream);
@@ -321,14 +324,16 @@ namespace lmu
 
 	struct SimilarityFilter
 	{
-		SimilarityFilter(double epsilon, double voxel_size);
+		SimilarityFilter(double epsilon, double voxel_size, bool similarity_only, double perfectness_t);
 
-		PrimitiveSet filter(const PrimitiveSet& ps);
+		PrimitiveSet filter(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker);
 
 	private:
 
 		double epsilon;
 		double voxel_size;
+		bool similarity_only;
+		double perfectness_t;
 		
 	};
 

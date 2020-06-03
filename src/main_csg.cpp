@@ -288,6 +288,8 @@ int main(int argc, char *argv[])
 	prim_params.geo_weight = s.getDouble("Primitives", "GeoWeight", 0.0);// = 0.0;
 	prim_params.per_prim_geo_weight = s.getDouble("Primitives", "PerPrimGeoWeight", 1.0);// = 1.0;//0.1;
 
+	prim_params.num_geo_score_samples = s.getInt("Primitives", "NumGeoScoreSamples", 100);
+
 	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
 	prim_params.polytope_prob = s.getDouble("Primitives", "PolytopeProbability", 0.0); // = 0.0;
 	prim_params.min_polytope_planes = s.getInt("Primitives", "MinPolytopePlanes", 4); // = 0.0;
@@ -301,8 +303,11 @@ int main(int argc, char *argv[])
 	prim_params.max_iterations = s.getInt("Primitives", "MaxIterations", 30); //30
 	prim_params.max_count = s.getInt("Primitives", "MaxCount", 30); //30
 
-	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilterEpsilon", 0.0); //0.0
-	prim_params.filter_threshold = s.getDouble("Primitives", "FilterThreshold", 0.01); //0.01
+	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilter.Epsilon", 0.0); //0.0
+	prim_params.similarity_filter_similarity_only = s.getBool("Primitives", "SimilarityFilter.SimilarityOnly", true);
+	prim_params.similarity_filter_perfectness_t = s.getDouble("Primitives", "SimilarityFilter.PerfectnessThreshold", 1.0);
+
+	prim_params.filter_threshold = s.getDouble("Primitives", "GeoScoreFilter.Threshold", 0.01); //0.01
 
 	prim_params.num_elite_injections = s.getInt("Primitives", "NumEliteInjections", 1);
 	
