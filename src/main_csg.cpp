@@ -290,6 +290,8 @@ int main(int argc, char *argv[])
 
 	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
 	prim_params.polytope_prob = s.getDouble("Primitives", "PolytopeProbability", 0.0); // = 0.0;
+	prim_params.min_polytope_planes = s.getInt("Primitives", "MinPolytopePlanes", 4); // = 0.0;
+	prim_params.max_polytope_planes = s.getInt("Primitives", "MaxPolytopePlanes", 6); // = 0.0;
 
 	prim_params.sdf_voxel_size = s.getDouble("Primitives", "SdfVoxelSize", 0.05);// = 0.05;
 	prim_params.ranker_voxel_size = s.getDouble("Primitives", "RankerVoxelSize", 0.05);// = 0.05;
@@ -390,6 +392,8 @@ int main(int argc, char *argv[])
 		g_ranker = res.ranker;
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = pc;
+
+		//goto _LAUNCH;
 
 		// Extract CSG tree 
 		t.tick();

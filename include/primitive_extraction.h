@@ -91,7 +91,7 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
-			double minDistanceBetweenParallelPlanes, double polytope_prob);
+			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -128,6 +128,8 @@ namespace lmu
 		std::unordered_set<ManifoldType> availableManifoldTypes;
 		double intraCrossProb;
 
+		int min_polytope_planes;
+		int max_polytope_planes;
 		double polytope_prob;
 
 		std::vector<double> mutationDistribution;
@@ -267,6 +269,8 @@ namespace lmu
 
 		int maxPrimitiveSetSize;// = 75;
 		double polytope_prob; // = 0.0;
+		int min_polytope_planes;
+		int max_polytope_planes;
 
 		double ranker_voxel_size;// = 0.05;
 		double sdf_voxel_size;

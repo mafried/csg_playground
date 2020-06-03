@@ -435,7 +435,7 @@ struct SelectionRanker
 		//std::cout << "counter: " << counter << std::endl;
 		//counter++;
 		
-		auto n = creator_strategy == CreatorStrategy::SELECTION ? s.to_node() /*integrate_node(start_node, s)*/ : integrate_node(start_node, s.node);
+		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
 		auto d = 0.0;
 
 		//Invalid node?
@@ -558,7 +558,7 @@ struct SelectionPopMan
 
 			ps.rank.combined = ps.rank.geo * geo_weight - ps.rank.size * size_weight;
 			
-
+			//std::cout << "Size: " << size_weight << " " << (ps.rank.size * size_weight) << std::endl;
 			//std::cout << ps.creature << " : " << ps.rank;
 		}
 		//std::cout << "========================" << std::endl;
@@ -833,7 +833,11 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 	CapOptimizer cap_opt(params.cap_plane_adjustment_max_dist);
 	gen_res.node = cap_opt.optimize_caps(decomposition.get_primitives(true), gen_res.node);
 
-	//node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
+	gen_res.node = to_binary_tree(gen_res.node);
+
+	std::cout << "Num nodes before redundancy removal: " << numNodes(gen_res.node) << std::endl;;
+	gen_res.node = lmu::remove_redundancies(gen_res.node, 0.01, lmu::PointCloud());
+	std::cout << "Num nodes after redundancy removal: " << numNodes(gen_res.node) << std::endl;;
 
 	return gen_res;
 }

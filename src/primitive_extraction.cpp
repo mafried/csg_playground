@@ -152,7 +152,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	// First GA for candidate box generation.
 	PrimitiveSetTournamentSelector selector(2);
 	PrimitiveSetIterationStopCriterion criterion(params.max_count, PrimitiveSetRank(0.00001), params.max_iterations);
-	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, params.polytope_prob);
+	PrimitiveSetCreator creator(manifoldsForCreator, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, 
+		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes);
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(non_static_pointcloud, ransacRes.manifolds, staticPrimitives, params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, 
 		params.allow_cube_cutout, model_sdf, 
@@ -204,7 +205,7 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
-	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob) :
+	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes) :
 	ms(ms),
 	intraCrossProb(intraCrossProb),
 	mutationDistribution(mutationDistribution),
@@ -214,7 +215,9 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	angleEpsilon(angleEpsilon),
 	availableManifoldTypes(getAvailableManifoldTypes(ms)),
 	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes),
-	polytope_prob(polytope_prob)
+	polytope_prob(polytope_prob),
+	min_polytope_planes(min_polytope_planes), 
+	max_polytope_planes(max_polytope_planes)
 {
 	rndEngine.seed(rndDevice());
 }
@@ -559,7 +562,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	case PrimitiveType::Polytope:
 	{
 		ManifoldSet planes;
-		int num_planes = du(rndEngine, parmu_t{ 4, 6 }); 
+		int num_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
 				
 		for (int i = 0; i < num_planes; ++i)
 		{
@@ -816,7 +819,7 @@ void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std:
 		}
 	}
 
-	const double max_len = 2.0;
+	const double max_len = 1.0;
 
 	double v0_len, v1_len, v2_len;
 	v0_len = std::min(v0.norm(), max_len);
@@ -1098,6 +1101,19 @@ std::string lmu::PrimitiveSetPopMan::info() const
 	return std::string();
 }
 
+bool polytope_out_of_range(const lmu::IFPolytope& polytope)
+{
+	for (int i = 0; i < polytope.meshCRef().vertices.rows(); ++i)
+	{
+		Eigen::Vector3d v = polytope.meshCRef().vertices.row(i);
+
+		if (v.norm() > 2.0)
+			return true;
+	}
+
+	return false;
+}
+
 lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 {
 	if (planes.size() < 4)
@@ -1138,7 +1154,7 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 	} 
 
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
-	if (polytope->empty())
+	if (polytope->empty() || polytope_out_of_range(*polytope))
 	{
 		return Primitive::None();
 	}
@@ -1400,9 +1416,10 @@ lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const
 	int idx = p_int.x() + grid_size.x() * p_int.y() + grid_size.x() * grid_size.y() * p_int.z();
 
 	return 
-		p.x() >= origin.x() && p.x() <= origin.x() + size.x() &&
-		p.y() >= origin.y() && p.y() <= origin.y() + size.y() &&
-		p.z() >= origin.z() && p.z() <= origin.z() + size.z()
+		idx < n &&
+		p.x() >= origin.x() && p.x() < origin.x() + size.x() &&
+		p.y() >= origin.y() && p.y() < origin.y() + size.y() &&
+		p.z() >= origin.z() && p.z() < origin.z() + size.z()
 		? data[idx] : SDFValue();
 }
 
