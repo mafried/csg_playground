@@ -1772,6 +1772,7 @@ bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Pri
 lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker)
 {
 	PrimitiveSet filtered_prims;
+	std::set<int> already_removed_indices;
 
 	for (int i = 0; i < ps.size(); ++i)
 	{
@@ -1779,11 +1780,12 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const Pr
 
 		for(int j = 0; j < ps.size(); ++j)
 		{
-			if (i == j) continue;
+			if (i == j || already_removed_indices.find(j) != already_removed_indices.end()) continue;
 
 			if (are_similar_or_contain_one_another(ps[i], ps[j], 0.01, ranker, perfectness_t))
 			{
 				std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
+				already_removed_indices.insert(i);
 				add = false;
 				break;
 			}
