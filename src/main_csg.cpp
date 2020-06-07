@@ -405,7 +405,7 @@ int main(int argc, char *argv[])
 		auto node = lmu::opNo();
 		auto decomposition = lmu::decompose_primitives(primitives, *res.ranker->model_sdf, inside_threshold, outside_threshold, voxel_size);
 		res_f << "Decomposition Duration=" << t.tick() << std::endl;
-		if (decomposition.remaining_primitives.empty())
+		if (decomposition.remaining_primitives.empty() && !ng_params.use_all_prims_for_ga)
 		{
 			node = decomposition.node;
 		}		

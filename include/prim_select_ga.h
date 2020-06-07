@@ -67,12 +67,13 @@ namespace lmu
 
 		void capture_unnormalized();
 
-		friend inline bool operator< (const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined < rhs.combined; }
-		friend inline bool operator> (const SelectionRank& lhs, const SelectionRank& rhs) { return rhs < lhs; }
-		friend inline bool operator<=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs > rhs); }
-		friend inline bool operator>=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs < rhs); }
-		friend inline bool operator==(const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined == rhs.combined; }
-		friend inline bool operator!=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs == rhs); }
+		friend inline bool operator< (const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined < rhs.combined || lhs.combined == rhs.combined && lhs.size < rhs.size; }
+		friend inline bool operator> (const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined > rhs.combined || lhs.combined == rhs.combined && lhs.size > rhs.size; }
+
+		//friend inline bool operator<=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs > rhs); }
+		//friend inline bool operator>=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs < rhs); }
+		//friend inline bool operator==(const SelectionRank& lhs, const SelectionRank& rhs) { return lhs.combined == rhs.combined; }
+		//friend inline bool operator!=(const SelectionRank& lhs, const SelectionRank& rhs) { return !(lhs == rhs); }
 
 		friend SelectionRank operator-(SelectionRank lhs, const SelectionRank& rhs)
 		{

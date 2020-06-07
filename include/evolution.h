@@ -206,7 +206,7 @@ namespace lmu
 
 			Rank currentBestRank = population[0].rank;
 
-			if(currentBestRank - _lastBestRank <= _delta)
+			if(currentBestRank - _lastBestRank < _delta)
 			{
 				//No change
 				_currentCount++;
@@ -380,7 +380,7 @@ namespace lmu
 				
 				for (int i = 0; i < bestCandidateScores.size(); ++i)
 				{
-					stream << i << " " << bestCandidateScores[i] << " " << worstCandidateScores[i] << " " << optDurations[i] << " " << rankingDurations[i] << " "  << sortingDurations[i] << " " << scmDurations[i] << std::endl;
+					stream << i << " | " << bestCandidateScores[i] << " | " << worstCandidateScores[i] << " | " << optDurations[i] << " | " << rankingDurations[i] << " | "  << sortingDurations[i] << " | " << scmDurations[i] << std::endl;
 				}
 			}
 

@@ -556,7 +556,7 @@ struct SelectionPopMan
 			ps.rank.geo = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
 			ps.rank.size = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-			ps.rank.combined = ps.rank.geo * geo_weight - ps.rank.size * size_weight;
+			ps.rank.combined = ps.rank.geo * geo_weight;// -ps.rank.size * size_weight;
 			
 			//std::cout << "Size: " << size_weight << " " << (ps.rank.size * size_weight) << std::endl;
 			//std::cout << ps.creature << " : " << ps.rank;
@@ -835,9 +835,9 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 
 	gen_res.node = to_binary_tree(gen_res.node);
 
-	std::cout << "Num nodes before redundancy removal: " << numNodes(gen_res.node) << std::endl;;
-	gen_res.node = lmu::remove_redundancies(gen_res.node, 0.01, lmu::PointCloud());
-	std::cout << "Num nodes after redundancy removal: " << numNodes(gen_res.node) << std::endl;;
+	//std::cout << "Num nodes before redundancy removal: " << numNodes(gen_res.node) << std::endl;;
+	//gen_res.node = lmu::remove_redundancies(gen_res.node, 0.01, lmu::PointCloud());
+	//std::cout << "Num nodes after redundancy removal: " << numNodes(gen_res.node) << std::endl;;
 
 	return gen_res;
 }

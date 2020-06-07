@@ -105,7 +105,8 @@ lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_i
 
 std::ostream & lmu::operator<<(std::ostream & out, const PrimitiveSetRank & r)
 {
-	out << "combined: " << r.combined << " geo: " << r.geo << " size: " << r.size << " prim geo avg: " << r.per_primitive_mean_score << " size unnormalized: " << r.size_unnormalized;
+	out << "{ \"combined\": " << r.combined << ", \"geo\": " << r.geo << ", \"size\": " << r.size << ", \"per_prim_geo_sum\": " << r.per_prim_geo_sum << 
+		", \"size_unnormalized\": " << r.size_unnormalized << ", \"geo_unnormalized\":" << r.geo_unnormalized << ", \"per_prim_mean_score\": " << r.per_primitive_mean_score << "}";
 	return out;
 }
 
@@ -184,14 +185,14 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 	auto primitives = res.population[0].creature;
 	primitives.insert(primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
-	
+
+	name_primitives(primitives);
+
 	primitives = primitives.without_duplicates();
 
 	primitives = od.remove_outliers(primitives, *ranker);
 
 	primitives = sf.filter(primitives, *ranker);
-
-	name_primitives(primitives);
 	
 	GAResult result;
 	result.primitives = primitives;
@@ -1015,7 +1016,9 @@ void lmu::PrimitiveSetPopMan::manipulateBeforeRanking(std::vector<RankedCreature
 
 void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
 {
-	// Add a primitive set consisting of primitives with best area score.
+	static int filter_counter = 0;
+
+	// Add a primitive set consisting of primitives with best per pri score score.
 	if (num_elite_injections > 0)
 	{
 		int max_primitives = maxPrimitiveSetSize;
@@ -1044,6 +1047,18 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 			PrimitiveSet best_primitives;
 			for (const auto& p : n_best_primitives)
 				best_primitives.push_back(*p.first);
+			
+			if (filter_counter >= 10)
+			{
+				//SimilarityFilter sf(0.0, 0.05, false, 0.9);
+				//best_primitives = sf.filter(best_primitives, *ranker);
+				filter_counter = 0;
+			}
+			else
+			{
+				filter_counter++;
+			}
+
 
 			auto rank = ranker->rank(best_primitives);
 
@@ -1090,9 +1105,15 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		ps.rank.per_prim_geo_sum = ps.rank.per_prim_geo_sum < 0.0 || diff_r.per_prim_geo_sum == 0.0 ? 0.0 : (ps.rank.per_prim_geo_sum - min_r.per_prim_geo_sum) / diff_r.per_prim_geo_sum;
 		ps.rank.size             = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight - ps.rank.size * sizeWeight;
-
-		std::cout << "RC: " << ps.rank.combined << std::endl;
+		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight;// -ps.rank.size * sizeWeight;
+		
+		/*
+		std::cout << "Combined: " << ps.rank.combined << std::endl;
+		std::cout << "Rank: geo: " << ps.rank.geo << " per prim geo sum: " << ps.rank.per_prim_geo_sum << " size: " << ps.rank.size << std::endl;
+		std::cout << "Rank: " << ps.rank << std::endl;
+		std::cout << "Weights: geo: " << geoWeight << " per prim geo sum: " << perPrimGeoWeight << " size: " << sizeWeight << std::endl;
+		std::cout << "----" << std::endl;
+		*/
 	}
 }
 
@@ -1701,46 +1722,75 @@ lmu::SimilarityFilter::SimilarityFilter(double epsilon, double voxel_size, bool 
 {
 }
 
-bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, bool similarity_only, const lmu::PrimitiveSetRanker& ranker, double perfectness_t)
+bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, const lmu::PrimitiveSetRanker& ranker, double perfectness_t)
 {
 	auto n1 = lmu::geometry(p1.imFunc);
 	auto n2 = lmu::geometry(p2.imFunc);
 
 	static lmu::EmptySetLookup esLookup;
 
+	// Check if p2 is perfect.
 	std::vector<Eigen::Matrix<double, 1, 6>> pts;
 	lmu::PrimitiveSet ps;
 	ps.push_back(p2);
 	bool container_is_imperfect_primitive = ranker.get_per_prim_geo_score(ps, pts)[0] < perfectness_t;
 
-	return similarity_only || container_is_imperfect_primitive ?
-
+	/*
+	bool contains = similarity_only || container_is_imperfect_primitive ?
+	
 		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup) &&
 		is_empty_set(lmu::opDiff({ n2, n1 }), voxel_size, lmu::PointCloud(), esLookup)
 		:
 		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup);
+	*/
+	int num_points = 0;
+	int num_outside_points = 0;
+	bool contains = true;
+	iterate_over_prim_volume(p1, 0.01, [&p2, &contains, &num_points, &num_outside_points](const Eigen::Vector3d& p) {
+		if (p2.imFunc->signedDistance(p) > 0.0)
+		{
+			contains = false;
+			num_outside_points++;
+		}
+		num_points++;
+	});
+
+	/*
+	bool contains = is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup);
+	*/
+	if (!container_is_imperfect_primitive && contains)
+	{
+		std::cout << p2.imFunc->name() << "is perfect and fully contains " << p1.imFunc->name() << " Decision base: " << num_points << " points. Outside: " << num_outside_points << std::endl;
+		return true;
+	}
+	else
+		return false;
+
+	return !container_is_imperfect_primitive && contains;
 }
 
 lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker)
 {
 	PrimitiveSet filtered_prims;
 
-	for (const auto& p : ps)
+	for (int i = 0; i < ps.size(); ++i)
 	{
 		bool add = true;
 
-		for(const auto& fp : filtered_prims)
+		for(int j = 0; j < ps.size(); ++j)
 		{
-			if (are_similar_or_contain_one_another(p, fp, 0.01, similarity_only, ranker, perfectness_t))
+			if (i == j) continue;
+
+			if (are_similar_or_contain_one_another(ps[i], ps[j], 0.01, ranker, perfectness_t))
 			{
-				std::cout << "filtered redundant primitive" << std::endl;
+				std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
 				add = false;
 				break;
 			}
 		}
 		if (add)
 		{
-			filtered_prims.push_back(p);
+			filtered_prims.push_back(ps[i]);
 		}
 	}
 	
@@ -1750,6 +1800,7 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const Pr
 void lmu::PrimitiveSetRank::capture_score_stats()
 {
 	per_primitive_mean_score = accumulate(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end(), 0.0) / (double)per_primitive_geo_scores.size();
+	geo_unnormalized = geo;
 	size_unnormalized = size;
 }
 

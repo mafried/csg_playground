@@ -42,21 +42,23 @@ namespace lmu
 
 		double per_primitive_mean_score;
 		double size_unnormalized;
+		double geo_unnormalized;
 
 		void capture_score_stats();
 
 		operator double() const { return combined; }
 		
-		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined < rhs.combined; }
-		friend inline bool operator> (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return rhs < lhs; }
-		friend inline bool operator<=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs > rhs); }
-		friend inline bool operator>=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs < rhs); }
-		friend inline bool operator==(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined == rhs.combined; }
-		friend inline bool operator!=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs == rhs); }
+		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { if (lhs.combined == rhs.combined) std::cout << "==" << std::endl; return lhs.combined < rhs.combined || lhs.combined == rhs.combined && lhs.size < rhs.size; }
+		friend inline bool operator> (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { if (lhs.combined == rhs.combined) std::cout << "==" << std::endl; return lhs.combined > rhs.combined || lhs.combined == rhs.combined && lhs.size > rhs.size; }
+		//friend inline bool operator<=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs > rhs); }
+		//friend inline bool operator>=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs < rhs); }
+		//friend inline bool operator==(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined == rhs.combined; }
+		//friend inline bool operator!=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs == rhs); }
 
 		PrimitiveSetRank& operator+=(const PrimitiveSetRank& rhs)
 		{
 			geo += rhs.geo;
+			per_prim_geo_sum += rhs.per_prim_geo_sum;
 			size += rhs.size;
 			combined += rhs.combined;
 
@@ -66,6 +68,7 @@ namespace lmu
 		PrimitiveSetRank& operator-=(const PrimitiveSetRank& rhs)
 		{
 			geo -= rhs.geo;
+			per_prim_geo_sum -= rhs.per_prim_geo_sum;
 			size -= rhs.size;
 			combined -= rhs.combined;
 
