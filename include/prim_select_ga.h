@@ -124,6 +124,8 @@ namespace lmu
 
 		double cap_plane_adjustment_max_dist;
 		bool use_mesh_refinement;
+
+		bool use_redundancy_removal; 
 	};
 
 	struct PrimitiveDecomposition

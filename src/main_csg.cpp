@@ -277,7 +277,7 @@ int main(int argc, char *argv[])
 	ng_params.max_count = s.getInt("NodeGeneration", "MaxCount", 10);
 	ng_params.cap_plane_adjustment_max_dist = s.getDouble("NodeGeneration", "CapPlaneAdjustmentMaxDistance", 0.0);
 	ng_params.use_mesh_refinement = s.getBool("NodeGeneration", "UseMeshRefinement", false);
-
+	ng_params.use_redundancy_removal = s.getBool("NodeGeneration", "UseRedundancyRemoval", false);
 
 	std::string path = s.getStr("Data", "InputFolder", "C:/Projekte/visigrapp2020/data/");
 	std::string out_path = s.getStr("Data", "OutputFolder", "");

@@ -1016,8 +1016,6 @@ void lmu::PrimitiveSetPopMan::manipulateBeforeRanking(std::vector<RankedCreature
 
 void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
 {
-	static int filter_counter = 0;
-
 	// Add a primitive set consisting of primitives with best per pri score score.
 	if (num_elite_injections > 0)
 	{
@@ -1047,18 +1045,7 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 			PrimitiveSet best_primitives;
 			for (const auto& p : n_best_primitives)
 				best_primitives.push_back(*p.first);
-			
-			if (filter_counter >= 10)
-			{
-				//SimilarityFilter sf(0.0, 0.05, false, 0.9);
-				//best_primitives = sf.filter(best_primitives, *ranker);
-				filter_counter = 0;
-			}
-			else
-			{
-				filter_counter++;
-			}
-
+		
 
 			auto rank = ranker->rank(best_primitives);
 
