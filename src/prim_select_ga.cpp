@@ -333,10 +333,42 @@ struct CSGNodeCreator
 
 		std::swap(*subNode1, *subNode2);
 
+		std::cout << "MAX: " << params.max_tree_depth << std::endl;
+		std::cout << "Before: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
+		shrink_large_nodes(newNode1, params.max_tree_depth);
+		shrink_large_nodes(newNode2, params.max_tree_depth);
+		std::cout << "After: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
+
 		return std::vector<PrimitiveSelection>
 		{
 			PrimitiveSelection(newNode1), PrimitiveSelection(newNode2)
 		};
+	}
+
+	void shrink_large_nodes(CSGNode& node, int max_depth) const
+	{
+		while (depth(node) > max_depth)
+		{
+			lmu::visit(node, [&node, &max_depth](CSGNode& n)
+			{
+				if (n.childsCRef().empty() || depth(node) <= max_depth)
+					return;
+
+				bool all_childs_are_leaves = true;
+				for (const auto &c : n.childsCRef())
+				{
+					if (c.type() != CSGNodeType::Geometry)
+					{
+						all_childs_are_leaves = false;
+						break;
+					}
+				}
+				if (all_childs_are_leaves)
+				{
+					n = n.childsCRef()[0];
+				}
+			});
+		}		
 	}
 
 	PrimitiveSelection create() const
