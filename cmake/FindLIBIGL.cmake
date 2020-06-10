@@ -9,6 +9,7 @@ endif()
 
 find_path(LIBIGL_INCLUDE_DIR igl/readOBJ.h
     HINTS
+        ${LIBIGL_DIR}
         ENV LIBIGL
         ENV LIBIGLROOT
         ENV LIBIGL_ROOT
