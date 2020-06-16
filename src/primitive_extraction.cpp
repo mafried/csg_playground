@@ -280,7 +280,7 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::mutate(const PrimitiveSet& ps) const
 				std::cout << "Mutation Add" << std::endl;
 
 				auto newP = createPrimitive();
-				if (!newP.isNone())
+				if (!newP.isNone() && newPS.size() < maxMutationIterations)
 					newPS.push_back(newP);
 
 				break;
@@ -1113,7 +1113,7 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		ps.rank.per_prim_geo_sum = ps.rank.per_prim_geo_sum < 0.0 || diff_r.per_prim_geo_sum == 0.0 ? 0.0 : (ps.rank.per_prim_geo_sum - min_r.per_prim_geo_sum) / diff_r.per_prim_geo_sum;
 		ps.rank.size             = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight;// -ps.rank.size * sizeWeight;
+		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight - ps.rank.size * sizeWeight;
 		
 		/*
 		std::cout << "Combined: " << ps.rank.combined << std::endl;
