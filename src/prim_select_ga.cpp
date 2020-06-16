@@ -302,7 +302,7 @@ struct CSGNodeCreator
 
 			CSGNode* subNode = nodePtrAt(newNode, nodeIdx);
 
-			create(*subNode, params.max_tree_depth, 0);
+			create(*subNode, params.max_tree_depth, /*0*/ depth(*subNode));
 
 			return PrimitiveSelection(newNode);
 		}
@@ -617,7 +617,8 @@ using NodeGA = GeneticAlgorithm<PrimitiveSelection, CSGNodeCreator, SelectionRan
 
 std::ostream& lmu::operator<<(std::ostream& out, const SelectionRank& r)
 {
-	out << "combined: " << r.combined << " geo: " << r.geo << " size: " << r.size << " geo unnormalized: " << r.geo_unnormalized << " size unnormalized: " << r.size_unnormalized;
+	out << "{ \"combined\": \"" << r.combined << "\", \"geo\": \"" << r.geo << "\", \"size\": \"" << r.size << "\", \"geo_unnormalized\": \"" << 
+		r.geo_unnormalized << "\", \"size_unnormalized\": \"" << r.size_unnormalized << "\"}";
 	return out;
 }
 
@@ -861,19 +862,7 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 			break;
 		}
 	}
-
-	CapOptimizer cap_opt(params.cap_plane_adjustment_max_dist);
-	gen_res.node = cap_opt.optimize_caps(decomposition.get_primitives(true), gen_res.node);
-
-	gen_res.node = to_binary_tree(gen_res.node);
-
-	if (params.use_redundancy_removal)
-	{
-		std::cout << "Num nodes before redundancy removal: " << numNodes(gen_res.node) << std::endl;;
-		gen_res.node = lmu::remove_redundancies(gen_res.node, 0.01, lmu::PointCloud());
-		std::cout << "Num nodes after redundancy removal: " << numNodes(gen_res.node) << std::endl;;
-	}
-
+	
 	return gen_res;
 }
 

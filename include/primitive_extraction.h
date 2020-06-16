@@ -90,6 +90,9 @@ namespace lmu
 
 	std::ostream& operator<<(std::ostream& out, const PrimitiveSetRank& r);
 
+	using PlaneMap = std::unordered_map<lmu::ManifoldPtr, std::vector<std::pair<lmu::ManifoldPtr, double>>>;
+	PlaneMap create_plane_map(const ManifoldSet& manifolds);
+
 	struct PrimitiveSetCreator
 	{
 		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
@@ -118,6 +121,8 @@ namespace lmu
 			double angleEpsilon, bool ignoreDirection = false, 
 			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0, bool ignorePointDistance = false) const;
 
+		ManifoldPtr getClosestPlane(const ManifoldPtr& plane, const ManifoldSet& already_used) const;
+
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
 		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon, double minDistanceToPlanePoint) const;
 
@@ -145,6 +150,8 @@ namespace lmu
 
 		mutable std::default_random_engine rndEngine;
 		mutable std::random_device rndDevice;
+
+		lmu::PlaneMap plane_map;
 	};
 	
 	struct PrimitiveSetRanker;
@@ -300,7 +307,7 @@ namespace lmu
 
 	lmu::Primitive createSpherePrimitive(const ManifoldPtr& m);
 	Primitive createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& planes);
-	
+
 	double estimateCylinderHeightFromPointCloud(const Manifold& m);
 	ManifoldPtr estimateSecondCylinderPlaneFromPointCloud(const Manifold& m, const Manifold& firstPlane);
 

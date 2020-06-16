@@ -18,6 +18,9 @@
 #include "pointcloud.h"
 #include "cluster.h"
 
+#include "optimizer_red.h"
+
+
 lmu::ManifoldSet g_manifoldSet;
 int g_manifoldIdx = 0;
 lmu::PointCloud g_res_pc;
@@ -387,7 +390,23 @@ int main(int argc, char *argv[])
 		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc, prim_params, prim_ga_f);
 		res_f << "PrimitiveGA Duration=" << t.tick() << std::endl;
 
-		lmu::PrimitiveSet primitives = res.primitives;
+		// Filter primitives
+		lmu::ThresholdOutlierDetector od(prim_params.filter_threshold);
+		lmu::SimilarityFilter sf(prim_params.similarity_filter_epsilon, prim_params.sdf_voxel_size, prim_params.similarity_filter_similarity_only, 
+			prim_params.similarity_filter_perfectness_t);
+		
+		auto primitives = res.primitives;
+
+		t.tick();
+		primitives = primitives.without_duplicates();
+		res_f << "Duplicate Filter=" << t.tick() << std::endl;
+
+		primitives = od.remove_outliers(primitives, *res.ranker);
+
+		t.tick();
+		primitives = sf.filter(primitives, *res.ranker);
+		res_f << "Similarity Filter=" << t.tick() << std::endl;
+
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;
 
 		for (const auto& p : primitives)
@@ -398,8 +417,7 @@ int main(int argc, char *argv[])
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = pc;
 
-		//goto _LAUNCH;
-
+		/*
 		// Extract CSG tree 
 		t.tick();
 		auto node = lmu::opNo();
@@ -421,6 +439,22 @@ int main(int argc, char *argv[])
 			res_f << "NodeGa Duration=" << t.tick() << std::endl;
 		}				
 
+		// Optimize CSG tree
+		t.tick();
+		lmu::CapOptimizer cap_opt(ng_params.cap_plane_adjustment_max_dist);
+		node = cap_opt.optimize_caps(decomposition.get_primitives(true), node);
+		res_f << "CapOptimizer Duration=" << t.tick() << std::endl;
+		node = lmu::to_binary_tree(node);
+
+		if (ng_params.use_redundancy_removal)
+		{
+			std::cout << "Num nodes before redundancy removal: " << lmu::numNodes(node) << std::endl;;
+			t.tick();
+			node = lmu::remove_redundancies(node, 0.01, lmu::PointCloud());
+			res_f << "RedundancyRemover Duration=" << t.tick() << std::endl;
+			std::cout << "Num nodes after redundancy removal: " << lmu::numNodes(node) << std::endl;;
+		}
+
 		lmu::toJSONFile(node, out_path + "tree.json");
 		lmu::writeNode(node, out_path + "tree.gv");
 
@@ -428,7 +462,9 @@ int main(int argc, char *argv[])
 		viewer.data().add_points(pc_n.leftCols(3), pc_n.rightCols(3));
 
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);		
+		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);	
+
+		*/
 
 		res_f.close();
 	}

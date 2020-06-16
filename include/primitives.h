@@ -90,7 +90,7 @@ namespace lmu
 			switch (type)
 			{
 				case ManifoldType::Plane:
-					return 0.0;
+					return (p - this->p).dot(n);
 				case ManifoldType::Cylinder:
 					return 0.0;
 				case ManifoldType::Sphere:

@@ -178,22 +178,12 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 	}*/
 	// ================ TMP ================
 
-	// Filter
-	//OutlierDetector od("C:/Projekte/outlier_detector");
-	ThresholdOutlierDetector od(params.filter_threshold);
-	SimilarityFilter sf(params.similarity_filter_epsilon, params.sdf_voxel_size, params.similarity_filter_similarity_only, params.similarity_filter_perfectness_t);
-
 	auto primitives = res.population[0].creature;
+
 	primitives.insert(primitives.end(), staticPrimitives.begin(), staticPrimitives.end());
 
 	name_primitives(primitives);
 
-	primitives = primitives.without_duplicates();
-
-	primitives = od.remove_outliers(primitives, *ranker);
-
-	primitives = sf.filter(primitives, *ranker);
-	
 	GAResult result;
 	result.primitives = primitives;
 	result.manifolds = ransacRes.manifolds;
@@ -218,7 +208,8 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const ManifoldSet& ms, double intr
 	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes),
 	polytope_prob(polytope_prob),
 	min_polytope_planes(min_polytope_planes), 
-	max_polytope_planes(max_polytope_planes)
+	max_polytope_planes(max_polytope_planes),
+	plane_map(create_plane_map(ms))
 {
 	rndEngine.seed(rndDevice());
 }
@@ -421,6 +412,31 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 	return candidates[du(rndEngine, parmu_t{ 0, (int)candidates.size() - 1 })];
 }
 
+lmu::ManifoldPtr lmu::PrimitiveSetCreator::getClosestPlane(const ManifoldPtr& plane, const ManifoldSet& already_used) const
+{
+	auto plane_it = plane_map.find(plane);
+	if(plane_it != plane_map.end())
+	{
+		// Filter out those planes that are already in use.
+		std::vector<std::pair<ManifoldPtr, double>> closest_planes;
+		std::copy_if(plane_it->second.begin(), plane_it->second.end(), std::back_inserter(closest_planes), [&already_used](const auto& e)
+		{
+			return std::find(already_used.begin(), already_used.end(), e.first) == already_used.end();
+		});
+
+		std::vector<double> probs;
+		std::transform(closest_planes.begin(), closest_planes.end(), std::back_inserter(probs), [](const auto& e) { return e.second; });
+
+		std::discrete_distribution<> d(probs.begin(), probs.end());
+
+		int idx = d(rndDevice);
+
+		return closest_planes[idx].first;
+	}
+	
+	return nullptr;
+}
+
 lmu::ManifoldPtr lmu::PrimitiveSetCreator::getPerpendicularPlane(const std::vector<ManifoldPtr>& planes,
 	const ManifoldSet& alreadyUsed, double angleEpsilon) const
 {
@@ -564,17 +580,22 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	{
 		ManifoldSet planes;
 		int num_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
-				
-		for (int i = 0; i < num_planes; ++i)
-		{
-			auto plane = getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
-			if (plane)
-			{
-				planes.push_back(plane);
-			}
-		}
 		
-		primitive = createPolytopePrimitive(planes);
+		ManifoldPtr cur_plane = getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
+		if (cur_plane)
+		{
+			planes.push_back(cur_plane);
+			for (int i = 1; i < num_planes; ++i)
+			{
+				cur_plane = getClosestPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+				if (cur_plane)
+				{
+					planes.push_back(cur_plane);
+				}
+			}
+			
+			primitive = createPolytopePrimitive(planes);
+		}
 	}
 	break;
 
@@ -964,7 +985,7 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 	double geo_score = geo_weight == 0.0 ? 0.0 : get_geo_score(ps);
 
 	// Size score
-	double size_score = size_score == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
+	double size_score = size_weight == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	// Per prim score
 		
@@ -1109,17 +1130,12 @@ std::string lmu::PrimitiveSetPopMan::info() const
 	return std::string();
 }
 
-bool polytope_out_of_range(const lmu::IFPolytope& polytope)
+bool mesh_out_of_range(const lmu::Mesh& mesh)
 {
-	for (int i = 0; i < polytope.meshCRef().vertices.rows(); ++i)
-	{
-		Eigen::Vector3d v = polytope.meshCRef().vertices.row(i);
+	Eigen::Vector3d min = mesh.vertices.colwise().minCoeff();
+	Eigen::Vector3d max = mesh.vertices.colwise().maxCoeff();
 
-		if (v.norm() > 2.0)
-			return true;
-	}
-
-	return false;
+	return (max - min).norm() > 1.0; //TODO make this variable.
 }
 
 lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
@@ -1162,11 +1178,11 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 	} 
 
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
-	if (polytope->empty() || polytope_out_of_range(*polytope))
+	if (polytope->empty() || mesh_out_of_range(polytope->meshCRef()))
 	{
 		return Primitive::None();
 	}
-	
+
 	return Primitive(polytope, planes, PrimitiveType::Polytope);
 }
 
@@ -1215,7 +1231,7 @@ lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 	}
 
 	auto box = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
-	if (box->empty())
+	if (box->empty() || mesh_out_of_range(box->meshCRef()))
 	{
 		return Primitive::None();
 	}
@@ -1290,6 +1306,48 @@ lmu::Primitive lmu::createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& p
 	default:
 		return Primitive::None();
 	}
+}
+
+lmu::PlaneMap lmu::create_plane_map(const lmu::ManifoldSet& manifolds)
+{
+	lmu::PlaneMap plane_map;
+
+	lmu::ManifoldSet planes;
+	std::copy_if(manifolds.begin(), manifolds.end(), std::back_inserter(planes), [](const auto& m) {return m->type == ManifoldType::Plane; });
+
+	for (const auto& p0 : planes)
+	{
+		std::vector<std::pair<lmu::ManifoldPtr, double>> p0_distances;
+
+		for (const auto& p1 : planes)
+		{
+			if (p0 == p1) continue;
+
+			double d_sum = std::numeric_limits<double>::max();
+			for (int i = 0; i < p1->pc.rows(); ++i)
+			{
+				Eigen::Vector3d p = p1->pc.row(i).leftCols(3).transpose();
+				//d_sum += p0->signedDistance(p);
+				d_sum = std::min(std::abs(p0->signedDistance(p)), d_sum);
+			}
+
+			auto pos = std::find_if(p0_distances.begin(), p0_distances.end(), [d_sum](const auto& s) {
+				return s.second > d_sum;
+			});
+			
+			p0_distances.insert(pos, std::make_pair(p1, d_sum));
+		}
+
+		// We want a score between 1 (the closest plane) and 0 (the farthest plane).
+		double max = std::max_element(p0_distances.begin(), p0_distances.end(), [](const auto& e0, const auto& e1) {return e0.second < e1.second; })->second;
+		double min = std::min_element(p0_distances.begin(), p0_distances.end(), [](const auto& e0, const auto& e1) {return e0.second < e1.second; })->second;
+		for (auto& d : p0_distances)
+			d.second = 1.0 - (d.second - min) / (max - min); 
+		
+		plane_map[p0] = p0_distances;
+	}
+
+	return plane_map;
 }
 
 double lmu::estimateCylinderHeightFromPointCloud(const Manifold& m)
