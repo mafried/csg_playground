@@ -1767,7 +1767,26 @@ lmu::SimilarityFilter::SimilarityFilter(double epsilon, double voxel_size, bool 
 {
 }
 
-bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, const lmu::PrimitiveSetRanker& ranker, double perfectness_t)
+bool fully_contains(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, double epsilon)
+{
+	int num_points = 0;
+	int num_outside_points = 0;
+	bool contains = true;
+	iterate_over_prim_volume(p1, voxel_size, [&p2, &contains, &num_points, &num_outside_points, epsilon](const Eigen::Vector3d& p) {
+		if (p2.imFunc->signedDistance(p) > epsilon)
+		{
+			contains = false;
+			num_outside_points++;
+		}
+		num_points++;
+	});
+
+	std::cout << "(" << num_outside_points << "|" << num_points <<  ")";
+	
+	return contains;
+}
+
+bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, const lmu::PrimitiveSetRanker& ranker, double perfectness_t, double epsilon)
 {
 	auto n1 = lmu::geometry(p1.imFunc);
 	auto n2 = lmu::geometry(p2.imFunc);
@@ -1778,40 +1797,32 @@ bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Pri
 	std::vector<Eigen::Matrix<double, 1, 6>> pts;
 	lmu::PrimitiveSet ps;
 	ps.push_back(p2);
-	bool container_is_imperfect_primitive = ranker.get_per_prim_geo_score(ps, pts)[0] < perfectness_t;
+	double score = ranker.get_per_prim_geo_score(ps, pts)[0];
+	bool container_is_perfect_primitive = score > perfectness_t;
 
-	/*
-	bool contains = similarity_only || container_is_imperfect_primitive ?
-	
-		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup) &&
-		is_empty_set(lmu::opDiff({ n2, n1 }), voxel_size, lmu::PointCloud(), esLookup)
-		:
-		is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup);
-	*/
-	int num_points = 0;
-	int num_outside_points = 0;
-	bool contains = true;
-	iterate_over_prim_volume(p1, 0.01, [&p2, &contains, &num_points, &num_outside_points](const Eigen::Vector3d& p) {
-		if (p2.imFunc->signedDistance(p) > 0.0)
-		{
-			contains = false;
-			num_outside_points++;
-		}
-		num_points++;
-	});
-
-	/*
-	bool contains = is_empty_set(lmu::opDiff({ n1, n2 }), voxel_size, lmu::PointCloud(), esLookup);
-	*/
-	if (!container_is_imperfect_primitive && contains)
+	if (fully_contains(p1, p2, voxel_size, epsilon))
 	{
-		std::cout << p2.imFunc->name() << "is perfect and fully contains " << p1.imFunc->name() << " Decision base: " << num_points << " points. Outside: " << num_outside_points << std::endl;
-		return true;
+		if (container_is_perfect_primitive)
+		{
+			//std::cout << p2.imFunc->name() << " is perfect and fully contains " << p1.imFunc->name() << std::endl;
+			return true;
+		}
+		else if(fully_contains(p2, p1, voxel_size, epsilon))
+		{
+			//std::cout << p2.imFunc->name() << " is equal to " << p1.imFunc->name() << std::endl;
+			return true;
+		}
+		else
+		{
+			//std::cout << p2.imFunc->name() << " is NOT equal to " << p1.imFunc->name() << std::endl;
+		}
 	}
 	else
-		return false;
-
-	return !container_is_imperfect_primitive && contains;
+	{
+		//std::cout << p2.imFunc->name() << " does not fully contain " << p1.imFunc->name() << std::endl;
+	}
+	
+	return false;
 }
 
 lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const PrimitiveSetRanker& ranker)
@@ -1823,22 +1834,29 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const Pr
 	{
 		bool add = true;
 
+		std::cout << ps[i].imFunc->name() << ": ";
+
 		for(int j = 0; j < ps.size(); ++j)
 		{
 			if (i == j || already_removed_indices.find(j) != already_removed_indices.end()) continue;
 
-			if (are_similar_or_contain_one_another(ps[i], ps[j], 0.01, ranker, perfectness_t))
+			if (are_similar_or_contain_one_another(ps[i], ps[j], voxel_size, ranker, perfectness_t, epsilon))
 			{
-				std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
+				//std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
 				already_removed_indices.insert(i);
 				add = false;
 				break;
 			}
+
+			std::cout << ps[j].imFunc->name() << ", ";
+
 		}
 		if (add)
 		{
 			filtered_prims.push_back(ps[i]);
 		}
+
+		std::cout << std::endl;
 	}
 	
 	return filtered_prims;

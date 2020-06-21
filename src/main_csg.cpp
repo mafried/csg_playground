@@ -141,6 +141,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
 	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
 
+	
 	lmu::PrimitiveSet ps;
 	if(g_primitiveSet.size() > 0)
 		ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
@@ -164,8 +165,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 
 	update(viewer);
-
-
+	
+	/*
 	if (!g_manifoldSet.empty())
 	{
 		for (int i = 0; i < g_manifoldSet.size(); ++i)
@@ -203,12 +204,12 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				}
 				cm.row(j) << c.transpose();
 			}
-
+			std::cout << "PC SIZE: " << g_manifoldSet[i]->pc.leftCols(3) << std::endl;
 			viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			//}
 		}
 	}
-
+	*/
 
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
@@ -309,6 +310,7 @@ int main(int argc, char *argv[])
 	prim_params.similarity_filter_epsilon = s.getDouble("Primitives", "SimilarityFilter.Epsilon", 0.0); //0.0
 	prim_params.similarity_filter_similarity_only = s.getBool("Primitives", "SimilarityFilter.SimilarityOnly", true);
 	prim_params.similarity_filter_perfectness_t = s.getDouble("Primitives", "SimilarityFilter.PerfectnessThreshold", 1.0);
+	prim_params.similarity_filter_voxel_size = s.getDouble("Primitives", "SimilarityFilter.VoxelSize", 0.01);
 
 	prim_params.filter_threshold = s.getDouble("Primitives", "GeoScoreFilter.Threshold", 0.01); //0.01
 
@@ -351,7 +353,7 @@ int main(int argc, char *argv[])
 
 		// Scale input pc.
 		pc = lmu::to_canonical_frame(pc);
-		viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
+		//viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
 				
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
 		std::vector<lmu::PointCloud> cluster_pcs;
@@ -392,7 +394,7 @@ int main(int argc, char *argv[])
 
 		// Filter primitives
 		lmu::ThresholdOutlierDetector od(prim_params.filter_threshold);
-		lmu::SimilarityFilter sf(prim_params.similarity_filter_epsilon, prim_params.sdf_voxel_size, prim_params.similarity_filter_similarity_only, 
+		lmu::SimilarityFilter sf(prim_params.similarity_filter_epsilon, prim_params.similarity_filter_voxel_size, prim_params.similarity_filter_similarity_only, 
 			prim_params.similarity_filter_perfectness_t);
 		
 		auto primitives = res.primitives;
@@ -417,7 +419,9 @@ int main(int argc, char *argv[])
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = pc;
 
-		/*
+		goto _LAUNCH;
+
+
 		// Extract CSG tree 
 		t.tick();
 		auto node = lmu::opNo();
@@ -463,9 +467,7 @@ int main(int argc, char *argv[])
 
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);	
-
-		*/
-
+				
 		res_f.close();
 	}
 	catch (const std::exception& ex)

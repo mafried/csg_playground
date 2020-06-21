@@ -295,6 +295,7 @@ namespace lmu
 
 		bool similarity_filter_similarity_only;
 		double similarity_filter_perfectness_t;
+		double similarity_filter_voxel_size;
 
 		int num_geo_score_samples;
 		int num_elite_injections;
