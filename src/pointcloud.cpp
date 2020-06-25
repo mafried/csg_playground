@@ -316,6 +316,10 @@ lmu::PointCloud lmu::readPointCloudXYZ(const std::string& file, double scaleFact
   return points;
 }
 
+#include "igl/signed_distance.h"
+#include <igl/per_vertex_normals.h>
+#include <igl/per_edge_normals.h>
+#include <igl/per_face_normals.h>
 
 lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, double samplingRate, double errorSigma)
 {
@@ -333,6 +337,7 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	std::cout << "Samples: " << numSamples << std::endl;
 
 	Eigen::MatrixXd samplingPoints;
+
 	size_t numSamplingPoints = numSamples.x()*numSamples.y()*numSamples.z();
 	samplingPoints.resize(numSamplingPoints, 3);
 
@@ -347,16 +352,24 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 			}
 
 	std::cout << "num samples: " << std::endl << numSamples << std::endl;
+	
+	Eigen::VectorXd sd;
+	Eigen::VectorXi idx;
+	Eigen::MatrixXd norm, c;
+	igl::AABB<Eigen::MatrixXd, 3> tree;
+	Eigen::MatrixXd fn, vn, en; //note that _vn is the same as mesh's _normals. TODO
+	Eigen::MatrixXi e;
+	Eigen::VectorXi emap;
+		
+	tree.init(mesh.vertices, mesh.indices);
 
-	Eigen::VectorXd sqrD;
-	Eigen::VectorXi I;
-	Eigen::MatrixXd C;
+	igl::per_face_normals(mesh.vertices, mesh.indices, fn);
+	igl::per_vertex_normals(mesh.vertices, mesh.indices, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, fn, vn);
+	igl::per_edge_normals(mesh.vertices, mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, fn, en, e, emap);
 
-	std::cout << "Get sampling points" << std::endl;
+	igl::signed_distance_pseudonormal(samplingPoints, mesh.vertices, mesh.indices, tree, fn, vn, en, emap, sd, idx, c, norm);
 
-	igl::point_mesh_squared_distance(samplingPoints, mesh.vertices, mesh.indices, sqrD, I, C);
-
-	std::vector<Eigen::Vector3d> remainingPoints;
+	std::vector<Eigen::Matrix<double,1,6>> remainingPoints;
 
 	std::random_device rd{};
 	std::mt19937 gen{ rd() };
@@ -368,14 +381,16 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	for (int i = 0; i < numSamplingPoints; i++)
 	{
 		Eigen::Vector3d noise = Eigen::Vector3d(dx(gen), dy(gen), dz(gen));
-		Eigen::Vector3d samplingPoint = samplingPoints.row(i).leftCols(3).transpose();
-		samplingPoint += noise;
+		Eigen::Matrix<double, 1, 6> p;
+		
+		p.row(0) << samplingPoints.row(i).leftCols(3), norm.row(i).leftCols(3);
+		//p += noise;
 		
 		//double sd = node.signedDistance(samplingPoint);
 
-		if (std::sqrt(sqrD(i)) < delta )//&& std::abs(sd) < delta)
+		if (std::abs(sd(i)) < delta )//&& std::abs(sd) < delta)
 		{
-			remainingPoints.push_back(samplingPoint);
+			remainingPoints.push_back(p);
 		}
 	}
 
@@ -388,11 +403,7 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	i = 0;
 	for (const auto& point : remainingPoints)
 	{	
-		res.block<1, 3>(i, 0) = point;
-
-		//Eigen::Vector3d normal = node.signedDistanceAndGradient(point).bottomRows(3).transpose();
-		
-		res.block<1, 3>(i, 3) = Eigen::Vector3d(0, 0, 0);//normal;
+		res.row(i) << point;
 
 		i++;
 	}

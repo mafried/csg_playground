@@ -424,8 +424,16 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getClosestPlane(const ManifoldPtr& pl
 			return std::find(already_used.begin(), already_used.end(), e.first) == already_used.end();
 		});
 
+		double min = std::min_element(closest_planes.begin(), closest_planes.end(), [](const auto& e1, const auto& e2) {return e1.second < e2.second; })->second;
+		double max = std::max_element(closest_planes.begin(), closest_planes.end(), [](const auto& e1, const auto& e2) {return e1.second < e2.second; })->second;
+
 		std::vector<double> probs;
-		std::transform(closest_planes.begin(), closest_planes.end(), std::back_inserter(probs), [](const auto& e) { return e.second; });
+		std::transform(closest_planes.begin(), closest_planes.end(), std::back_inserter(probs), [min, max](const auto& e) { return (e.second-min)/(max-min); });
+
+		//std::cout << "#" << std::endl;
+		for (auto& p : probs)
+			p = 1.0;
+		//std::cout << std::endl;
 
 		std::discrete_distribution<> d(probs.begin(), probs.end());
 
@@ -587,7 +595,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			planes.push_back(cur_plane);
 			for (int i = 1; i < num_planes; ++i)
 			{
-				cur_plane = getClosestPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+				cur_plane = getManifold(ManifoldType::Plane, anyDirection, {}, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true); // getClosestPlane(cur_plane, {} /*planes*/);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
 				if (cur_plane)
 				{
 					planes.push_back(cur_plane);
@@ -1027,12 +1035,14 @@ void lmu::PrimitiveSetPopMan::manipulateBeforeRanking(std::vector<RankedCreature
 	std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>> filtered_pop;
 
 	// Remove duplicate primitives in each creature. 
+	
 	for (const auto& c : population)
 	{	
 		filtered_pop.push_back(RankedCreature<PrimitiveSet, PrimitiveSetRank>(c.creature.without_duplicates(), PrimitiveSetRank()));		
 	}
 
 	population = filtered_pop;
+	
 }
 
 void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const
@@ -1135,7 +1145,7 @@ bool mesh_out_of_range(const lmu::Mesh& mesh)
 	Eigen::Vector3d min = mesh.vertices.colwise().minCoeff();
 	Eigen::Vector3d max = mesh.vertices.colwise().maxCoeff();
 
-	return (max - min).norm() > 1.0; //TODO make this variable.
+	return (max - min).norm() > std::sqrt(3.0); //TODO make this variable.
 }
 
 lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
@@ -1164,7 +1174,7 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 
 	for (int i = 0; i < planes.size(); ++i)
 	{
-		auto new_plane = planes[i];
+		auto new_plane = std::make_shared<Manifold>(*planes[i]);
 
 		// Flip plane normal if inside_point would be outside.
 		double d = (inside_point - new_plane->p).dot(new_plane->n);
