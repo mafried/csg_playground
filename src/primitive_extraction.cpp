@@ -595,7 +595,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			planes.push_back(cur_plane);
 			for (int i = 1; i < num_planes; ++i)
 			{
-				cur_plane = getManifold(ManifoldType::Plane, anyDirection, {}, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true); // getClosestPlane(cur_plane, {} /*planes*/);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+				cur_plane = getClosestPlane(cur_plane, {} /*planes*/);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
 				if (cur_plane)
 				{
 					planes.push_back(cur_plane);
@@ -1148,6 +1148,50 @@ bool mesh_out_of_range(const lmu::Mesh& mesh)
 	return (max - min).norm() > std::sqrt(3.0); //TODO make this variable.
 }
 
+// Find normal to point-cloud by majority voting
+Eigen::Vector3d findNormalByMajority(const lmu::PointCloud& pc)
+{
+	Eigen::Vector3d n1(0.0, 0.0, 0.0);
+	int count1 = 0;
+	Eigen::Vector3d n2(0.0, 0.0, 0.0);
+	int count2 = 0;
+
+	int np = pc.rows();
+
+	if (np == 0) {
+		std::cout << "Empty point-cloud" << std::endl;
+		return n1;
+	}
+
+	n1[0] = pc(0, 3);
+	n1[1] = pc(0, 4);
+	n1[2] = pc(0, 5);
+	count1++;
+
+	for (int i = 1; i < np; ++i) {
+		Eigen::Vector3d cn(pc(i, 3), pc(i, 4), pc(i, 5));
+		double d = n1.dot(cn);
+		if (d < 0) {
+			if (!(n2[0] == 0.0 && n2[1] == 0.0 && n2[2] == 0.0)) {
+				n2[0] = pc(i, 3);
+				n2[1] = pc(i, 4);
+				n2[2] = pc(i, 5);
+			}
+			count2++;
+		}
+		else {
+			count1++;
+		}
+	}
+
+	if (count1 > count2) {
+		return n1;
+	}
+	else {
+		return n2;
+	}
+}
+
 lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 {
 	if (planes.size() < 4)
@@ -1176,16 +1220,19 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 	{
 		auto new_plane = std::make_shared<Manifold>(*planes[i]);
 
-		// Flip plane normal if inside_point would be outside.
-		double d = (inside_point - new_plane->p).dot(new_plane->n);
-		if (d > 0.0)
+		// Find the normal to the plane by majority voting
+		Eigen::Vector3d nm = findNormalByMajority(planes[i]->pc);
+
+		// Flip plane normal if it disagrees with the point-cloud normal
+		double d = nm.dot(new_plane->n);
+		if (d < 0.0)
 		{
 			new_plane->n = -1.0 * new_plane->n;
 		}
 
 		n.push_back(new_plane->n);
 		p.push_back(new_plane->p);
-	} 
+	}
 
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
 	if (polytope->empty() || mesh_out_of_range(polytope->meshCRef()))
