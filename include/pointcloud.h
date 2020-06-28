@@ -31,7 +31,9 @@ namespace lmu
   void scalePointCloud(PointCloud& pc, double scaleFactor = 1.0);
 
   PointCloud add_gaussian_noise(const PointCloud& pc, double pos_std_dev, double n_std_dev);
-  PointCloud to_canonical_frame(const PointCloud& pc, const PointCloud* reference_pc = nullptr);
+
+  PointCloud to_canonical_frame(const PointCloud& pc, const Eigen::Vector3d& min, const Eigen::Vector3d& max);
+  PointCloud to_canonical_frame(const PointCloud& pc);
 
   PointCloud pointCloudFromMesh(const lmu::Mesh & mesh, double delta, double samplingRate, double errorSigma);
 

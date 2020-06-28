@@ -1218,20 +1218,18 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 
 	for (int i = 0; i < planes.size(); ++i)
 	{
-		auto new_plane = std::make_shared<Manifold>(*planes[i]);
-
+		
 		// Find the normal to the plane by majority voting
 		Eigen::Vector3d nm = findNormalByMajority(planes[i]->pc);
 
 		// Flip plane normal if it disagrees with the point-cloud normal
-		double d = nm.dot(new_plane->n);
+		double d = nm.dot(planes[i]->n);
+		Eigen::Vector3d new_n = planes[i]->n;
 		if (d < 0.0)
-		{
-			new_plane->n = -1.0 * new_plane->n;
-		}
-
-		n.push_back(new_plane->n);
-		p.push_back(new_plane->p);
+			new_n = -1.0 * new_n;
+				
+		n.push_back(new_n);
+		p.push_back(planes[i]->p);
 	}
 
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
@@ -1257,34 +1255,34 @@ lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 	ManifoldSet ms;
 	for (int i = 0; i < planes.size() / 2; ++i)
 	{
-		auto newPlane1 = std::make_shared<Manifold>(*planes[i * 2]);
-		auto newPlane2 = std::make_shared<Manifold>(*planes[i * 2 + 1]);
+		//auto newPlane1 = std::make_shared<Manifold>(*planes[i * 2]);
+		//auto newPlane2 = std::make_shared<Manifold>(*planes[i * 2 + 1]);
 
-		Eigen::Vector3d p1 = newPlane1->p;
-		Eigen::Vector3d n1 = newPlane1->n;
-		Eigen::Vector3d p2 = newPlane2->p;
-		Eigen::Vector3d n2 = newPlane2->n;
+		Eigen::Vector3d p1 = planes[i * 2]->p;
+		Eigen::Vector3d n1 = planes[i * 2]->n;
+		Eigen::Vector3d p2 = planes[i * 2 + 1]->p;
+		Eigen::Vector3d n2 = planes[i * 2 + 1]->n;
 
 		// Check plane orientation and correct if necessary.
 		double d1 = (p2 - p1).dot(n2) / n1.dot(n2);
 		double d2 = (p1 - p2).dot(n1) / n2.dot(n1);
 		if (d1 >= 0.0)
-			newPlane1->n = newPlane1->n * -1.0;
+			n1 = n1 * -1.0;
 		if (d2 >= 0.0)
-			newPlane2->n = newPlane2->n * -1.0;
+			n2 = n2 * -1.0;
 
-		ms.push_back(newPlane1);
-		ms.push_back(newPlane2);
+		//ms.push_back(newPlane1);
+		//ms.push_back(newPlane2);
 
-		n.push_back(newPlane1->n);
+		n.push_back(n1);
 
 		if (strictlyParallel)
-			n.push_back(newPlane1->n * -1.0);
+			n.push_back(n1 * -1.0);
 		else
-			n.push_back(newPlane2->n);
+			n.push_back(n2);
 
-		p.push_back(newPlane1->p);
-		p.push_back(newPlane2->p);
+		p.push_back(p1);
+		p.push_back(p2);
 	}
 
 	auto box = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
@@ -1625,8 +1623,7 @@ lmu::DHType lmu::ModelSDF::get_dh_type(const Primitive & p, double t_inside, dou
 		point_mat.row(i) << points[i].transpose();
 	}
 
-	std::cout << "====================" << std::endl;
-
+	
 	std::cout << "Points: " << points.size() << std::endl;
 
 	Eigen::VectorXd d;

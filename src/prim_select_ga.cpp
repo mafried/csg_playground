@@ -357,7 +357,7 @@ struct CSGNodeCreator
 				bool all_childs_are_leaves = true;
 				for (const auto &c : n.childsCRef())
 				{
-					if (c.type() != CSGNodeType::Geometry)
+					if (c.type() != CSGNodeType::Geometry && c.operationType() != CSGNodeOperationType::Noop)
 					{
 						all_childs_are_leaves = false;
 						break;
@@ -435,10 +435,31 @@ private:
 
 	CSGNode create_rnd_operation_node() const
 	{
-		std::discrete_distribution<> d({ 1, 1, 1, 1 });
-		int op = d(_rndEngine) + 1; //0 is OperationType::Unknown, 6 is OperationType::Invalid.
+		std::discrete_distribution<> d({ 1, 1, 1, 1, 1 });
+		int op = d(_rndEngine);
 
-		return createOperation(static_cast<CSGNodeOperationType>(op));
+		CSGNodeOperationType op_type; 
+		switch (op)
+		{
+		default:
+		case 0: 
+			op_type = CSGNodeOperationType::Union;
+			break;
+		case 1:
+			op_type = CSGNodeOperationType::Difference;
+			break;
+		case 2:
+			op_type = CSGNodeOperationType::Intersection;
+			break;
+		case 3:
+			op_type = CSGNodeOperationType::Complement;
+			break;
+		case 4:
+			op_type = CSGNodeOperationType::Noop;;
+			break;
+		}
+
+		return createOperation(op_type);
 	}
 
 	CSGNodeGenerationParams params;
@@ -466,7 +487,7 @@ struct SelectionRanker
 		//static int counter = 0;
 		//std::cout << "counter: " << counter << std::endl;
 		//counter++;
-		
+
 		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
 		auto d = 0.0;
 
@@ -534,6 +555,7 @@ struct SelectionRanker
 		sr.points = points;
 
 		sr.capture_unnormalized();
+		
 		
 		return sr;
 	}

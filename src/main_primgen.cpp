@@ -140,6 +140,10 @@ lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d
 	t3.scale(-1.0 * primitive_scaling);
 	t3.translate(Eigen::Vector3d(-dims.maxCoeff(), 0, 0));
 
+	auto cylinder_f = std::vector<double>({ 0.1, 0.3, 0.5, 0.7, 1.0 });
+	std::uniform_int_distribution<int> cyl_f_d(0, cylinder_f.size()-1);
+
+
 	switch (type)
 	{
 	case 0:
@@ -150,7 +154,7 @@ lmu::CSGNode selectPrimitive(const Eigen::Affine3d& trans, const Eigen::Vector3d
 		return lmu::opPrim({ lmu::geo<lmu::IFTorus>(trans, dims.minCoeff() * primitive_scaling * 0.5, dims.maxCoeff() * primitive_scaling * 0.5, "") });
 	case 3:
 		return lmu::opPrim({ 
-			lmu::geo<lmu::IFCylinder>(trans, dims.maxCoeff() / 2.0 * primitive_scaling, 100, ""),
+			lmu::geo<lmu::IFCylinder>(trans, dims.maxCoeff() / 2.0 * primitive_scaling * cylinder_f[cyl_f_d(rng)], 100, ""),
 			lmu::geo<lmu::IFPlane>(trans * t1, ""),
 			lmu::geo<lmu::IFPlane>(trans * t2, "")
 			});

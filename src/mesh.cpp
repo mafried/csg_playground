@@ -13,17 +13,17 @@
 #include <igl/signed_distance.h>
 #include <igl/upsample.h>
 
-#include <pcl/point_types.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/surface/organized_fast_mesh.h>
-#include <pcl/surface/gp3.h>
-#include <pcl/kdtree/kdtree_flann.h>
+//#include <pcl/point_types.h>
+//#include <pcl/features/normal_3d.h>
+//#include <pcl/surface/organized_fast_mesh.h>
+//#include <pcl/surface/gp3.h>
+//#include <pcl/kdtree/kdtree_flann.h>
 
 //#include <CGAL/Simple_cartesian.h>
 //#include <CGAL/Advancing_front_surface_reconstruction.h>
 //#include <CGAL/tuple.h>
 
-#include <pcl/common/common.h>
+//#include <pcl/common/common.h>
 
 #include "../include/constants.h"
 
@@ -59,7 +59,7 @@ void lmu::transform(Mesh& mesh)
 
 Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& size, int numSubdivisions)
 {
-	Mesh mesh; 
+	Mesh mesh;
 
 	double w2 = 0.5*size.x();
 	double h2 = 0.5*size.y();
@@ -81,7 +81,7 @@ Mesh lmu::createBox(const Eigen::Affine3d& transform, const Eigen::Vector3d& siz
 
 	mesh.indices.row(0) = Eigen::RowVector3i(0, 1, 2);
 	mesh.indices.row(1) = Eigen::RowVector3i(2, 3, 0);
-	
+
 	mesh.indices.row(2) = Eigen::RowVector3i(1, 5, 6);
 	mesh.indices.row(3) = Eigen::RowVector3i(6, 2, 1);
 
@@ -158,7 +158,7 @@ Mesh meshFromGeometry(const std::vector<Eigen::RowVector3d>& vertices, const std
 	lmu::transform(mesh);
 
 	//igl::per_vertex_normals(mesh.vertices, mesh.indices, mesh.normals);
-	
+
 	return mesh;
 }
 
@@ -191,7 +191,7 @@ Mesh lmu::createSphere(const Eigen::Affine3d & transform, double radius, int sta
 			verticesVector.push_back(p);
 		}
 	}
-	
+
 	verticesVector.push_back(Eigen::RowVector3d(0, -radius, 0));
 
 	for (int i = 1; i <= sliceCount; i++) {
@@ -295,7 +295,7 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 		double y = -0.5*height + i*stackHeight;
 		double r = bottomRadius + i*radiusStep;
 		double dTheta = 2.0*pi / slices;
-		for (int j = 0; j <= slices; j++) 
+		for (int j = 0; j <= slices; j++)
 		{
 			double c = cos(j*dTheta);
 			double s = sin(j*dTheta);
@@ -328,7 +328,7 @@ Mesh lmu::createCylinder(const Eigen::Affine3d& transform, float bottomRadius, f
 
 	buildCylinderTopCap(topRadius, height, slices, vertices, indices);
 	buildCylinderBottomCap(bottomRadius, height, slices, vertices, indices);
-	
+
 	return meshFromGeometry(vertices, indices, transform);
 }
 
@@ -373,11 +373,11 @@ void lmu::initializePolytopeCreator()
 }
 
 Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n)
-{	
+{
 	dd_PolyhedraPtr poly;
 	dd_MatrixPtr A, G;
 	dd_ErrorType err;
-	
+
 	A = dd_CreateMatrix(p.size(), 4);
 	A->representation = dd_Inequality;
 
@@ -387,7 +387,7 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 		dd_set_d(A->matrix[i][0], d); dd_set_d(A->matrix[i][1], -n[i].x());  dd_set_d(A->matrix[i][2], -n[i].y());  dd_set_d(A->matrix[i][3], -n[i].z());
 	}
 
-   //dd_WriteMatrix(stdout, A);
+	//dd_WriteMatrix(stdout, A);
 
 	poly = dd_DDMatrix2Poly(A, &err);  /* compute the second (generator) representation */
 	if (err != dd_NoError)
@@ -395,17 +395,17 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 		//std::cout << "Error: " << (int)err << std::endl;
 		return Mesh();
 	}
-		
+
 	G = dd_CopyGenerators(poly);
 	if (G->rowsize == 0)
 	{
 		//std::cout << "Error: Row size is 0" << std::endl;
 		return Mesh();
 	}
-	
+
 	//dd_WriteMatrix(stdout, A);
 	//dd_WriteMatrix(stdout, G);
-	
+
 	std::vector<Point_3> points;
 	points.reserve(G->rowsize);
 	for (int i = 0; i < G->rowsize; i++)
@@ -417,30 +417,30 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	/*std::cout << "--------------------------------------------" << std::endl;
 	if (points.size() < 8)
 	{
-		for (int i = 0; i < p.size(); ++i)
-		{
-			std::cout
-				<< "p: " << p[i].x() << " " << p[i].y() << " " << p[i].z()
-				<< " n: " << n[i].x() << " " << n[i].y() << " " << n[i].z() << std::endl;
-		}
+	for (int i = 0; i < p.size(); ++i)
+	{
+	std::cout
+	<< "p: " << p[i].x() << " " << p[i].y() << " " << p[i].z()
+	<< " n: " << n[i].x() << " " << n[i].y() << " " << n[i].z() << std::endl;
+	}
 	}*/
 
 	dd_FreeMatrix(A);
-	dd_FreeMatrix(G);	
-		
+	dd_FreeMatrix(G);
+
 	//CGAL::advancing_front_surface_reconstruction(points.begin(),
 	//	points.end(),
 	//	std::back_inserter(facets));
 
 	CGAL::Object obj;
-	CGAL::convex_hull_3(points.begin(), points.end(), obj);	
+	CGAL::convex_hull_3(points.begin(), points.end(), obj);
 	const Polyhedron_3* ph = CGAL::object_cast<Polyhedron_3>(&obj);
-	if (!ph) 
+	if (!ph)
 	{
 		//std::cout << "Error: Polyhedron object is null." << std::endl;
 		return Mesh();
 	}
-	
+
 	Eigen::MatrixXd verts(ph->size_of_vertices(), 3);
 	auto np = CGAL::parameters::all_default();
 	auto vpm = choose_param(get_param(np, CGAL::internal_np::vertex_point),
@@ -463,7 +463,7 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 		std::size_t n = circulator_size(hc);
 		size_t indexIdx = 0;
 		do {
-			indices.block<1,1>(faceIdx, indexIdx) << index[hc->vertex()];
+			indices.block<1, 1>(faceIdx, indexIdx) << index[hc->vertex()];
 			indexIdx++;
 			++hc;
 		} while (hc != hc_end);
@@ -472,26 +472,26 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 
 	/*Eigen::MatrixXi indices(sm.number_of_faces(), 3);
 	int row = 0;
-	for (Surface_mesh::Face_index fi : sm.faces()) 
+	for (Surface_mesh::Face_index fi : sm.faces())
 	{
-		Surface_mesh::Halfedge_index hf = sm.halfedge(fi);
-		unsigned int indicesRow[3];
-		int i = 0;
-		for (Surface_mesh::Vertex_index vi : vertices_around_face(hf, sm))
-		{
-			if (i > 2) break;
-			indicesRow[i++] = (unsigned int)vi;
-		}
-		if (i < 3) break;
-		indices.row(row++) << indicesRow[0], indicesRow[1], indicesRow[2];
+	Surface_mesh::Halfedge_index hf = sm.halfedge(fi);
+	unsigned int indicesRow[3];
+	int i = 0;
+	for (Surface_mesh::Vertex_index vi : vertices_around_face(hf, sm))
+	{
+	if (i > 2) break;
+	indicesRow[i++] = (unsigned int)vi;
+	}
+	if (i < 3) break;
+	indices.row(row++) << indicesRow[0], indicesRow[1], indicesRow[2];
 	}
 
 	Eigen::MatrixXd vertices(sm.number_of_vertices(), 3);
 	row = 0;
 	for (auto vd : sm.vertices())
 	{
-		auto p = sm.point(vd);
-		vertices.row(row++) << p.x(), p.y(), p.z();
+	auto p = sm.point(vd);
+	vertices.row(row++) << p.x(), p.y(), p.z();
 	}
 
 	std::cout << "mesh ready" << std::endl;
@@ -501,6 +501,132 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 	return Mesh(verts, indices);
 }
 
+
+// ------
+
+#include <igl/writeOBJ.h>
+
+#include <CGAL/poisson_surface_reconstruction.h>
+#include <CGAL/Inverse_index.h>
+
+
+#include <CGAL/Surface_mesh_default_triangulation_3.h>
+#include <CGAL/Complex_2_in_triangulation_3.h>
+#include <CGAL/make_surface_mesh.h>
+#include <CGAL/Implicit_surface_3.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/IO/facets_in_complex_2_to_triangle_mesh.h>
+#include <CGAL/Poisson_reconstruction_function.h>
+
+
+Mesh lmu::createFromPointCloud(const PointCloud & pc)
+{
+	typedef std::pair<Point_3, Vector_3> Pwn;
+
+	typedef K::FT FT;
+	typedef CGAL::Poisson_reconstruction_function<K> Poisson_reconstruction_function;
+	typedef CGAL::Surface_mesh_default_triangulation_3 STr;
+	typedef CGAL::Surface_mesh_complex_2_in_triangulation_3<STr> C2t3;
+	typedef CGAL::Implicit_surface_3<K, Poisson_reconstruction_function> Surface_3;
+	typedef K::Sphere_3 Sphere_3;
+
+	std::vector<Pwn> points;
+	points.reserve(pc.rows());
+	for (int i = 0; i < pc.rows(); ++i) {
+		Eigen::RowVector3d p = pc.row(i).leftCols(3);
+		Eigen::RowVector3d n = pc.row(i).rightCols(3);
+		points.push_back(std::make_pair(Point_3(p.x(), p.y(), p.z()), Vector_3(n.x(), n.y(), n.z())));
+	}
+	std::cout << "Poisson num points: " << points.size() << std::endl;
+
+
+	Poisson_reconstruction_function
+		function(points.begin(), points.end(),
+			CGAL::First_of_pair_property_map<Pwn>(),
+			CGAL::Second_of_pair_property_map<Pwn>());
+	// Poisson_reconstruction_function function(points.begin(), points.end(), Point_map(), Normal_map());
+
+	if (!function.compute_implicit_function()) {
+		std::cout << "Unable to create Poisson surface mesh." << std::endl;
+		return Mesh();
+	}
+
+
+	FT sm_angle = 20.0;
+	FT sm_radius = 30;
+	FT sm_distance = 0.375;
+
+	FT average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
+		(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
+	std::cout << "Poisson surface average spacing: " << average_spacing << std::endl;
+
+	Point_3 inner_point = function.get_inner_point();
+	Sphere_3 bsphere = function.bounding_sphere();
+	FT radius = std::sqrt(bsphere.squared_radius());
+	FT sm_sphere_radius = 5.0 * radius;
+	FT sm_dichotomy_error = sm_distance*average_spacing / 1000.0;
+
+	Surface_3 surface(function,
+		Sphere_3(inner_point, sm_sphere_radius*sm_sphere_radius),
+		sm_dichotomy_error / sm_sphere_radius);
+
+	CGAL::Surface_mesh_default_criteria_3<STr>
+		criteria(sm_angle,
+			sm_radius*average_spacing,
+			sm_distance*average_spacing);
+
+	// Add all the input points in the Delaunay triangulation
+	STr tr;
+	for (std::size_t i = 0; i < points.size(); ++i) {
+		tr.insert(points[i].first);
+	}
+
+	C2t3 c2t3(tr);
+	CGAL::make_surface_mesh(c2t3,
+		surface,
+		criteria,
+		CGAL::Manifold_with_boundary_tag());
+
+	// Converts to polyhedron
+	Polyhedron_3 output_mesh;
+	CGAL::facets_in_complex_2_to_triangle_mesh(c2t3, output_mesh);
+
+
+	Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
+	int i = 0;
+	for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
+		vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
+
+	typedef typename Polyhedron_3::Vertex_const_iterator VCI;
+	typedef CGAL::Inverse_index< VCI> Index;
+	Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
+
+	Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
+	i = 0;
+	for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
+	{
+		auto hc = it->facet_begin();
+		auto hc_end = hc;
+		std::size_t n = circulator_size(hc);
+		int j = 0;
+		do {
+			indices.coeffRef(i, j++) = index[VCI(hc->vertex())];
+			++hc;
+		} while (hc != hc_end);
+		i++;
+	}
+
+
+	igl::writeOBJ("mesh_out.obj", vertices, indices);
+
+	return Mesh(vertices, indices);
+}
+
+
+// ------
+
+
+/*
 #include <igl/writeOBJ.h>
 
 #include <CGAL/poisson_surface_reconstruction.h>
@@ -508,71 +634,74 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 
 typedef std::pair<Point_3, Vector_3> Pwn;
 
+
 Mesh lmu::createFromPointCloud(const PointCloud & pc)
 {
-	std::vector<Pwn> points;
-	points.reserve(pc.rows());
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		Eigen::RowVector3d p = pc.row(i).leftCols(3);
-		Eigen::RowVector3d n = pc.row(i).rightCols(3);
-		points.push_back(std::make_pair(Point_3(p.x(), p.y(), p.z()), Vector_3(n.x(), n.y(), n.z())));
-	}
-	
-	//CGAL::advancing_front_surface_reconstruction(points.begin(), points.end(),std::back_inserter(facets));
-	
-	Polyhedron_3 output_mesh;
-
-	double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
-		(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
-
-	//average_spacing *= 0.1;
-
-	std::cout << "Poisson surface average spacing: " << average_spacing << std::endl;
-	
-	if (CGAL::poisson_surface_reconstruction_delaunay
-	(points.begin(), points.end(),
-		CGAL::First_of_pair_property_map<Pwn>(),
-		CGAL::Second_of_pair_property_map<Pwn>(),
-		output_mesh, average_spacing))
-	{		
-
-		Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
-		int i = 0;
-		for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
-			vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
-
-		typedef typename Polyhedron_3::Vertex_const_iterator                  VCI;
-		typedef CGAL::Inverse_index< VCI> Index;
-		Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
-
-		Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
-		i = 0;
-		for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
-		{
-			auto hc = it->facet_begin();
-			auto hc_end = hc;
-			std::size_t n = circulator_size(hc);
-			int j = 0;
-			do {
-				indices.coeffRef(i, j++) = index[VCI(hc->vertex())];
-				++hc;
-			} while (hc != hc_end);
-			i++;
-		}
-
-
-		igl::writeOBJ("mesh_out.obj", vertices, indices);
-
-
-		return Mesh(vertices, indices);
-	}
-	else
-	{
-		std::cout << "Unable to create Poisson surface mesh." << std::endl;
-		return Mesh();
-	}
+std::vector<Pwn> points;
+points.reserve(pc.rows());
+for (int i = 0; i < pc.rows(); ++i)
+{
+Eigen::RowVector3d p = pc.row(i).leftCols(3);
+Eigen::RowVector3d n = pc.row(i).rightCols(3);
+points.push_back(std::make_pair(Point_3(p.x(), p.y(), p.z()), Vector_3(n.x(), n.y(), n.z())));
 }
+
+std::cout << "Poisson num points: " << points.size() << std::endl;
+
+//CGAL::advancing_front_surface_reconstruction(points.begin(), points.end(),std::back_inserter(facets));
+
+Polyhedron_3 output_mesh;
+
+double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
+(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
+
+//average_spacing *= 0.1;
+
+std::cout << "Poisson surface average spacing: " << average_spacing << std::endl;
+
+if (CGAL::poisson_surface_reconstruction_delaunay
+(points.begin(), points.end(),
+CGAL::First_of_pair_property_map<Pwn>(),
+CGAL::Second_of_pair_property_map<Pwn>(),
+output_mesh, average_spacing))
+{
+Eigen::MatrixXd vertices(output_mesh.size_of_vertices(), 3);
+int i = 0;
+for (auto it = output_mesh.vertices_begin(); it != output_mesh.vertices_end(); ++it)
+vertices.row(i++) << it->point().x(), it->point().y(), it->point().z();
+
+typedef typename Polyhedron_3::Vertex_const_iterator VCI;
+typedef CGAL::Inverse_index< VCI> Index;
+Index index(output_mesh.vertices_begin(), output_mesh.vertices_end());
+
+Eigen::MatrixXi indices(output_mesh.size_of_facets(), 3);
+i = 0;
+for (auto it = output_mesh.facets_begin(); it != output_mesh.facets_end(); ++it)
+{
+auto hc = it->facet_begin();
+auto hc_end = hc;
+std::size_t n = circulator_size(hc);
+int j = 0;
+do {
+indices.coeffRef(i, j++) = index[VCI(hc->vertex())];
+++hc;
+} while (hc != hc_end);
+i++;
+}
+
+
+igl::writeOBJ("mesh_out.obj", vertices, indices);
+
+return Mesh(vertices, indices);
+}
+else
+{
+std::cout << "Unable to create Poisson surface mesh." << std::endl;
+return Mesh();
+}
+}
+*/
+
 
 double lmu::computeMeshArea(const Mesh & m)
 {
@@ -597,11 +726,11 @@ Mesh lmu::fromOBJFile(const std::string & file)
 {
 	Eigen::MatrixXd vertices;
 	Eigen::MatrixXi indices;
-	
+
 	Mesh mesh;
 
 	igl::readOBJ(file, vertices, indices);
-	
+
 	return Mesh(vertices, indices);
 }
 
@@ -624,7 +753,7 @@ Mesh lmu::fromOFFFile(const std::string & file)
 void lmu::scaleMesh(Mesh& mesh, double largestDim)
 {
 	double factor = (mesh.vertices.colwise().maxCoeff() - mesh.vertices.colwise().minCoeff()).cwiseAbs().maxCoeff();
-	
+
 	mesh.vertices = mesh.vertices / factor * largestDim;
 }
 
@@ -635,7 +764,7 @@ lmu::Mesh lmu::to_canonical_frame(const Mesh& m)
 
 	lmu::Mesh centered_m = m;
 
-	centered_m.vertices  = centered_m.vertices.rowwise() - min.transpose();
+	centered_m.vertices = centered_m.vertices.rowwise() - min.transpose();
 	centered_m.vertices = centered_m.vertices.array().rowwise() / (max - min).transpose().array();
 
 	return centered_m;
@@ -667,48 +796,48 @@ std::string lmu::iFTypeToString(ImplicitFunctionType type)
 }
 
 Eigen::Matrix3d rotationMatrixFrom(const Eigen::Vector3d& x, Eigen::Vector3d& y)
-{	
+{
 	Eigen::Matrix3d m;
 	m.col(0) = x.normalized();
 	m.col(2) = x.cross(y).normalized();
 	m.col(1) = m.col(2).cross(x).normalized();
 
-	return m; 
+	return m;
 }
 
 std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string & file, double scaling)
 {
 	std::ifstream s(file);
-	
-	int cylCount = 0; 
+
+	int cylCount = 0;
 	int boxCount = 0;
 	std::vector<std::shared_ptr<ImplicitFunction>> res;
 
 	while (!s.eof())
 	{
 		std::string type;
-		s >> type; 
-		
+		s >> type;
+
 		std::cout << "Type: " << type << std::endl;
 
 		if (type == "cylinder")
-		{		
+		{
 			double x, y, z, ax, ay, az, radius, height;
 			s >> ax >> ay >> az >> x >> y >> z >> radius >> height;
 
 			x *= scaling;
 			y *= scaling;
 			z *= scaling;
-			radius *= scaling; 
+			radius *= scaling;
 			height *= scaling;
 
-			Eigen::Translation3d t(x, z + height / 2, y  );
-			Eigen::AngleAxisd r(M_PI / 2 , Eigen::Vector3d(1,0,0));
+			Eigen::Translation3d t(x, z + height / 2, y);
+			Eigen::AngleAxisd r(M_PI / 2, Eigen::Vector3d(1, 0, 0));
 			//Eigen::Matrix3d r = rotationMatrixFrom(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(ax,ay,az));
 
 			//std::vector<double> params = { x,y,z,ax,ay,az,radius, height };
 
-			res.push_back(std::make_shared<IFCylinder>((Eigen::Affine3d)r*t,radius, height, "Cylinder" + std::to_string(cylCount++)));
+			res.push_back(std::make_shared<IFCylinder>((Eigen::Affine3d)r*t, radius, height, "Cylinder" + std::to_string(cylCount++)));
 		}
 		else if (type == "box")
 		{
@@ -722,16 +851,16 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 			ymax *= scaling;
 			zmax *= scaling;
 
-			Eigen::Translation3d t(xmin + (xmax-xmin) * 0.5, ymin + (ymax - ymin) * 0.5, zmin + (zmax - zmin) * 0.5);
-					
+			Eigen::Translation3d t(xmin + (xmax - xmin) * 0.5, ymin + (ymax - ymin) * 0.5, zmin + (zmax - zmin) * 0.5);
+
 			std::cout << "BOX: " << xmin + (xmax - xmin) * 0.5 << " " << ymin + (ymax - ymin) * 0.5 << " " << zmin + (zmax - zmin) * 0.5 << std::endl;
-			
+
 			std::cout << ymax << " min: " << ymin << std::endl;
 			//std::cout << xmin << ymin << zmin << "Max: " << xmax << ymax << zmax << std::endl;
 
 			std::vector<double> params = { xmin, ymin, zmin, xmax, ymax, zmax };
 
-			res.push_back(std::make_shared<IFBox>((Eigen::Affine3d)t, Eigen::Vector3d(xmax-xmin, ymax-ymin, zmax-zmin), 1,"Box" + std::to_string(boxCount++)));
+			res.push_back(std::make_shared<IFBox>((Eigen::Affine3d)t, Eigen::Vector3d(xmax - xmin, ymax - ymin, zmax - zmin), 1, "Box" + std::to_string(boxCount++)));
 		}
 	}
 
@@ -739,106 +868,109 @@ std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFile(const std::string &
 }
 
 
-std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::string& file) 
+std::vector<std::shared_ptr<ImplicitFunction>> lmu::fromFilePRIM(const std::string& file)
 {
-  std::ifstream s(file);
-  
-  std::vector<std::shared_ptr<ImplicitFunction>> res;
+	std::ifstream s(file);
 
-  while (!s.eof()) {
-    std::string name;
-    s >> name; 
-    
-    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-    std::cout << "Name: " << name << std::endl;
-    
-    if (name.find("cylinder") != std::string::npos) {
-      // transform radius height
-      Eigen::Affine3d t;
-      // row 1
-      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
-      // row 2
-      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
-      // row 3
-      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
-      // row 4
-      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+	std::vector<std::shared_ptr<ImplicitFunction>> res;
 
-      double radius;
-      s >> radius;
+	while (!s.eof()) {
+		std::string name;
+		s >> name;
 
-      double height;
-      s >> height;
+		std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+		std::cout << "Name: " << name << std::endl;
 
-      res.push_back(std::make_shared<IFCylinder>(t, radius, height, name));
+		if (name.find("cylinder") != std::string::npos) {
+			// transform radius height
+			Eigen::Affine3d t;
+			// row 1
+			s >> t(0, 0) >> t(0, 1) >> t(0, 2) >> t(0, 3);
+			// row 2
+			s >> t(1, 0) >> t(1, 1) >> t(1, 2) >> t(1, 3);
+			// row 3
+			s >> t(2, 0) >> t(2, 1) >> t(2, 2) >> t(2, 3);
+			// row 4
+			s >> t(3, 0) >> t(3, 1) >> t(3, 2) >> t(3, 3);
 
-    } else if (name.find("sphere") != std::string::npos) {
-      // transform radius displacement
-      Eigen::Affine3d t;
-      // row 1
-      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
-      // row 2
-      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
-      // row 3
-      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
-      // row 4
-      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+			double radius;
+			s >> radius;
 
-      double radius;
-      s >> radius;
+			double height;
+			s >> height;
 
-      double disp;
-      s >> disp;
+			res.push_back(std::make_shared<IFCylinder>(t, radius, height, name));
 
-      res.push_back(std::make_shared<IFSphere>(t, radius, name, disp));
+		}
+		else if (name.find("sphere") != std::string::npos) {
+			// transform radius displacement
+			Eigen::Affine3d t;
+			// row 1
+			s >> t(0, 0) >> t(0, 1) >> t(0, 2) >> t(0, 3);
+			// row 2
+			s >> t(1, 0) >> t(1, 1) >> t(1, 2) >> t(1, 3);
+			// row 3
+			s >> t(2, 0) >> t(2, 1) >> t(2, 2) >> t(2, 3);
+			// row 4
+			s >> t(3, 0) >> t(3, 1) >> t(3, 2) >> t(3, 3);
 
-    } else if (name.find("box") != std::string::npos || name.find("cube") != std::string::npos) {
-      // transform size displacement
-      Eigen::Affine3d t;
-      // row 1
-      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
-      // row 2
-      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
-      // row 3
-      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
-      // row 4
-      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+			double radius;
+			s >> radius;
 
-      Eigen::Vector3d size;
-      s >> size[0] >> size[1] >> size[2];
+			double disp;
+			s >> disp;
 
-      double disp;
-      s >> disp;
+			res.push_back(std::make_shared<IFSphere>(t, radius, name, disp));
 
-      res.push_back(std::make_shared<IFBox>(t, size, 1, name, disp));
+		}
+		else if (name.find("box") != std::string::npos || name.find("cube") != std::string::npos) {
+			// transform size displacement
+			Eigen::Affine3d t;
+			// row 1
+			s >> t(0, 0) >> t(0, 1) >> t(0, 2) >> t(0, 3);
+			// row 2
+			s >> t(1, 0) >> t(1, 1) >> t(1, 2) >> t(1, 3);
+			// row 3
+			s >> t(2, 0) >> t(2, 1) >> t(2, 2) >> t(2, 3);
+			// row 4
+			s >> t(3, 0) >> t(3, 1) >> t(3, 2) >> t(3, 3);
 
-    } else if (name.find("cone") != std::string::npos) {
-      // transform c
-      Eigen::Affine3d t;
-      // row 1
-      s >> t(0,0) >> t(0,1) >> t(0,2) >> t(0,3);
-      // row 2
-      s >> t(1,0) >> t(1,1) >> t(1,2) >> t(1,3);
-      // row 3
-      s >> t(2,0) >> t(2,1) >> t(2,2) >> t(2,3);
-      // row 4
-      s >> t(3,0) >> t(3,1) >> t(3,2) >> t(3,3);
+			Eigen::Vector3d size;
+			s >> size[0] >> size[1] >> size[2];
 
-      Eigen::Vector3d c;
-      s >> c[0] >> c[1] >> c[2];
+			double disp;
+			s >> disp;
 
-	  //TODO
-      //res.push_back(std::make_shared<IFCone>(t, c, name));
+			res.push_back(std::make_shared<IFBox>(t, size, 1, name, disp));
 
-    }
-  }		
-  
-  return res;
+		}
+		else if (name.find("cone") != std::string::npos) {
+			// transform c
+			Eigen::Affine3d t;
+			// row 1
+			s >> t(0, 0) >> t(0, 1) >> t(0, 2) >> t(0, 3);
+			// row 2
+			s >> t(1, 0) >> t(1, 1) >> t(1, 2) >> t(1, 3);
+			// row 3
+			s >> t(2, 0) >> t(2, 1) >> t(2, 2) >> t(2, 3);
+			// row 4
+			s >> t(3, 0) >> t(3, 1) >> t(3, 2) >> t(3, 3);
+
+			Eigen::Vector3d c;
+			s >> c[0] >> c[1] >> c[2];
+
+			//TODO
+			//res.push_back(std::make_shared<IFCone>(t, c, name));
+
+		}
+	}
+
+	return res;
 }
 
 
 void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction>>& functions, bool filter, double threshold)
-{	
+{
 	for (auto& func : functions)
 	{
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
@@ -853,15 +985,15 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 			double sampleDistFunction = sampleDistGradFunction[0];
 			Eigen::Vector3d sampleGradFunction = sampleDistGradFunction.bottomRows(3);
-			
+
 			Eigen::Matrix<double, 1, 6> newPN;
 			Eigen::Vector3d newP = (sampleP - (sampleDistFunction * sampleGradFunction));
-			newPN << newP.transpose() , sampleN.transpose();
-								
+			newPN << newP.transpose(), sampleN.transpose();
+
 			double distAfter = func->signedDistance(newP);
 
 			if (std::abs(distAfter) <  threshold)
-			{				
+			{
 				points.push_back(newPN);
 			}
 			else
@@ -874,14 +1006,14 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 		if (filter)
 		{
-			Eigen::MatrixXd m(points.size(), 6); 
+			Eigen::MatrixXd m(points.size(), 6);
 
 			int i = 0;
 			for (const auto& point : points)
 			{
-				m.row(i) = point;				
+				m.row(i) = point;
 				i++;
-			}				
+			}
 			func->points() = m;
 		}
 	}
@@ -889,17 +1021,17 @@ void lmu::movePointsToSurface(const std::vector<std::shared_ptr<ImplicitFunction
 
 
 
-void lmu::writePrimitives(const std::string& filename, 
-			  const std::vector<std::shared_ptr<ImplicitFunction>>& shapes)
+void lmu::writePrimitives(const std::string& filename,
+	const std::vector<std::shared_ptr<ImplicitFunction>>& shapes)
 {
-  std::ofstream of(filename.c_str());
-  
-  for (const auto& shape : shapes) {
-    of << shape->name(); 
-    of << " " + shape->serializeTransform(); 
-    of << " " + shape->serializeParameters();
-    of << std::endl;
-  }
+	std::ofstream of(filename.c_str());
+
+	for (const auto& shape : shapes) {
+		of << shape->name();
+		of << " " + shape->serializeTransform();
+		of << " " + shape->serializeParameters();
+		of << std::endl;
+	}
 }
 
 lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string & name) :
@@ -917,7 +1049,7 @@ lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector
 		_tree.init(_mesh.vertices, _mesh.indices);
 		_hier.set_mesh(_mesh.vertices, _mesh.indices);
 		_hier.grow();
-	
+
 		Eigen::Vector3d min = _mesh.vertices.colwise().minCoeff();
 		Eigen::Vector3d max = _mesh.vertices.colwise().maxCoeff();
 		Eigen::Vector3d tpos(0.5*(min.x() + max.x()), 0.5*(min.y() + max.y()), 0.5*(min.z() + max.z()));
@@ -971,15 +1103,15 @@ Eigen::Vector3d lmu::IFPolytope::gradientLocal(const Eigen::Vector3d & localP, d
 }
 
 double lmu::IFPolytope::signedDistanceLocal(const Eigen::Vector3d & localP)
-{	
-	double d = std::numeric_limits<double>::max(); 
+{
+	double d = std::numeric_limits<double>::max();
 
 	for (int i = 0; i < _p.size(); ++i)
 	{
 		double pn = -_n[i].dot(localP - _p[i]);
 		d = pn < d ? pn : d;
 	}
-	
+
 	return -d;
 }
 
@@ -1089,8 +1221,8 @@ inline lmu::IFBox::IFBox(const Eigen::Affine3d & transform, const Eigen::Vector3
 	_aabb = AABB(tpos, 0.5 * Eigen::Vector3d(max.x() - min.x(), max.y() - min.y(), max.z() - min.z()));
 }
 
-lmu::IFTorus::IFTorus(const Eigen::Affine3d& transform,	double minor, double major, const std::string& name) :
-	ImplicitFunction(transform, lmu::Mesh(), name),	
+lmu::IFTorus::IFTorus(const Eigen::Affine3d& transform, double minor, double major, const std::string& name) :
+	ImplicitFunction(transform, lmu::Mesh(), name),
 	_major(major),
 	_minor(minor)
 {
@@ -1133,12 +1265,12 @@ double lmu::IFTorus::signedDistanceLocal(const Eigen::Vector3d& localP)
 	float spin1 = n.dot(s);
 	float spin0 = (s - spin1 * n).norm();
 	spin0 -= _major;
-	
+
 	return std::sqrt(spin0 * spin0 + spin1 * spin1) - _minor;
 
 	//if (!m_appleShaped)
 	//	return std::sqrt(spin0 * spin0 + spin1 * spin1) - m_rminor;
-	
+
 	// apple shaped torus distance
 	//float minorAngle = std::atan2(spin1, spin0); // minor angle
 	//if (fabs(minorAngle) < m_cutOffAngle)
@@ -1155,7 +1287,7 @@ lmu::IFCone::IFCone(const Eigen::Affine3d& transform, double angle, double heigh
 	ImplicitFunction(transform, lmu::Mesh(), name),
 	_angle(angle),
 	_height(height)
-{	
+{
 }
 
 ImplicitFunctionType lmu::IFCone::type() const
@@ -1193,8 +1325,8 @@ double lmu::IFCone::signedDistanceLocal(const Eigen::Vector3d& localP)
 	// this is for one sided cone!
 	auto s = localP;
 	float g = s.dot(n); // distance to plane orhogonal to
-								// axisdir through center
-								// distance to axis
+						// axisdir through center
+						// distance to axis
 	float sqrS = s.squaredNorm();
 	float f = sqrS - (g * g);
 	if (f <= 0)
@@ -1214,8 +1346,8 @@ lmu::IFPlane::IFPlane(const Eigen::Affine3d& transform, const std::string& name)
 {
 }
 
-lmu::IFPlane::IFPlane(const Eigen::Vector3d & p, const Eigen::Vector3d & n, const std::string & name) : 
-	ImplicitFunction(get_transform_from(p,n), lmu::Mesh(), name)
+lmu::IFPlane::IFPlane(const Eigen::Vector3d & p, const Eigen::Vector3d & n, const std::string & name) :
+	ImplicitFunction(get_transform_from(p, n), lmu::Mesh(), name)
 {
 }
 
@@ -1261,18 +1393,18 @@ Eigen::Vector3d lmu::IFPlane::gradientLocal(const Eigen::Vector3d& localP, doubl
 double lmu::IFPlane::signedDistanceLocal(const Eigen::Vector3d& localP)
 {
 	const auto n = Eigen::Vector3d(1.0, 0.0, 0.0);
-	double d =  n.dot(localP);
+	double d = n.dot(localP);
 
 	//std::cout << "D: " << d << std::endl;
-	return d; 
+	return d;
 }
 
 Eigen::Affine3d lmu::IFPlane::get_transform_from(const Eigen::Vector3d& p, const Eigen::Vector3d& n) const
 {
 	const auto c_n = Eigen::Vector3d(1.0, 0.0, 0.0);
-	
+
 	Eigen::Affine3d trans = Eigen::Translation3d(p) * Eigen::Quaterniond().setFromTwoVectors(c_n, n).toRotationMatrix();
-	
+
 	return trans;
 }
 

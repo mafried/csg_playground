@@ -145,21 +145,20 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	lmu::PrimitiveSet ps;
 	if(g_primitiveSet.size() > 0)
 		ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
-	/*
+	
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
 	std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
-
 	points.clear();
 	std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], g_t_inside, g_t_outside, g_voxel_size, points, true) << std::endl;
-
 	std::cout << "Show Result: " << g_show_res << std::endl;
-	
+	std::cout << "====================" << std::endl;
+
 	viewer.data().clear();
 	
 
 	
 	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
-
+	/*
 	auto points_pc = lmu::pointCloudFromVector(points);
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	*/
@@ -210,8 +209,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				}
 				cm.row(j) << c.transpose();
 			}
-			viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-			//}
+			
+			//viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			
 		}
 	}
 	
@@ -340,20 +340,6 @@ int main(int argc, char *argv[])
 	try
 	{							
 		// read complete point cloud
-		lmu::PointCloud pc;
-
-		std::cout << "Source: " << source << std::endl;
-		
-		if (source == "mesh")
-		{
-			auto mesh = lmu::to_canonical_frame(lmu::fromOBJFile(path + "mesh.obj"));
-			pc = lmu::pointCloudFromMesh(mesh, sampling_rate, sampling_rate, 0.0);
-			lmu::writePointCloud("out_pc.txt", pc);
-		}
-		else
-		{
-			pc = lmu::readPointCloud(path + "pc.txt");
-		}
 
 		//viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
 
@@ -368,30 +354,48 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
+			lmu::PointCloud pc;
+
+			std::cout << "Source: " << source << std::endl;
+
+			if (source == "mesh")
+			{
+				auto mesh = lmu::to_canonical_frame(lmu::fromOBJFile(path + "mesh.obj"));
+				pc = lmu::pointCloudFromMesh(mesh, sampling_rate, sampling_rate, 0.0);
+				lmu::writePointCloud("out_pc.txt", pc);
+			}
+			else
+			{
+				pc = lmu::readPointCloud(path + "pc.txt");
+			}
+
 			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
 			clusters = { cl };
 		}
-
-		// Scale input pc.
-		pc = lmu::to_canonical_frame(pc);
 				
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
 		std::vector<lmu::PointCloud> cluster_pcs;
 		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs),[](const auto& c) { return c.pc; });
+		
+		
 		auto merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
+			
+		Eigen::Vector3d mc_min = merged_cluster_pc.leftCols(3).colwise().minCoeff();
+		Eigen::Vector3d mc_max = merged_cluster_pc.leftCols(3).colwise().maxCoeff();
+
+		merged_cluster_pc = lmu::to_canonical_frame(merged_cluster_pc);
+
+		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
+
 		for (auto& c : clusters)
 		{
-			c.pc = lmu::to_canonical_frame(c.pc, &merged_cluster_pc);
-			//viewer.data().set_points(c.pc.leftCols(3), c.pc.rightCols(3));
-
+			c.pc = lmu::to_canonical_frame(c.pc, mc_min, mc_max);
 		}
-
+		
 		// Check if everything went right with the pc transformation.
 		cluster_pcs.clear();
 		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
 		merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
-		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(pc).transpose() << std::endl;
-		std::cout << "Combined cluster point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
 		
 		lmu::TimeTicker t;
 
@@ -413,7 +417,7 @@ int main(int argc, char *argv[])
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes, pc, prim_params, prim_ga_f);
+		auto res = lmu::extractPrimitivesWithGA(ransacRes, merged_cluster_pc, prim_params, prim_ga_f);
 		res_f << "PrimitiveGA Duration=" << t.tick() << std::endl;
 
 		// Filter primitives
@@ -424,13 +428,13 @@ int main(int argc, char *argv[])
 		auto primitives = res.primitives;
 
 		t.tick();
-		//primitives = primitives.without_duplicates();
+		primitives = primitives.without_duplicates();
 		res_f << "Duplicate Filter=" << t.tick() << std::endl;
 
 		primitives = od.remove_outliers(primitives, *res.ranker);
 
 		t.tick();
-		//primitives = sf.filter(primitives, *res.ranker);
+		primitives = sf.filter(primitives, *res.ranker);
 		res_f << "Similarity Filter=" << t.tick() << std::endl;
 
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;
@@ -441,9 +445,9 @@ int main(int argc, char *argv[])
 		g_primitiveSet = primitives;
 		g_ranker = res.ranker;
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
-		g_res_pc = pc;
+		g_res_pc = merged_cluster_pc;
 
-		goto _LAUNCH;
+		//goto _LAUNCH;
 
 		// Extract CSG tree 
 		t.tick();

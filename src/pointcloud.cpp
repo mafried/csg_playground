@@ -217,31 +217,26 @@ lmu::PointCloud lmu::add_gaussian_noise(const PointCloud& pc, double pos_std_dev
 	return new_pc;
 }
 
-lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc, const PointCloud* reference_pc)
-{
-	Eigen::Vector3d min; 
-	Eigen::Vector3d max;
+lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc)
+{	
+	Eigen::Vector3d min = pc.leftCols(3).colwise().minCoeff();
+	Eigen::Vector3d max = pc.leftCols(3).colwise().maxCoeff();
 	
-	if (reference_pc)
-	{
-		min = reference_pc->leftCols(3).colwise().minCoeff();
-		max = reference_pc->leftCols(3).colwise().maxCoeff();
-	}
-	else
-	{
-		min = pc.leftCols(3).colwise().minCoeff();
-		max = pc.leftCols(3).colwise().maxCoeff();
-	}
-	
+	return to_canonical_frame(pc, min, max);
+}
+
+lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc, const Eigen::Vector3d& min, const Eigen::Vector3d& max)
+{	
 	double s = (max - min).maxCoeff();
-		
+
 	lmu::PointCloud centered_pc = pc;
-	
+
 	centered_pc.leftCols(3) = centered_pc.leftCols(3).rowwise() - min.transpose();
-	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() / Eigen::Array<double,1,3>(s, s, s);// (max - min).transpose().array();
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() / Eigen::Array<double,1,3>(s, s, s);
 
 	return centered_pc;
 }
+
 
 lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)
 {
