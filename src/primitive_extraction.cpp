@@ -162,6 +162,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 
 	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, size_weight, params.num_elite_injections);
 	PrimitiveSetGA ga;
+
+	std::cout << "Start GA" << std::endl;
 	auto res = ga.run(paramsGA1, selector, creator, *ranker, criterion, popMan);
 	
 	res.statistics.save(stream);
@@ -362,11 +364,11 @@ lmu::PrimitiveSet lmu::PrimitiveSetCreator::create() const
 		{
 			ps.push_back(p);
 
-			//std::cout << "Added Primitive" << std::endl;
+			std::cout << "Added Primitive" << std::endl;
 		}
 		else
 		{
-			//std::cout << "Added None" << std::endl;
+			std::cout << "Added None" << std::endl;
 		}
 	}
 
@@ -595,7 +597,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			planes.push_back(cur_plane);
 			for (int i = 1; i < num_planes; ++i)
 			{
-				cur_plane = getClosestPlane(cur_plane, {} /*planes*/);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+				cur_plane = getClosestPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
 				if (cur_plane)
 				{
 					planes.push_back(cur_plane);
@@ -1199,6 +1201,29 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 		return Primitive::None();
 	}
 
+	/*
+	std::vector<Eigen::Vector3d> p;
+	std::vector<Eigen::Vector3d> n;
+
+	for (int i = 0; i < planes.size(); ++i)
+	{
+		auto new_plane = std::make_shared<Manifold>(*planes[i]);
+
+		// Find the normal to the plane by majority voting
+		Eigen::Vector3d nm = findNormalByMajority(planes[i]->pc);
+
+		// Flip plane normal if it disagrees with the point-cloud normal
+		double d = nm.dot(new_plane->n);
+		if (d < 0.0)
+		{
+			new_plane->n = -1.0 * new_plane->n;
+		}
+
+		n.push_back(new_plane->n);
+		p.push_back(new_plane->p);
+	}
+	*/
+
 	// Get point that is guaranteed to be inside of the polytope. 
 	// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
 	Eigen::Vector3d inside_point;
@@ -1218,21 +1243,21 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 
 	for (int i = 0; i < planes.size(); ++i)
 	{
-		
-		// Find the normal to the plane by majority voting
-		Eigen::Vector3d nm = findNormalByMajority(planes[i]->pc);
+		auto new_plane = std::make_shared<Manifold>(*planes[i]);
 
-		// Flip plane normal if it disagrees with the point-cloud normal
-		double d = nm.dot(planes[i]->n);
-		Eigen::Vector3d new_n = planes[i]->n;
-		if (d < 0.0)
-			new_n = -1.0 * new_n;
-				
-		n.push_back(new_n);
-		p.push_back(planes[i]->p);
+		// Flip plane normal if inside_point would be outside.
+		double d = (inside_point - new_plane->p).dot(new_plane->n);
+		if (d > 0.0)
+		{
+			new_plane->n = -1.0 * new_plane->n;
+		}
+
+		n.push_back(new_plane->n);
+		p.push_back(new_plane->p);
 	}
-
+	
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
+
 	if (polytope->empty() || mesh_out_of_range(polytope->meshCRef()))
 	{
 		return Primitive::None();
@@ -1255,34 +1280,34 @@ lmu::Primitive lmu::createBoxPrimitive(const ManifoldSet& planes)
 	ManifoldSet ms;
 	for (int i = 0; i < planes.size() / 2; ++i)
 	{
-		//auto newPlane1 = std::make_shared<Manifold>(*planes[i * 2]);
-		//auto newPlane2 = std::make_shared<Manifold>(*planes[i * 2 + 1]);
+		auto newPlane1 = std::make_shared<Manifold>(*planes[i * 2]);
+		auto newPlane2 = std::make_shared<Manifold>(*planes[i * 2 + 1]);
 
-		Eigen::Vector3d p1 = planes[i * 2]->p;
-		Eigen::Vector3d n1 = planes[i * 2]->n;
-		Eigen::Vector3d p2 = planes[i * 2 + 1]->p;
-		Eigen::Vector3d n2 = planes[i * 2 + 1]->n;
+		Eigen::Vector3d p1 = newPlane1->p;
+		Eigen::Vector3d n1 = newPlane1->n;
+		Eigen::Vector3d p2 = newPlane2->p;
+		Eigen::Vector3d n2 = newPlane2->n;
 
 		// Check plane orientation and correct if necessary.
 		double d1 = (p2 - p1).dot(n2) / n1.dot(n2);
 		double d2 = (p1 - p2).dot(n1) / n2.dot(n1);
 		if (d1 >= 0.0)
-			n1 = n1 * -1.0;
+			newPlane1->n = newPlane1->n * -1.0;
 		if (d2 >= 0.0)
-			n2 = n2 * -1.0;
+			newPlane2->n = newPlane2->n * -1.0;
 
-		//ms.push_back(newPlane1);
-		//ms.push_back(newPlane2);
+		ms.push_back(newPlane1);
+		ms.push_back(newPlane2);
 
-		n.push_back(n1);
+		n.push_back(newPlane1->n);
 
 		if (strictlyParallel)
-			n.push_back(n1 * -1.0);
+			n.push_back(newPlane1->n * -1.0);
 		else
-			n.push_back(n2);
+			n.push_back(newPlane2->n);
 
-		p.push_back(p1);
-		p.push_back(p2);
+		p.push_back(newPlane1->p);
+		p.push_back(newPlane2->p);
 	}
 
 	auto box = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
@@ -1498,6 +1523,8 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 	igl::per_edge_normals(surface_mesh.vertices, surface_mesh.indices, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, fn, en, e, emap);
 
 	std::cout << "Fill with signed distance values. " << std::endl;
+	std::cout << "N: " << n << std::endl;
+	std::cout << "GridSize: " << grid_size.transpose() << std::endl;
 
 	Eigen::MatrixXd points(n, 3);
 	int idx = 0;
@@ -1520,7 +1547,11 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 	Eigen::VectorXi i;
 	Eigen::MatrixXd norm, c;
 
+	std::cout << "Get sd and normal. ";
+
 	igl::signed_distance_pseudonormal(points, surface_mesh.vertices, surface_mesh.indices, tree, fn, vn, en, emap, d, i, c, norm);
+
+	std::cout << "Done." << std::endl;
 
 	for (int j = 0; j < n; ++j)
 	{
@@ -1529,6 +1560,8 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 
 		data[j] = SDFValue(sd, n);
 	}
+
+	std::cout << "Mesh re-creation done." << std::endl;
 }
 
 lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const
@@ -1826,8 +1859,8 @@ bool fully_contains(const lmu::Primitive& p1, const lmu::Primitive& p2, double v
 	int num_points = 0;
 	int num_outside_points = 0;
 	bool contains = true;
-	iterate_over_prim_volume(p1, voxel_size, [&p2, &contains, &num_points, &num_outside_points, epsilon](const Eigen::Vector3d& p) {
-		if (p2.imFunc->signedDistance(p) > epsilon)
+	iterate_over_prim_volume(p1, voxel_size, [&p1, &p2, &contains, &num_points, &num_outside_points, epsilon](const Eigen::Vector3d& p) {
+		if (std::abs(p2.imFunc->signedDistance(p) - p1.imFunc->signedDistance(p)) > epsilon )
 		{
 			contains = false;
 			num_outside_points++;
@@ -1842,9 +1875,6 @@ bool fully_contains(const lmu::Primitive& p1, const lmu::Primitive& p2, double v
 
 bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Primitive& p2, double voxel_size, const lmu::PrimitiveSetRanker& ranker, double perfectness_t, double epsilon)
 {
-	auto n1 = lmu::geometry(p1.imFunc);
-	auto n2 = lmu::geometry(p2.imFunc);
-
 	static lmu::EmptySetLookup esLookup;
 
 	// Check if p2 is perfect.
@@ -1858,22 +1888,22 @@ bool are_similar_or_contain_one_another(const lmu::Primitive& p1, const lmu::Pri
 	{
 		if (container_is_perfect_primitive)
 		{
-			//std::cout << p2.imFunc->name() << " is perfect and fully contains " << p1.imFunc->name() << std::endl;
+			std::cout << p2.imFunc->name() << " is perfect and fully contains " << p1.imFunc->name() << std::endl;
 			return true;
 		}
 		else if(fully_contains(p2, p1, voxel_size, epsilon))
 		{
-			//std::cout << p2.imFunc->name() << " is equal to " << p1.imFunc->name() << std::endl;
+			std::cout << p2.imFunc->name() << " is equal to " << p1.imFunc->name() << std::endl;
 			return true;
 		}
 		else
 		{
-			//std::cout << p2.imFunc->name() << " is NOT equal to " << p1.imFunc->name() << std::endl;
+			std::cout << p2.imFunc->name() << " is NOT equal to " << p1.imFunc->name() << std::endl;
 		}
 	}
 	else
-	{
-		//std::cout << p2.imFunc->name() << " does not fully contain " << p1.imFunc->name() << std::endl;
+	{ 
+		std::cout << p2.imFunc->name() << " does not fully contain " << p1.imFunc->name() << std::endl;
 	}
 	
 	return false;
@@ -1888,7 +1918,7 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const Pr
 	{
 		bool add = true;
 
-		std::cout << ps[i].imFunc->name() << ": ";
+		std::cout << ps[i].imFunc->name() << ": " << std::endl;
 
 		for(int j = 0; j < ps.size(); ++j)
 		{
@@ -1896,14 +1926,11 @@ lmu::PrimitiveSet lmu::SimilarityFilter::filter(const PrimitiveSet& ps, const Pr
 
 			if (are_similar_or_contain_one_another(ps[i], ps[j], voxel_size, ranker, perfectness_t, epsilon))
 			{
-				//std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
+				std::cout << "filtered redundant primitive " << ps[i].imFunc->name() << std::endl;
 				already_removed_indices.insert(i);
 				add = false;
 				break;
 			}
-
-			std::cout << ps[j].imFunc->name() << ", ";
-
 		}
 		if (add)
 		{
