@@ -155,6 +155,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	viewer.data().clear();
 	
+	auto points_pc = lmu::pointCloudFromVector(points);
+	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 
 	
 	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
@@ -163,7 +165,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	*/
 	
-	viewer.data().clear();
+	//viewer.data().clear();
 
 	if (g_show_sdf)
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
@@ -436,7 +438,7 @@ int main(int argc, char *argv[])
 		t.tick();
 		primitives = sf.filter(primitives, *res.ranker);
 		res_f << "Similarity Filter=" << t.tick() << std::endl;
-
+				
 		lmu::ManifoldSet manifolds = ransacRes.manifolds;
 
 		for (const auto& p : primitives)
