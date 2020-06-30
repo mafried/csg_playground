@@ -597,7 +597,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 			planes.push_back(cur_plane);
 			for (int i = 1; i < num_planes; ++i)
 			{
-				cur_plane = getClosestPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0,0,0), 0.0, true);
+				cur_plane = getClosestPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
 				if (cur_plane)
 				{
 					planes.push_back(cur_plane);
@@ -1860,7 +1860,7 @@ bool fully_contains(const lmu::Primitive& p1, const lmu::Primitive& p2, double v
 	int num_outside_points = 0;
 	bool contains = true;
 	iterate_over_prim_volume(p1, voxel_size, [&p1, &p2, &contains, &num_points, &num_outside_points, epsilon](const Eigen::Vector3d& p) {
-		if (std::abs(p2.imFunc->signedDistance(p) - p1.imFunc->signedDistance(p)) > epsilon )
+		if (p1.imFunc->signedDistance(p) < 0.0 && p2.imFunc->signedDistance(p) > epsilon )
 		{
 			contains = false;
 			num_outside_points++;
