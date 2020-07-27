@@ -184,7 +184,7 @@ namespace lmu
 
 	struct ModelSDF
 	{
-		ModelSDF(const PointCloud& pc, double voxel_size);
+		ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& s);
 
 		~ModelSDF();
 
@@ -301,7 +301,7 @@ namespace lmu
 		int num_elite_injections;
 	};
 
-	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const PrimitiveGaParams& params, std::ostream& stream);
+	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
 	Primitive createPolytopePrimitive(const ManifoldSet& planes);
