@@ -216,6 +216,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	update(viewer);
 	
+	return true;
 	
 	if (!g_manifoldSet.empty())
 	{
@@ -515,7 +516,7 @@ int main(int argc, char *argv[])
 
 		int ii; 
 		std::cin >> ii;
-		structure_pointcloud(merged_cluster_pc, ransacRes.manifolds, 0.015);
+		g_res_pc = lmu::structure_pointcloud(ransacRes.manifolds, 0.1);
 
 		
 		goto _LAUNCH;

@@ -6,7 +6,7 @@
 
 namespace lmu
 {
-	void structure_pointcloud(const lmu::PointCloud& pc, const lmu::ManifoldSet& ms, double epsilon);
+	lmu::PointCloud structure_pointcloud(const lmu::ManifoldSet& ms, double epsilon);
 }
 
 #endif

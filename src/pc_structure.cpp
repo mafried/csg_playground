@@ -90,24 +90,48 @@ Efficient_ransac::Plane_range to_cgal_planes(const lmu::ManifoldSet& ms)
 }
 
 
-void lmu::structure_pointcloud(const lmu::PointCloud& pc, const lmu::ManifoldSet& ms, double epsilon)
+lmu::PointCloud lmu::structure_pointcloud(const lmu::ManifoldSet& ms, double epsilon)
 {
 	Efficient_ransac::Plane_range planes = to_cgal_planes(ms);
 
 	Pwn_vector points = to_cgal_points(ms);
-	Pwn_vector structured_pts;
 
-	CGAL::structure_point_set(points,
-		planes,
-		std::back_inserter(structured_pts),
+	CGAL::Point_set_with_structure<Kernel> psws(points,
+		planes,		
 		epsilon,//0.015, // epsilon for structuring points
 		CGAL::parameters::point_map(Point_map()).
 		normal_map(Normal_map()).
 		plane_map(CGAL::Shape_detection_3::Plane_map<Traits>()).
 		plane_index_map(CGAL::Shape_detection_3::Point_to_shape_index_map<Traits>(points, planes)));
 
-	std::cout << structured_pts.size()
-		<< " structured point(s) generated." << std::endl;
+	lmu::PointCloud debug_pc(points.size(), 6);
+	
+	for (int i = 0; i < psws.size(); ++i)
+	{
+		std::vector<Kernel::Plane_3> adjacent_planes;
 
+		psws.adjacency(i, std::back_inserter(adjacent_planes));
+
+		auto size = adjacent_planes.size();
+
+		switch (size)
+		{
+		case 0:
+			debug_pc.row(i) << points[i].first.x(), points[i].first.y(), points[i].first.z(), 1.0, 0.0, 0.0;
+			break;
+		case 1:
+			debug_pc.row(i) << points[i].first.x(), points[i].first.y(), points[i].first.z(), 0.0, 0.0, 1.0;
+			break;
+		case 2: 
+			debug_pc.row(i) << points[i].first.x(), points[i].first.y(), points[i].first.z(), 0.0, 1.0, 0.0;
+			break;
+
+		default:
+			debug_pc.row(i) << points[i].first.x(), points[i].first.y(), points[i].first.z(), 0.0, 0.0, 0.0;
+		}
+		
+	}
+
+	return debug_pc;
 }
 
