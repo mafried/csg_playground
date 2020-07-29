@@ -233,6 +233,16 @@ lmu::ManifoldSet lmu::PlaneGraph::planes() const
 	return ms;
 }
 
+lmu::PointCloud lmu::PlaneGraph::plane_points() const
+{
+	std::vector<PointCloud> pcs;
+	const auto& p = planes();
+	std::transform(p.begin(), p.end(), std::back_inserter(pcs),
+		[](const ManifoldPtr m) {return m->pc; });
+
+	return lmu::mergePointClouds(pcs);
+}
+
 template <class Name>
 class VertexWriter
 {

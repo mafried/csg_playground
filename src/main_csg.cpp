@@ -216,8 +216,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	update(viewer);
 	
-	return true;
-	
+	//return true;
+
 	if (!g_manifoldSet.empty())
 	{
 		viewer.data().clear();
@@ -514,13 +514,11 @@ int main(int argc, char *argv[])
 
 		g_manifoldSet = ransacRes.manifolds;
 
-		int ii; 
-		std::cin >> ii;
-		auto g = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
-		g.to_file("plane_graph.gv");
-		
-		goto _LAUNCH;
+		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
+		plane_graph.to_file("plane_graph.gv");
 
+		//goto _LAUNCH;
+						
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
 				
@@ -533,10 +531,14 @@ int main(int argc, char *argv[])
 
 		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
 
-		//goto _LAUNCH;
-
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes, merged_cluster_pc, model_sdf, prim_params, prim_ga_f);
+		auto non_planar_primitives = lmu::extractNonPlanarPrimitives(ransacRes.manifolds);
+
+		auto res = lmu::extractPolytopePrimitivesWithGA(plane_graph, model_sdf, prim_params, prim_ga_f);
+
+		auto primitives = res.polytopes;
+		primitives.insert(primitives.end(), non_planar_primitives.begin(), non_planar_primitives.end());
+
 		res_f << "PrimitiveGA Duration=" << t.tick() << std::endl;
 
 		// Filter primitives
@@ -544,8 +546,6 @@ int main(int argc, char *argv[])
 		lmu::SimilarityFilter sf(prim_params.similarity_filter_epsilon, prim_params.similarity_filter_voxel_size, prim_params.similarity_filter_similarity_only, 
 			prim_params.similarity_filter_perfectness_t);
 		
-		auto primitives = res.primitives;
-
 		t.tick();
 		primitives = primitives.without_duplicates();
 		res_f << "Duplicate Filter=" << t.tick() << std::endl;
@@ -568,7 +568,7 @@ int main(int argc, char *argv[])
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = merged_cluster_pc;
 
-		//goto _LAUNCH;
+		goto _LAUNCH;
 
 		// Extract CSG tree 
 		t.tick();

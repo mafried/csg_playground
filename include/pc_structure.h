@@ -24,6 +24,8 @@ namespace lmu
 
 		ManifoldSet planes() const;
 
+		PointCloud plane_points() const;
+
 		void to_file(const std::string& file) const;
 
 	private: 

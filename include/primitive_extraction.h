@@ -3,6 +3,7 @@
 
 #include "primitives.h"
 #include "evolution.h"
+#include "pc_structure.h"
 
 #include <vector>
 
@@ -90,12 +91,9 @@ namespace lmu
 
 	std::ostream& operator<<(std::ostream& out, const PrimitiveSetRank& r);
 
-	using PlaneMap = std::unordered_map<lmu::ManifoldPtr, std::vector<std::pair<lmu::ManifoldPtr, double>>>;
-	PlaneMap create_plane_map(const ManifoldSet& manifolds);
-
 	struct PrimitiveSetCreator
 	{
-		PrimitiveSetCreator(const ManifoldSet& ms, double intraCrossProb, const std::vector<double>& mutationDistribution,
+		PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
 			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes);
 
@@ -121,7 +119,7 @@ namespace lmu
 			double angleEpsilon, bool ignoreDirection = false, 
 			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0, bool ignorePointDistance = false) const;
 
-		ManifoldPtr getClosestPlane(const ManifoldPtr& plane, const ManifoldSet& already_used) const;
+		ManifoldPtr getNeighborPlane(const ManifoldPtr& plane, const ManifoldSet& already_used) const;
 
 		ManifoldPtr getPerpendicularPlane(const std::vector<ManifoldPtr>& planes, const ManifoldSet& alreadyUsed, double angleEpsilon) const;
 		ManifoldPtr getParallelPlane(const ManifoldPtr& plane, const ManifoldSet& alreadyUsed, double angleEpsilon, double minDistanceToPlanePoint) const;
@@ -132,8 +130,7 @@ namespace lmu
 		Primitive createPrimitive() const;
 		Primitive mutatePrimitive(const Primitive& p, double angleEpsilon) const;
 
-		ManifoldSet ms;
-		std::unordered_set<ManifoldType> availableManifoldTypes;
+		PlaneGraph plane_graph;
 		double intraCrossProb;
 
 		int min_polytope_planes;
@@ -151,14 +148,13 @@ namespace lmu
 		mutable std::default_random_engine rndEngine;
 		mutable std::random_device rndDevice;
 
-		lmu::PlaneMap plane_map;
 	};
 	
 	struct PrimitiveSetRanker;
 	struct GAResult
 	{
-		PrimitiveSet primitives; 
-		ManifoldSet manifolds; 
+		PrimitiveSet polytopes; 
+		PlaneGraph plane_graph; 
 		std::shared_ptr<PrimitiveSetRanker> ranker;
 	};
 
@@ -218,7 +214,7 @@ namespace lmu
 
 	struct PrimitiveSetRanker
 	{
-		PrimitiveSetRanker(const PointCloud& pc, const ManifoldSet& ms, const PrimitiveSet& staticPrims,
+		PrimitiveSetRanker(const PointCloud& pc,
 			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
 			double geo_weight, double per_prim_geo_weight, double size_weight);
 
@@ -234,9 +230,7 @@ namespace lmu
 
 		double get_geo_score(const PrimitiveSet& ps) const;
 	
-		PrimitiveSet staticPrimitives;
 		PointCloud pc;
-		ManifoldSet ms;
 		double distanceEpsilon;
 		double cell_size;
 		int maxPrimitiveSetSize;
@@ -301,7 +295,9 @@ namespace lmu
 		int num_elite_injections;
 	};
 
-	GAResult extractPrimitivesWithGA(const RansacResult& ransacResult, const PointCloud& full_pc, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream);
+	PrimitiveSet extractNonPlanarPrimitives(const ManifoldSet& manifolds);
+
+	GAResult extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
 	Primitive createPolytopePrimitive(const ManifoldSet& planes);
