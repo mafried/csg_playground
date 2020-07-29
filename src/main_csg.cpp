@@ -516,8 +516,8 @@ int main(int argc, char *argv[])
 
 		int ii; 
 		std::cin >> ii;
-		g_res_pc = lmu::structure_pointcloud(ransacRes.manifolds, 0.1);
-
+		auto g = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
+		g.to_file("plane_graph.gv");
 		
 		goto _LAUNCH;
 
