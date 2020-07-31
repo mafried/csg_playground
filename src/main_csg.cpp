@@ -21,6 +21,7 @@
 #include "optimizer_red.h"
 
 #include "pc_structure.h"
+#include "point_vis.h"
 
 
 lmu::ManifoldSet g_manifoldSet;
@@ -216,7 +217,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	update(viewer);
 	
-	//return true;
+	return true;
 
 	if (!g_manifoldSet.empty())
 	{
@@ -530,6 +531,14 @@ int main(int argc, char *argv[])
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
 		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
+
+		auto af_pc = lmu::farthestPointSampling(g_res_pc, 2500);
+		auto mat = lmu::get_affinity_matrix(af_pc, /*model_sdf->surface_mesh*/ plane_graph.planes(), 0.01, g_res_pc);
+
+		lmu::write_affinity_matrix("af.dat", mat);
+		lmu::writePointCloudXYZ("pc_af.dat", af_pc);
+
+		goto _LAUNCH;
 
 		// Extract primitives 
 		auto non_planar_primitives = lmu::extractNonPlanarPrimitives(ransacRes.manifolds);
