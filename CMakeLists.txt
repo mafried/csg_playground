@@ -75,7 +75,7 @@ message("Python libs: ", ${PYTHON_LIBRARIES})
 FILE(GLOB_RECURSE CSG_LIB_HEADERS "include/*.h")
 message("Lib Headers: " ${CSG_LIB_HEADERS})
 
-FILE(GLOB CSG_LIB_SOURCES "src/point_vis.cpp" "src/pc_structure.cpp" "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp" "src/cluster.cpp" "src/optimizer_red.cpp" "src/optimizer_clustering.cpp" "src/optimizer_ga.cpp" "src/cit.cpp" "src/optimizer_py.cpp" "src/red_inserter.cpp" "src/optimizer_pipeline_runner.cpp" "src/prim_select_ga.cpp")
+FILE(GLOB CSG_LIB_SOURCES "src/polytope_extraction.cpp" "src/point_vis.cpp" "src/pc_structure.cpp" "src/collision.cpp" "src/congraph.cpp" "src/csgnode.cpp" "src/csgnode_evo.cpp" "src/csgnode_evo_v2.cpp" "src/csgnode_helper.cpp" "src/curvature.cpp" "src/dnf.cpp" "src/evolution.cpp" "src/mesh.cpp" "src/pointcloud.cpp" "src/ransac.cpp" "src/statistics.cpp" "src/test.cpp" "src/helper.cpp" "src/params.cpp" "src/primitives.cpp" "src/primitive_extraction.cpp" "src/primitive_helper.cpp" "src/cluster.cpp" "src/optimizer_red.cpp" "src/optimizer_clustering.cpp" "src/optimizer_ga.cpp" "src/cit.cpp" "src/optimizer_py.cpp" "src/red_inserter.cpp" "src/optimizer_pipeline_runner.cpp" "src/prim_select_ga.cpp")
 message("Lib Sources: " ${CSG_LIB_SOURCES})
 
 if(MSVC)

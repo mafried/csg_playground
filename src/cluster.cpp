@@ -5,6 +5,9 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "point_vis.h"
+#include "pc_structure.h"
+
 using namespace lmu;
 
 std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double scaleFactor)
@@ -41,4 +44,22 @@ std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double sc
 	std::cout << "Num Clusters: " << res.size() << std::endl;
 
 	return res;
+}
+
+std::vector<lmu::PointCloud> lmu::readRawPointCloudClusterFromFile(const std::string& file, double scale_factor)
+{
+	std::vector<lmu::PointCloud> res;
+
+	std::ifstream s(file);
+
+	size_t numClusters;
+	s >> numClusters;
+
+	for (int i = 0; i < numClusters; ++i)
+	{
+		res.push_back(readPointCloud(s, scale_factor));
+	}
+
+	std::cout << "Num Clusters: " << res.size() << std::endl;
+		return res;
 }

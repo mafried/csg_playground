@@ -8,6 +8,8 @@
 
 namespace lmu
 {	
+	struct PlaneGraph;
+
 	struct Cluster
 	{
 		Cluster(const PointCloud& pc, int label, const std::set<ManifoldType>& types) :
@@ -22,7 +24,11 @@ namespace lmu
 		std::set<ManifoldType> manifoldTypes;
 	};
 
+
 	std::vector<Cluster> readClusterFromFile(const std::string& file, double scaleFactor);
+
+	std::vector<lmu::PointCloud> readRawPointCloudClusterFromFile(const std::string& file, double scale_factor = 1.0);
+
 }
 
 #endif

@@ -219,17 +219,31 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 
 	double epsilon = 0.000001;
 	int c = 0;
+	int wrong_side_c = 0;
 
 	for (int i = 0; i < pc.rows(); ++i)
 	{
 		for (int j = i + 1; j < pc.rows(); ++j)
 		{
+			if (c % 100000 == 0)
+				std::cout << c << " of " << (int)(pc.rows() * pc.rows()) * 0.5 << std::endl;
+			c++;
+
 			K::Point_3 p0(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
 			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
 			K::Segment_3 s(p0, p1);
 
-			int hit = 1;
+			Eigen::Vector3d n(pc.row(i).rightCols(3));
+			Eigen::Vector3d ep0(pc.row(i).leftCols(3));
+			Eigen::Vector3d ep1(pc.row(j).leftCols(3));
+			
+			if ((n * -1.0).normalized().dot((ep1 - ep0).normalized()) < 0.0)
+			{
+				wrong_side_c++;
+				continue;
+			}
 
+			int hit = 1;
 			for (const auto& plane : planes)
 			{
 				auto result = CGAL::intersection(s, plane);
@@ -257,16 +271,12 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 				}
 			}
 			OUT:
-
 			am.coeffRef(i, j) = hit;
-			am.coeffRef(j, i) = hit;
-
-			if (c % 100000 == 0)
-				std::cout << c << " of " << (int)(pc.rows() * pc.rows() * 0.5) << std::endl;
-
-			c++;
+			am.coeffRef(j, i) = hit;			
 		}
 	}
+
+	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
 
 	return am;
 }

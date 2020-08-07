@@ -134,17 +134,19 @@ lmu::PlaneGraph lmu::structure_pointcloud(const lmu::ManifoldSet& ms, double eps
 	Pwn_vector points = to_cgal_points(ms);
 
 	CGAL::Point_set_with_structure<Kernel> psws(points,
-		planes,		
+		planes,
 		epsilon,
 		CGAL::parameters::point_map(Point_map()).
 		normal_map(Normal_map()).
 		plane_map(CGAL::Shape_detection_3::Plane_map<Traits>()).
 		plane_index_map(CGAL::Shape_detection_3::Point_to_shape_index_map<Traits>(points, planes)));
 
-	debug_pc = lmu::PointCloud(points.size(), 6);
+
 	lmu::PlaneGraph graph;
 	std::vector<std::pair<Kernel::Plane_3, lmu::ManifoldPtr>> planes_to_manifolds;
 	std::unordered_map<lmu::ManifoldPtr, std::vector<Eigen::Matrix<double, 1, 6>>> manifolds_to_points;
+
+	std::vector<Eigen::Matrix<double, 1, 6>> struct_points;
 
 	for (int i = 0; i < psws.size(); ++i)
 	{
@@ -155,7 +157,7 @@ lmu::PlaneGraph lmu::structure_pointcloud(const lmu::ManifoldSet& ms, double eps
 		if (!adjacent_planes.empty())
 		{
 			auto planes = get_plane_manifolds(adjacent_planes, planes_to_manifolds);
-			
+
 			for (const auto& plane : planes)
 			{
 				Eigen::Matrix<double, 1, 6> pn;
@@ -169,28 +171,41 @@ lmu::PlaneGraph lmu::structure_pointcloud(const lmu::ManifoldSet& ms, double eps
 			{
 				for (int j = i + 1; j < planes.size(); ++j)
 				{
-					if(!graph.is_connected(planes[i], planes[j]))
+					if (!graph.is_connected(planes[i], planes[j]))
 						graph.add_connection(planes[i], planes[j]);
 				}
 			}
 		}
-		
-		switch (adjacent_planes.size())
-		{
-		case 0:
-			debug_pc.row(i) << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 1.0, 0.0, 0.0;
-			break;
-		case 1:
-			debug_pc.row(i) << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 0.0, 1.0;
-			break;
-		case 2:
-			debug_pc.row(i) << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 1.0, 0.0;
-			break;
 
-		default:
-			debug_pc.row(i) << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 0.0, 0.0;
-		}		
+		if (!adjacent_planes.empty()) {
+			Eigen::Matrix<double, 1, 6> struct_pt;
+
+			switch (adjacent_planes.size())
+			{
+			case 0:
+				struct_pt << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 1.0, 0.0, 0.0;
+				struct_points.push_back(struct_pt);
+				break;
+			case 1:
+				struct_pt << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 0.0, 1.0;
+				struct_points.push_back(struct_pt);
+				break;
+			case 2:
+				struct_pt << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 1.0, 0.0;
+				struct_points.push_back(struct_pt);
+				break;
+			case 3:
+				struct_pt << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), 0.0, 0.0, 0.0;
+				struct_points.push_back(struct_pt);
+				break;
+
+			default:
+				std::cout << "lmu::structure_point_cloud(): number of adjacent planes different than: 0, 1, 2 or 3" << std::endl;
+			}
+		}
 	}
+
+	debug_pc = lmu::pointCloudFromVector(struct_points);
 
 	// fill plane point clouds.
 	for (const auto& plane : planes_to_manifolds)

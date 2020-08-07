@@ -49,8 +49,8 @@ namespace lmu
 
 		operator double() const { return combined; }
 		
-		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { if (lhs.combined == rhs.combined) std::cout << "==" << std::endl; return lhs.combined < rhs.combined || lhs.combined == rhs.combined && lhs.size < rhs.size; }
-		friend inline bool operator> (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { if (lhs.combined == rhs.combined) std::cout << "==" << std::endl; return lhs.combined > rhs.combined || lhs.combined == rhs.combined && lhs.size > rhs.size; }
+		friend inline bool operator< (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined < rhs.combined || lhs.combined == rhs.combined && lhs.size < rhs.size; }
+		friend inline bool operator> (const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined > rhs.combined || lhs.combined == rhs.combined && lhs.size > rhs.size; }
 		//friend inline bool operator<=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs > rhs); }
 		//friend inline bool operator>=(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return !(lhs < rhs); }
 		//friend inline bool operator==(const PrimitiveSetRank& lhs, const PrimitiveSetRank& rhs) { return lhs.combined == rhs.combined; }
@@ -95,7 +95,8 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
-			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes);
+			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes,
+			const Eigen::Vector3d& polytope_center, const ManifoldSet& fixed_planes);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -148,6 +149,8 @@ namespace lmu
 		mutable std::default_random_engine rndEngine;
 		mutable std::random_device rndDevice;
 
+		Eigen::Vector3d polytope_center;
+		ManifoldSet fixed_planes;
 	};
 	
 	struct PrimitiveSetRanker;
@@ -300,7 +303,7 @@ namespace lmu
 	GAResult extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
-	Primitive createPolytopePrimitive(const ManifoldSet& planes);
+	Primitive createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& polytope_center);
 
 	lmu::Primitive createSpherePrimitive(const ManifoldPtr& m);
 	Primitive createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& planes);

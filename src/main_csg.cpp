@@ -22,6 +22,7 @@
 
 #include "pc_structure.h"
 #include "point_vis.h"
+#include "polytope_extraction.h"
 
 
 lmu::ManifoldSet g_manifoldSet;
@@ -185,7 +186,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
 	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
 
-	
+	/*
 	lmu::PrimitiveSet ps;
 	if (g_primitiveSet.size() > 0)
 	{
@@ -203,7 +204,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		auto points_pc = lmu::pointCloudFromVector(points);
 		viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	}
-
+	*/
 	
 	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 	/*
@@ -217,8 +218,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	update(viewer);
 	
-	return true;
+	//return true;
 
+	/*
 	if (!g_manifoldSet.empty())
 	{
 		viewer.data().clear();
@@ -279,7 +281,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				for (int j = 0; j < cm.rows(); ++j)
 				{
 					Eigen::Vector3d c;
-					switch (/*(int)g_manifoldSet[i]->type*/ i % 5)
+					switch ((int)g_manifoldSet[i]->type)
 					{
 					case 0:
 						c = Eigen::Vector3d(0, 1, 0);
@@ -318,18 +320,18 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 					cm.row(j) << c.transpose();
 				}
 
-				
-				
 
 				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			}			
 		}
 	}
-	
+	*/	
 
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
 	{
+		viewer.data().clear();
+
 		viewer.data().set_mesh(mesh.vertices, mesh.indices);
 
 		auto aabb = g_primitiveSet[g_prim_idx >= 0 ? g_prim_idx : 0].imFunc->aabb();
@@ -514,31 +516,30 @@ int main(int argc, char *argv[])
 		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, ransac_iterations, ransac_params);
 
 		g_manifoldSet = ransacRes.manifolds;
-
-		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
-		plane_graph.to_file("plane_graph.gv");
-
-		//goto _LAUNCH;
-						
+					
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
 				
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 300);
+			m->pc = lmu::farthestPointSampling(m->pc, 200);
 		}		
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
-		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
+		// Create plane graph.
+		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
+		plane_graph.to_file("plane_graph.gv");
 
-		auto af_pc = lmu::farthestPointSampling(g_res_pc, 2500);
-		auto mat = lmu::get_affinity_matrix(af_pc, /*model_sdf->surface_mesh*/ plane_graph.planes(), 0.01, g_res_pc);
+		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, "C:/Projekte/pointcloud_viewer");
 
-		lmu::write_affinity_matrix("af.dat", mat);
-		lmu::writePointCloudXYZ("pc_af.dat", af_pc);
+		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
+		g_primitiveSet = polytopes;
+		
 		goto _LAUNCH;
+
+		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
 
 		// Extract primitives 
 		auto non_planar_primitives = lmu::extractNonPlanarPrimitives(ransacRes.manifolds);

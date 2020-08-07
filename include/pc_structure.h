@@ -34,6 +34,8 @@ namespace lmu
 	};
 
 	lmu::PlaneGraph structure_pointcloud(const lmu::ManifoldSet& ms, double epsilon, lmu::PointCloud& debug_pc);
+
+
 }
 
 #endif
