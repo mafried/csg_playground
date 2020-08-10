@@ -226,22 +226,29 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	std::cout << "Points: " << convex_cluster.pc.rows() << std::endl;
 	std::cout << "Planes: " << convex_cluster.planes.size() << std::endl;
 
+
+	// Compute model sdf. 
+	auto model_sdf = std::make_shared<lmu::ModelSDF>(convex_cluster.pc, params.sdf_voxel_size, s);
+
+	igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
+
 	// Compute polytope center.
 	Eigen::Vector3d center;
 	double num_points = 0.0;
 	for (int  i = 0; i < convex_cluster.pc.rows(); ++i)
 	{		
-		center += Eigen::Vector3d(convex_cluster.pc.row(i).x(), convex_cluster.pc.row(i).y(), convex_cluster.pc.row(i).z());
-		num_points += 1.0;
+		Eigen::Vector3d p(convex_cluster.pc.row(i).x(), convex_cluster.pc.row(i).y(), convex_cluster.pc.row(i).z());
+
+		if (model_sdf->sdf_value(p).d <= 0.05)
+		{
+			std::cout << "P: " << p << std::endl;
+			center += p;
+			num_points += 1.0;
+		}
 		
 	}
 	center /= num_points;
 	std::cout << "Center: " << center.transpose() << std::endl;
-
-	// Compute model sdf. 
-	auto model_sdf = std::make_shared<lmu::ModelSDF>(convex_cluster.pc, params.sdf_voxel_size, s);
-	
-	igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 	// Create polytope ranker.
 	int max_primitive_set_size = 2;

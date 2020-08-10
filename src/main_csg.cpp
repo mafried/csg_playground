@@ -35,6 +35,9 @@ int g_prim_idx = 0;
 std::shared_ptr<lmu::PrimitiveSetRanker> g_ranker = nullptr;
 bool g_show_sdf = false;
 
+std::vector<lmu::ConvexCluster> g_convex_clusters;
+int g_cluster_idx = 0;
+
 double g_voxel_size = 0.0;
 double g_t_inside = 0.0;
 double g_t_outside = 0.0;
@@ -171,6 +174,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		g_prim_idx = -1;
 		break;
 	case '7':
+	{
 		std::cout << "Serialize meshes" << std::endl;
 		std::string basename = "out_mesh";
 		for (int i = 0; i < g_primitiveSet.size(); ++i) {
@@ -180,6 +184,17 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				igl::writeOBJ(mesh_name, mesh.vertices, mesh.indices);
 			}
 		}
+		break;
+	}
+	case '9':
+		g_cluster_idx++;
+		if (g_cluster_idx == g_convex_clusters.size())
+			g_cluster_idx = 0;
+		break;
+	case '0':
+		g_cluster_idx--;
+		if (g_cluster_idx < 0)
+			g_cluster_idx = g_convex_clusters.size()-1;
 		break;
 	}
 
@@ -212,9 +227,17 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	*/
 	
-	
+	viewer.data().clear();
+
 	if (g_show_sdf)
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
+
+	if (!g_convex_clusters.empty())
+	{
+		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+		lmu::ModelSDF msdf(g_convex_clusters[g_cluster_idx].pc, g_voxel_size, std::ofstream());
+		viewer.data().set_mesh(msdf.surface_mesh.vertices, msdf.surface_mesh.indices);
+	}
 
 	update(viewer);
 	
@@ -327,6 +350,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	}
 	*/	
 
+	
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
 	{
@@ -340,7 +364,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		viewer.data().add_points((aabb.c - aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
 		viewer.data().add_points((aabb.c + aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
 	}
-		
+	
+
 	update(viewer);
 	return true;
 }
@@ -532,6 +557,8 @@ int main(int argc, char *argv[])
 		plane_graph.to_file("plane_graph.gv");
 
 		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, "C:/Projekte/pointcloud_viewer");
+
+		g_convex_clusters = convex_clusters;
 
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
