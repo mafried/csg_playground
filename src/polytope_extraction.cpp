@@ -2,6 +2,9 @@
 #include "primitive_extraction.h"
 #include "point_vis.h"
 
+#include <boost/math/special_functions/erf.hpp>
+
+
 #ifdef _DEBUG
 #undef _DEBUG
 #include <python.h>
@@ -10,11 +13,57 @@
 #include <python.h>
 #endif
 
+inline double median(std::vector<double> v)
+{
+	std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+	return v[v.size() / 2];
+}
+
+std::tuple<double, double> scaled3MADAndMedian(const lmu::PointCloud& pc, const lmu::ModelSDF& msdf)
+{
+	std::vector<double> values(pc.rows());
+
+	for (int j = 0; j < pc.rows(); ++j)
+	{
+		Eigen::Vector3d p = pc.row(j).leftCols(3);
+		values[j] = std::abs(msdf.distance(p));
+	}
+
+	double med = median(values);
+
+	std::transform(values.begin(), values.end(), values.begin(), [med](double v) -> double { return std::abs(v - med); });
+
+	const double c = -1.0 / (std::sqrt(2.0)*boost::math::erfc_inv(3.0 / 2.0));
+
+	return std::make_tuple(c * median(values) * 3.0, med);
+}
+
 
 lmu::ConvexCluster::ConvexCluster(const IntermediateConvexCluster& icc) : 
 	pc(lmu::pointCloudFromVector(icc.points)),
 	planes(icc.planes.begin(), icc.planes.end())
 {
+}
+
+Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) const
+{
+	auto mad_and_median = scaled3MADAndMedian(pc, msdf);
+	
+	Eigen::Vector3d center;
+	double num_points = 0.0;
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		Eigen::Vector3d p(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
+
+		if (std::abs(std::abs(msdf.distance(p)) - std::get<1>(mad_and_median)) < std::get<0>(mad_and_median))
+		{		
+			center += p;
+			num_points += 1.0;
+		}
+	}
+	center /= num_points;
+
+	return center;
 }
 
 std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script)
@@ -233,25 +282,11 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 	// Compute polytope center.
-	Eigen::Vector3d center;
-	double num_points = 0.0;
-	for (int  i = 0; i < convex_cluster.pc.rows(); ++i)
-	{		
-		Eigen::Vector3d p(convex_cluster.pc.row(i).x(), convex_cluster.pc.row(i).y(), convex_cluster.pc.row(i).z());
-
-		if (model_sdf->sdf_value(p).d <= 0.05)
-		{
-			std::cout << "P: " << p << std::endl;
-			center += p;
-			num_points += 1.0;
-		}
-		
-	}
-	center /= num_points;
+	Eigen::Vector3d center = convex_cluster.compute_center(*model_sdf);
 	std::cout << "Center: " << center.transpose() << std::endl;
 
 	// Create polytope ranker.
-	int max_primitive_set_size = 2;
+	int max_primitive_set_size = 1;
 	auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
 		lmu::farthestPointSampling(convex_cluster.pc, params.num_geo_score_samples),
 		params.max_dist, max_primitive_set_size, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf,

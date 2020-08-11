@@ -947,7 +947,7 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 }
 
 
-lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool debug) const
+lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
 {
 	if (ps.empty())
 		return PrimitiveSetRank::Invalid;	
@@ -962,7 +962,31 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, bool
 		
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
 
-	auto per_prim_geo_scores = get_per_prim_geo_score(ps, points, debug);
+	auto per_prim_geo_scores = get_per_prim_geo_score(ps, points, false);
+
+	auto per_prim_geo_score_sum = std::accumulate(per_prim_geo_scores.begin(), per_prim_geo_scores.end(), 0.0);
+
+	auto score = PrimitiveSetRank(geo_score, per_prim_geo_score_sum, size_score, 0.0 /*computed later*/, per_prim_geo_scores);
+
+	score.capture_score_stats();
+
+	return score;
+}
+
+lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, std::vector<Eigen::Matrix<double, 1, 6>>& debug_points) const
+{
+	if (ps.empty())
+		return PrimitiveSetRank::Invalid;
+
+	// Geometry score
+	double geo_score = geo_weight == 0.0 ? 0.0 : get_geo_score(ps);
+
+	// Size score
+	double size_score = size_weight == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
+
+	// Per prim score
+	
+	auto per_prim_geo_scores = get_per_prim_geo_score(ps, debug_points, false);
 
 	auto per_prim_geo_score_sum = std::accumulate(per_prim_geo_scores.begin(), per_prim_geo_scores.end(), 0.0);
 

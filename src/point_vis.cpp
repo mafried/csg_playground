@@ -233,15 +233,18 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
 			K::Segment_3 s(p0, p1);
 
+			
 			Eigen::Vector3d n(pc.row(i).rightCols(3));
 			Eigen::Vector3d ep0(pc.row(i).leftCols(3));
 			Eigen::Vector3d ep1(pc.row(j).leftCols(3));
+			
 			
 			if ((n * -1.0).normalized().dot((ep1 - ep0).normalized()) < 0.0)
 			{
 				wrong_side_c++;
 				continue;
 			}
+			
 
 			int hit = 1;
 			for (const auto& plane : planes)

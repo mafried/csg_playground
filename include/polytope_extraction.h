@@ -17,6 +17,8 @@ namespace lmu
 
 		lmu::ManifoldSet planes;
 		PointCloud pc;
+
+		Eigen::Vector3d compute_center(const lmu::ModelSDF& msdf) const;
 	};
 
 	std::vector<ConvexCluster> get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script);

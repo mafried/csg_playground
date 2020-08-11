@@ -221,7 +221,8 @@ namespace lmu
 			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
 			double geo_weight, double per_prim_geo_weight, double size_weight);
 
-		PrimitiveSetRank rank(const PrimitiveSet& ps, bool debug = false) const;
+		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
+		PrimitiveSetRank rank(const PrimitiveSet& ps, std::vector<Eigen::Matrix<double, 1, 6>>& debug_points) const;
 
 		std::vector<double> get_per_prim_geo_score(const PrimitiveSet& ps, std::vector<Eigen::Matrix<double, 1, 6>>& points, bool debug = false) const;
 

@@ -32,8 +32,10 @@ lmu::PointCloud g_sdf_model_pc;
 bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
 int g_prim_idx = 0;
-std::shared_ptr<lmu::PrimitiveSetRanker> g_ranker = nullptr;
 bool g_show_sdf = false;
+
+lmu::PrimitiveGaParams g_prim_params;
+
 
 std::vector<lmu::ConvexCluster> g_convex_clusters;
 int g_cluster_idx = 0;
@@ -234,9 +236,43 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	if (!g_convex_clusters.empty())
 	{
-		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
-		lmu::ModelSDF msdf(g_convex_clusters[g_cluster_idx].pc, g_voxel_size, std::ofstream());
-		viewer.data().set_mesh(msdf.surface_mesh.vertices, msdf.surface_mesh.indices);
+
+		auto msdf = std::make_shared<lmu::ModelSDF>(g_convex_clusters[g_cluster_idx].pc, g_voxel_size, std::ofstream());
+
+		auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
+			lmu::farthestPointSampling(g_convex_clusters[g_cluster_idx].pc, g_prim_params.num_geo_score_samples),
+			g_prim_params.max_dist, 2, g_prim_params.ranker_voxel_size, g_prim_params.allow_cube_cutout, msdf,
+			g_prim_params.geo_weight, g_prim_params.per_prim_geo_weight, g_prim_params.size_weight);
+
+		if (g_prim_idx >= 0)
+		{
+			lmu::PrimitiveSet ps;
+			std::vector<Eigen::Matrix<double, 1, 6>> debug_points;
+
+			ps.push_back(g_primitiveSet[g_prim_idx]);
+
+			auto rank = ranker->rank(ps, debug_points);
+			std::cout << "POLYTOPE " << g_prim_idx;
+			std::cout << rank << std::endl;
+
+			auto debug_pc = lmu::pointCloudFromVector(debug_points);
+
+			viewer.data().add_points(debug_pc.leftCols(3), debug_pc.rightCols(3));
+		}
+	
+		//viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+
+		auto c = g_convex_clusters[g_cluster_idx].compute_center(*msdf);
+		viewer.data().add_points(c.transpose(), Eigen::Vector3d(1, 0, 1).transpose());
+
+		auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
+		if (!mesh.empty())
+		{
+			viewer.data().set_mesh(mesh.vertices, mesh.indices);
+		}
+
+		//viewer.data().set_mesh(msdf.surface_mesh.vertices, msdf.surface_mesh.indices);
+
 	}
 
 	update(viewer);
@@ -350,7 +386,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	}
 	*/	
 
-	
+	/*
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 	if (!mesh.empty())
 	{
@@ -364,6 +400,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		viewer.data().add_points((aabb.c - aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
 		viewer.data().add_points((aabb.c + aabb.s).transpose(), Eigen::Vector3d(1, 0, 0).transpose());
 	}
+	*/
 	
 
 	update(viewer);
@@ -464,6 +501,8 @@ int main(int argc, char *argv[])
 
 	prim_params.num_elite_injections = s.getInt("Primitives", "NumEliteInjections", 1);
 	
+	g_prim_params = prim_params;
+
 	s.print();
 	std::cout << "--------------------------------------------------------------" << std::endl;
 
@@ -548,7 +587,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 200);
+			m->pc = lmu::farthestPointSampling(m->pc, 100);
 		}		
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
@@ -601,7 +640,6 @@ int main(int argc, char *argv[])
 			std::cout << "Primitive: " << p << std::endl;
 		
 		g_primitiveSet = primitives;
-		g_ranker = res.ranker;
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = merged_cluster_pc;
 
