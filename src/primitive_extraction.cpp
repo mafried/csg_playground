@@ -1535,7 +1535,7 @@ lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const
 		p.x() >= origin.x() && p.x() < origin.x() + size.x() &&
 		p.y() >= origin.y() && p.y() < origin.y() + size.y() &&
 		p.z() >= origin.z() && p.z() < origin.z() + size.z()
-		? data[idx] : SDFValue();
+		? data[idx] : SDFValue(std::numeric_limits<double>::max(), Eigen::Vector3f());
 }
 
 double lmu::ModelSDF::distance(const Eigen::Vector3d& p) const

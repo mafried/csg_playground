@@ -251,6 +251,13 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 			ps.push_back(g_primitiveSet[g_prim_idx]);
 
+			auto polytope = (lmu::IFPolytope*)g_primitiveSet[g_prim_idx].imFunc.get();
+			for (int i = 0; i < polytope->n().size(); ++i)
+			{
+				std::cout << "n: " << polytope->n()[i].transpose() << " p: " << polytope->p()[i].transpose() << std::endl;
+			}
+
+
 			auto rank = ranker->rank(ps, debug_points);
 			std::cout << "POLYTOPE " << g_prim_idx;
 			std::cout << rank << std::endl;
@@ -272,7 +279,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 			viewer.data().set_mesh(mesh.vertices, mesh.indices);
 		}
 
-		//viewer.data().set_mesh(msdf.surface_mesh.vertices, msdf.surface_mesh.indices);
+		//viewer.data().set_mesh(msdf->surface_mesh.vertices, msdf->surface_mesh.indices);
 
 	}
 

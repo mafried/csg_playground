@@ -1043,6 +1043,33 @@ lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector
 	for (auto& nv : _n)
 		nv.normalize();
 
+	// Remove all planes with equal normal vectors.
+	std::vector<Eigen::Vector3d> tmp_p;
+	std::vector<Eigen::Vector3d> tmp_n;
+	
+	for (int i = 0; i < _n.size(); ++i)
+	{
+		bool found = false;
+		for (int j = 0; j < tmp_n.size(); ++j)
+		{
+			if (_n[i].isApprox(tmp_n[j], 0.000000001))
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			tmp_p.push_back(_p[i]);
+			tmp_n.push_back(_n[i]);
+		}
+	}
+	//if (_n.size() != tmp_n.size())
+	//	std::cout << "Polytope planes have changed. Now: " << tmp_n.size() << " Before: " << _n.size() << std::endl;
+	_n = tmp_n;
+	_p = tmp_p;
+	
+
 	// Create AABB tree for fast signed distance calculations. 
 	if (!_mesh.empty())
 	{
