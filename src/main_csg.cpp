@@ -259,8 +259,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 			viewer.data().add_points(debug_pc.leftCols(3), debug_pc.rightCols(3));
 		}
-	
-		//viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+		
+		std::cout << "CLUSTER: " << g_cluster_idx;
+		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
 
 		auto c = g_convex_clusters[g_cluster_idx].compute_center(*msdf);
 		viewer.data().add_points(c.transpose(), Eigen::Vector3d(1, 0, 1).transpose());
@@ -472,7 +473,9 @@ int main(int argc, char *argv[])
 
 
 	lmu::PrimitiveGaParams prim_params;
-		
+
+	prim_params.cluster_script_folder = s.getStr("Primitives", "ClusterScriptFolder", "C:/Projekte/pointcloud_viewer");
+
 	prim_params.size_weight = s.getDouble("Primitives", "SizeWeight", 0.1);// = 0.1;
 	prim_params.geo_weight = s.getDouble("Primitives", "GeoWeight", 0.0);// = 0.0;
 	prim_params.per_prim_geo_weight = s.getDouble("Primitives", "PerPrimGeoWeight", 1.0);// = 1.0;//0.1;
@@ -500,7 +503,7 @@ int main(int argc, char *argv[])
 	prim_params.filter_threshold = s.getDouble("Primitives", "GeoScoreFilter.Threshold", 0.01); //0.01
 
 	prim_params.num_elite_injections = s.getInt("Primitives", "NumEliteInjections", 1);
-	
+
 	g_prim_params = prim_params;
 
 	s.print();
@@ -595,7 +598,7 @@ int main(int argc, char *argv[])
 		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
 		plane_graph.to_file("plane_graph.gv");
 
-		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, "C:/Projekte/pointcloud_viewer");
+		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, prim_params.cluster_script_folder);
 
 		g_convex_clusters = convex_clusters;
 

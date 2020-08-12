@@ -809,7 +809,7 @@ void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std:
 		}
 	}
 
-	const double max_len = 1.0;
+	const double max_len = 2.0;
 
 	double v0_len, v1_len, v2_len;
 	v0_len = std::min(v0.norm(), max_len);

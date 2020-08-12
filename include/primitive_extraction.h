@@ -297,6 +297,8 @@ namespace lmu
 
 		int num_geo_score_samples;
 		int num_elite_injections;
+
+		std::string cluster_script_folder;
 	};
 
 	PrimitiveSet extractNonPlanarPrimitives(const ManifoldSet& manifolds);

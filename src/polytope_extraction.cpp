@@ -68,15 +68,18 @@ Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) co
 
 std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script)
 {	
+	std::string cluster_file = "clusters.dat";
+	std::string afm_path = "af.dat";
+	std::string pcaf_path = "pc_af.dat";
+
 	auto pc = pg.plane_points();
 	lmu::PointCloud debug_pc;
 
-	writePointCloud("C:/Projekte/csg_playground_build/RelWithDebInfo/pc_af.dat", pc);
+	writePointCloud(pcaf_path, pc);
 
 	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), max_point_dist, debug_pc);
 
 	auto n = std::to_string(aff_mat.rows());
-	std::string afm_path = "C:/Projekte/csg_playground_build/RelWithDebInfo/af.dat";
 
 	std::cout << n << " " << afm_path << std::endl;
 	
@@ -85,11 +88,9 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	std::cout << "AM was written." << std::endl;
 
 	// Call Python clustering script.
-
+		
 	std::cout << "Before init." << std::endl;
-	
-	/*
-	Py_SetPath(L"C:/ProgramData/Anaconda3/Lib");
+		
 	Py_Initialize();
 
 	std::cout << "After init." << std::endl;
@@ -97,7 +98,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	PyObject* od_method_name = PyUnicode_FromString((char*)"clustering");
 
 	PyRun_SimpleString(("import sys\nsys.path.append('" + python_script + "')").c_str());
-
+		
 	PyObject* od_module = PyImport_Import(od_method_name);
 	PyObject* od_dict = PyModule_GetDict(od_module);
 	PyObject* od_method = PyDict_GetItemString(od_dict, (char*)"get_clusters_and_write_to_file");
@@ -108,7 +109,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	{
 		PyErr_Print();
 		
-		PyObject_CallObject(od_method, Py_BuildValue("(z, z)", (char*)afm_path.c_str(), (char*)n.c_str()));
+		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str()));
 		PyErr_Print();
 	}
 	else
@@ -122,18 +123,18 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	Py_Finalize();
 
 	std::cout << "After call" << std::endl;
-	*/
-	int foo;
-	std::cin >> foo;
-	
+		
 	// Clustering result is in a file. Load it and create clusters.
-	std::string cluster_file = python_script + "/clusters.dat";
 	
 	std::vector<int> per_point_cluster_ids;
 	int num_clusters;
 		
 	std::ifstream cf(cluster_file);
+
+	std::cout << "Stream is open: " << cf.is_open() << std::endl;
+
 	cf >> num_clusters;
+	std::cout << "Num Clusters: " << num_clusters << std::endl;
 	while (!cf.eof())
 	{	
 		int cluster_id;
@@ -146,6 +147,8 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 
 	auto planes = pg.planes();
 	int point_idx = 0;
+
+	std::cout << "Planes: " << planes.size() << std::endl;
 	for (const auto& plane : planes)
 	{
 		for (int i = 0; i < plane->pc.rows(); ++i)
@@ -208,7 +211,7 @@ lmu::Primitive polytope_from_planes(const lmu::ManifoldSet& planes, const Eigen:
 
 lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster, const lmu::PlaneGraph& plane_graph,
 	const lmu::PrimitiveGaParams& params, std::ofstream& s, const std::shared_ptr<lmu::PrimitiveSetRanker>& ranker, 
-	const Eigen::Vector3d& polytope_center, int max_primitive_set_size)
+	const Eigen::Vector3d& polytope_center)
 {
 	double angle_t = M_PI / 9.0;
 	
@@ -217,10 +220,10 @@ lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster
 
 	lmu::PrimitiveSetTournamentSelector selector(2);
 	lmu::PrimitiveSetIterationStopCriterion criterion(params.max_count, lmu::PrimitiveSetRank(0.00001), params.max_iterations);
-	lmu::PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, max_primitive_set_size, angle_t, 0.001,
+	lmu::PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, params.maxPrimitiveSetSize, angle_t, 0.001,
 		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes, polytope_center, convex_cluster.planes);
 
-	lmu::PrimitiveSetPopMan popMan(*ranker, max_primitive_set_size, params.geo_weight, params.per_prim_geo_weight, params.size_weight, 
+	lmu::PrimitiveSetPopMan popMan(*ranker, params.maxPrimitiveSetSize, params.geo_weight, params.per_prim_geo_weight, params.size_weight,
 		params.num_elite_injections);
 	
 	lmu::PrimitiveSetGA ga;
@@ -286,10 +289,9 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	std::cout << "Center: " << center.transpose() << std::endl;
 
 	// Create polytope ranker.
-	int max_primitive_set_size = 1;
 	auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
 		lmu::farthestPointSampling(convex_cluster.pc, params.num_geo_score_samples),
-		params.max_dist, max_primitive_set_size, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf,
+		params.max_dist, params.maxPrimitiveSetSize, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf,
 		params.geo_weight, params.per_prim_geo_weight, params.size_weight);
 
 	// Try to create a polytope with all planes in the convex cluster.
@@ -306,7 +308,7 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	{
 		std::cout << "Polytope is not valid or its score is not perfect. Score: " << polytope_score << std::endl;
 
-		return generate_polytope_with_ga(convex_cluster, plane_graph, params, s, ranker, center, max_primitive_set_size);
+		return generate_polytope_with_ga(convex_cluster, plane_graph, params, s, ranker, center);
 	}
 }
 
