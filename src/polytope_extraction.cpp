@@ -336,6 +336,9 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 
 lmu::Primitive merge_to_single_polytope(const lmu::PrimitiveSet& ps)
 {
+	if (ps.size() == 1)
+		return ps[0];
+
 	std::vector<Eigen::Vector3d> n;
 	std::vector<Eigen::Vector3d> pos;
 	std::set<lmu::ManifoldPtr> manifolds;
