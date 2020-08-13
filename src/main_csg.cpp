@@ -611,6 +611,8 @@ int main(int argc, char *argv[])
 
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
+		polytopes = lmu::merge_polytopes(polytopes, 0.01);
+
 		g_primitiveSet = polytopes;
 		
 		goto _LAUNCH;

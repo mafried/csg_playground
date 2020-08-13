@@ -77,7 +77,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 
 	writePointCloud(pcaf_path, pc);
 
-	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), max_point_dist, debug_pc);
+	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), max_point_dist, true, debug_pc);
 
 	auto n = std::to_string(aff_mat.rows());
 
@@ -329,5 +329,93 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 
 	std::cout << "Created polytopes: " << ps.size() << std::endl;
 
+	name_primitives(ps);
+
 	return ps;
+}
+
+lmu::Primitive merge_to_single_polytope(const lmu::PrimitiveSet& ps)
+{
+	std::vector<Eigen::Vector3d> n;
+	std::vector<Eigen::Vector3d> pos;
+	std::set<lmu::ManifoldPtr> manifolds;
+	
+	for (const auto& p : ps)
+	{
+		if (p.type == lmu::PrimitiveType::Polytope)
+		{
+			auto p_ptr = (lmu::IFPolytope*)p.imFunc.get();
+			auto _n = p_ptr->n();
+			auto _pos = p_ptr->p();
+			n.insert(n.end(), _n.begin(), _n.end());
+			pos.insert(pos.end(), _pos.begin(), _pos.end());
+
+			for(const auto& m : p.ms)
+				manifolds.insert(m);
+		}
+	}
+
+	return lmu::Primitive(
+		std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), pos, n, ""), 
+		lmu::ManifoldSet(manifolds.begin(), manifolds.end()), 
+		lmu::PrimitiveType::Polytope
+	);
+}
+
+bool can_be_merged(const lmu::Primitive& p0, const lmu::Primitive& p1, double max_dist)
+{
+	std::cout << p0.imFunc->name() << "-" << p1.imFunc->name() << std::endl;
+
+	int num_v0 = p0.imFunc->meshCRef().vertices.rows();
+	int num_v1 = p1.imFunc->meshCRef().vertices.rows();
+
+	lmu::PointCloud pc(num_v0 + num_v1, 6);
+	for (int i = 0; i < num_v0; ++i) pc.row(i) << p0.imFunc->meshCRef().vertices.row(i), 0, 0, 0;
+	for (int i = 0; i < num_v1; ++i) pc.row(i + num_v0) << p1.imFunc->meshCRef().vertices.row(i), 0, 0, 0;
+
+	
+	lmu::PointCloud debug_pc;
+
+	lmu::ManifoldSet ms;
+	ms.insert(ms.end(), p0.ms.begin(), p0.ms.end());
+	ms.insert(ms.end(), p1.ms.begin(), p1.ms.end());
+
+	auto afm = lmu::get_affinity_matrix(pc, ms, max_dist, false, debug_pc);
+
+	std::cout << "Points: " << std::endl << afm << std::endl;
+
+	return (afm.array() == 1.0).all();
+}
+
+lmu::PrimitiveSet lmu::merge_polytopes(const lmu::PrimitiveSet& ps, double max_dist)
+{
+	std::list<Primitive> candidates(ps.begin(), ps.end()); 	
+	PrimitiveSet res;
+
+	while (!candidates.empty())
+	{
+		auto cur_p = candidates.front();
+		candidates.pop_front();
+
+		PrimitiveSet to_merge; 
+		to_merge.push_back(cur_p);
+		
+		auto i = candidates.begin();
+		while (i != candidates.end())
+		{
+			if (can_be_merged(cur_p, *i, max_dist))
+			{
+				to_merge.push_back(*i);
+				i = candidates.erase(i);
+			}			
+			else
+			{
+				++i;
+			}
+		}
+
+		res.push_back(merge_to_single_polytope(to_merge));
+	}
+
+	return res;
 }

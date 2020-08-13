@@ -314,6 +314,8 @@ namespace lmu
 	double estimateCylinderHeightFromPointCloud(const Manifold& m);
 	ManifoldPtr estimateSecondCylinderPlaneFromPointCloud(const Manifold& m, const Manifold& firstPlane);
 
+	void name_primitives(const lmu::PrimitiveSet& ps);
+
 	struct ThresholdOutlierDetector
 	{
 		ThresholdOutlierDetector(double threshold);

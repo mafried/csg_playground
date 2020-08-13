@@ -25,6 +25,9 @@ namespace lmu
 
 	PrimitiveSet generate_polytopes(const std::vector<ConvexCluster>& convex_clusters, const PlaneGraph& plane_graph,
 		const lmu::PrimitiveGaParams& params, std::ofstream& s);
+
+	PrimitiveSet merge_polytopes(const lmu::PrimitiveSet& ps, double max_dist);
+
 }
 
 #endif 

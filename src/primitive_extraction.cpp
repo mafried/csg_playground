@@ -81,7 +81,7 @@ std::ostream & lmu::operator<<(std::ostream & out, const PrimitiveSetRank & r)
 	return out;
 }
 
-void name_primitives(const lmu::PrimitiveSet& ps)
+void lmu::name_primitives(const lmu::PrimitiveSet& ps)
 {
 	std::unordered_map<lmu::PrimitiveType, int> counter;
 
