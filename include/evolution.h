@@ -167,7 +167,7 @@ namespace lmu
 
 		bool shouldStop(const std::vector<RankedCreature>& population, int iterationCount) const
 		{
-			std::cout << "Iteration " << iterationCount << " of " << _maxIterations << std::endl;
+			//std::cout << "Iteration " << iterationCount << " of " << _maxIterations << std::endl;
 			return iterationCount >= _maxIterations;
 		}
 
@@ -196,7 +196,7 @@ namespace lmu
 
 		bool shouldStop(const std::vector<RankedCreature>& population, int iterationCount)
 		{
-			std::cout << "Iteration " << iterationCount << std::endl;
+			//std::cout << "Iteration " << iterationCount << std::endl;
 
 			if (iterationCount >= _maxIterations)
 				return true;
@@ -648,7 +648,7 @@ namespace lmu
 					}
 				}
 
-				std::cout << "Num threads: " << numThreads << std::endl;
+				//std::cout << "Num threads: " << numThreads << std::endl;
 			}
 			else // single threaded
 			{
@@ -684,7 +684,7 @@ namespace lmu
 
 		void sortPopulation(std::vector<RankedCreature>& population) const
 		{
-			std::cout << "Sort population." << std::endl;
+			//std::cout << "Sort population." << std::endl;
 
 			//sort by rank
 			std::sort(population.begin(), population.end(),

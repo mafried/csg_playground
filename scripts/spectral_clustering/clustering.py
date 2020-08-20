@@ -92,16 +92,18 @@ def read_pointcloud(path, delimiter=' ', hasHeader=True):
     return np.asarray(pc)[:, :6]
 
 
-def get_clusters_and_write_to_file(afm_path, n_str, cluster_file):
+def get_clusters_and_write_to_file(afm_path, n_str, cluster_file, cluster_param_str):
     n = int(n_str)
-
+    cluster_param = float(cluster_param_str)
+	
     print('affinity matrix size: ' + str(n))
+    print('cluster param: ' + str(cluster_param))
 
     print('load affinity matrix from file')
     afm = np.reshape(np.fromfile(afm_path, sep=' '), (n, n))
     print(afm)
 
-    cluster_labels = get_clusters(afm, 0.4)
+    cluster_labels = get_clusters(afm, cluster_param)
 
     write_cluster_labels(cluster_file, cluster_labels)
 

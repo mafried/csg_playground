@@ -511,6 +511,10 @@ int main(int argc, char *argv[])
 
 	prim_params.num_elite_injections = s.getInt("Primitives", "NumEliteInjections", 1);
 
+	prim_params.ga_threshold = s.getDouble("Primitives", "GaThreshold", 0.99);
+	prim_params.am_quality_threshold = s.getDouble("Primitives", "AmQualityThreshold", 0.9);
+	prim_params.am_clustering_param = s.getDouble("Primitives", "AmClusteringParam", 0.4);
+
 	g_prim_params = prim_params;
 
 	s.print();
@@ -605,14 +609,14 @@ int main(int argc, char *argv[])
 		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
 		plane_graph.to_file("plane_graph.gv");
 
-		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, prim_params.cluster_script_folder);
+		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, prim_params.cluster_script_folder, prim_params.am_clustering_param);
 
 		g_convex_clusters = convex_clusters;
 
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
-		polytopes = lmu::merge_polytopes(polytopes, 0.01);
-
+		polytopes = lmu::merge_polytopes(polytopes, prim_params.am_quality_threshold);
+		
 		g_primitiveSet = polytopes;
 		
 		goto _LAUNCH;

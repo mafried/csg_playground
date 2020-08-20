@@ -4,6 +4,7 @@
 #include <igl/per_vertex_normals.h>
 #include <igl/per_edge_normals.h>
 #include <igl/per_face_normals.h>
+#include "igl/copyleft/cgal/mesh_boolean.h"
 
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
@@ -288,4 +289,98 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
 
 	return am;
+}
+
+lmu::Mesh merge_meshes(const lmu::Mesh& m0, const lmu::Mesh& m1)
+{
+	auto new_m1 = m1;
+   
+	for (int i = 0; i < m0.vertices.rows(); ++i)
+	{
+		for (int j = 0; j < m1.vertices.rows(); ++j)
+		{
+			Eigen::Vector3d p0(m0.vertices.row(i).x(), m0.vertices.row(i).y(), m0.vertices.row(i).z());
+			Eigen::Vector3d p1(m1.vertices.row(j).x(), m1.vertices.row(j).y(), m1.vertices.row(j).z());
+
+			double d = (p0 - p1).norm();
+
+			if (d < 0.0001)
+			{
+				new_m1.vertices.row(j) << p0.transpose();
+			}
+		}
+	}
+
+	lmu::Mesh m;
+	igl::copyleft::cgal::mesh_boolean(m0.vertices, m0.indices, new_m1.vertices, new_m1.indices, igl::MESH_BOOLEAN_TYPE_UNION, m.vertices, m.indices);
+
+	if (m.vertices.rows() < m0.vertices.rows() + m1.vertices.rows())
+	{	
+		return m;
+	}
+	else
+	{
+		return lmu::Mesh();
+	}
+}
+
+Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::Mesh& m0, const lmu::Mesh& m1)
+{
+	auto m = merge_meshes(m0, m1);
+	
+	Eigen::MatrixXd am(m.vertices.rows(), m.vertices.rows());
+
+	if (m.empty())
+		return am;
+
+	am.setOnes();
+
+	static int c = 0;
+	//std::string path = "af_mesh_" + std::to_string(c++) + ".obj";
+	//igl::writeOBJ(path, m.vertices, m.indices);
+
+
+	for (int i = 0; i < m.vertices.rows(); ++i)
+	{
+		for (int j = i + 1; j < m.vertices.rows(); ++j)
+		{
+			K::Point_3 p0(m.vertices.row(i).x(), m.vertices.row(i).y(), m.vertices.row(i).z());
+			K::Point_3 p1(m.vertices.row(j).x(), m.vertices.row(j).y(), m.vertices.row(j).z());
+			K::Segment_3 s(p0, p1);
+		
+			int intersection_count = 0;
+			for (int k = 0; k < m.indices.rows(); ++k)
+			{
+				int i0 = m.indices.row(k).x();
+				int i1 = m.indices.row(k).y();
+				int i2 = m.indices.row(k).z();
+				
+				K::Point_3 v0(m.vertices.row(i0).x(), m.vertices.row(i0).y(), m.vertices.row(i0).z());
+				K::Point_3 v1(m.vertices.row(i1).x(), m.vertices.row(i1).y(), m.vertices.row(i1).z());
+				K::Point_3 v2(m.vertices.row(i2).x(), m.vertices.row(i2).y(), m.vertices.row(i2).z());
+
+				K::Triangle_3 t(v0, v1, v2);
+
+				if (CGAL::coplanar(p0, v0, v1, v2) || CGAL::coplanar(p1, v0, v1, v2))
+					continue;
+
+				auto result = CGAL::intersection(s, t);
+				if (result)
+				{
+					// We only consider intersection points (not also segments).
+					if (boost::get<K::Point_3>(&*result))
+					{
+						intersection_count++;
+					}
+				}
+			}			
+			if (intersection_count > 0 )
+			{
+				am.coeffRef(i, j) = 0;
+				am.coeffRef(j, i) = 0;
+			}
+		}
+	}
+
+	return am; 
 }

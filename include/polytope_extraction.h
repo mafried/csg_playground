@@ -21,12 +21,12 @@ namespace lmu
 		Eigen::Vector3d compute_center(const lmu::ModelSDF& msdf) const;
 	};
 
-	std::vector<ConvexCluster> get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script);
+	std::vector<ConvexCluster> get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script, double am_clustering_param);
 
 	PrimitiveSet generate_polytopes(const std::vector<ConvexCluster>& convex_clusters, const PlaneGraph& plane_graph,
 		const lmu::PrimitiveGaParams& params, std::ofstream& s);
 
-	PrimitiveSet merge_polytopes(const lmu::PrimitiveSet& ps, double max_dist);
+	PrimitiveSet merge_polytopes(const lmu::PrimitiveSet& ps, double am_quality_threshold);
 
 }
 

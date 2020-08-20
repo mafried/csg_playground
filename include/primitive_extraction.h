@@ -299,6 +299,9 @@ namespace lmu
 		int num_elite_injections;
 
 		std::string cluster_script_folder;
+		double ga_threshold; 
+		double am_quality_threshold;
+		double am_clustering_param;
 	};
 
 	PrimitiveSet extractNonPlanarPrimitives(const ManifoldSet& manifolds);

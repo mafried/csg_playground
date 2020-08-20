@@ -1035,7 +1035,7 @@ void lmu::writePrimitives(const std::string& filename,
 }
 
 lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n, const std::string & name) :
-	ImplicitFunction(transform, createPolytope(transform, p, n), name),
+	ImplicitFunction(transform, lmu::Mesh(), name),
 	_n(n),
 	_p(p)
 {
@@ -1068,6 +1068,8 @@ lmu::IFPolytope::IFPolytope(const Eigen::Affine3d & transform, const std::vector
 	//	std::cout << "Polytope planes have changed. Now: " << tmp_n.size() << " Before: " << _n.size() << std::endl;
 	_n = tmp_n;
 	_p = tmp_p;
+
+	_mesh = createPolytope(transform, _p, _n);
 	
 
 	// Create AABB tree for fast signed distance calculations. 

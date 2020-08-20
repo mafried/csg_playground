@@ -4,6 +4,10 @@
 
 #include <boost/math/special_functions/erf.hpp>
 
+#include <CGAL/Simple_cartesian.h>
+
+typedef CGAL::Simple_cartesian<double> K;
+
 
 #ifdef _DEBUG
 #undef _DEBUG
@@ -66,7 +70,7 @@ Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) co
 	return center;
 }
 
-std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script)
+std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script, double am_clustering_param)
 {	
 	std::string cluster_file = "clusters.dat";
 	std::string afm_path = "af.dat";
@@ -80,8 +84,9 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), max_point_dist, true, debug_pc);
 
 	auto n = std::to_string(aff_mat.rows());
-
 	std::cout << n << " " << afm_path << std::endl;
+
+	auto am_clustering_param_str = std::to_string(am_clustering_param);
 	
 	lmu::write_affinity_matrix(afm_path, aff_mat);
 
@@ -109,7 +114,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	{
 		PyErr_Print();
 		
-		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str()));
+		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str(), (char*)am_clustering_param_str.c_str()));
 		PyErr_Print();
 	}
 	else
@@ -287,6 +292,7 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	// Compute polytope center.
 	Eigen::Vector3d center = convex_cluster.compute_center(*model_sdf);
 	std::cout << "Center: " << center.transpose() << std::endl;
+	std::cout << "GA Threshold: " << params.ga_threshold << std::endl;
 
 	// Create polytope ranker.
 	auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
@@ -300,7 +306,7 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	lmu::PrimitiveSet ps; ps.push_back(polytope);
 	double polytope_score = ranker->rank(ps).per_primitive_geo_scores[0];
 
-	if (!polytope.isNone() && polytope_score == 1.0)
+	if (!polytope.isNone() && polytope_score >= params.ga_threshold)
 	{		
 		return polytope;
 	}
@@ -339,10 +345,10 @@ lmu::Primitive merge_to_single_polytope(const lmu::PrimitiveSet& ps)
 	if (ps.size() == 1)
 		return ps[0];
 
+	//Collect all planes from all polytopes.
 	std::vector<Eigen::Vector3d> n;
 	std::vector<Eigen::Vector3d> pos;
 	std::set<lmu::ManifoldPtr> manifolds;
-	
 	for (const auto& p : ps)
 	{
 		if (p.type == lmu::PrimitiveType::Polytope)
@@ -358,67 +364,100 @@ lmu::Primitive merge_to_single_polytope(const lmu::PrimitiveSet& ps)
 		}
 	}
 
+	//Merge that are duplicates and filter out double planes. 
+	// Double planes are planes that exist twice but with normals in opposite directions.
+	// Double planes are completely removed since they mark surface regions that need to be open for the merge.
+	std::vector<Eigen::Vector3d> f_n;
+	std::vector<Eigen::Vector3d> f_pos;
+	std::unordered_set<int> double_planes; 
+	for (int i = 0; i < n.size(); ++i)
+	{
+		bool duplicate = false;
+		for (int j = i+1; j < n.size(); ++j)
+		{
+			K::Plane_3 p_i(K::Point_3(pos[i].x(), pos[i].y(), pos[i].z()), K::Vector_3(n[i].x(), n[i].y(), n[i].z()));
+			K::Plane_3 p_j(K::Point_3(pos[j].x(), pos[j].y(), pos[j].z()), K::Vector_3(n[j].x(), n[j].y(), n[j].z()));
+
+			// If the intersection of the two planes i,j is a plane, then plane i is a duplicate.
+			auto result = CGAL::intersection(p_i, p_j);
+			if (result)
+			{
+				if (boost::get<K::Plane_3>(&*result))
+				{
+					if (p_i.orthogonal_vector() == -p_j.orthogonal_vector())
+						double_planes.insert(j);
+
+					duplicate = true; 
+					break;
+				}
+			}
+		}
+		if (!duplicate && double_planes.find(i) == double_planes.end())
+		{
+			f_n.push_back(n[i]);
+			f_pos.push_back(pos[i]);
+		}
+	}
+	
+	std::stringstream ss; 
+	for (const auto& p : ps)
+		ss << p.imFunc->name() << "_";
+	auto new_name = ss.str().substr(0, ss.str().size() - 1);
+
+	// Create polytope. 
 	return lmu::Primitive(
-		std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), pos, n, ""), 
+		std::make_shared<lmu::IFPolytope>(Eigen::Affine3d::Identity(), f_pos, f_n, new_name), 
 		lmu::ManifoldSet(manifolds.begin(), manifolds.end()), 
 		lmu::PrimitiveType::Polytope
 	);
 }
 
-bool can_be_merged(const lmu::Primitive& p0, const lmu::Primitive& p1, double max_dist)
+bool can_be_merged(const lmu::Primitive& p0, const lmu::Primitive& p1, double am_quality_threshold)
 {
-	std::cout << p0.imFunc->name() << "-" << p1.imFunc->name() << std::endl;
+	auto afm = lmu::get_affinity_matrix(p0.imFunc->meshCRef(), p1.imFunc->meshCRef());
 
-	int num_v0 = p0.imFunc->meshCRef().vertices.rows();
-	int num_v1 = p1.imFunc->meshCRef().vertices.rows();
+	double s = ((double)afm.sum() / (double)afm.size());
 
-	lmu::PointCloud pc(num_v0 + num_v1, 6);
-	for (int i = 0; i < num_v0; ++i) pc.row(i) << p0.imFunc->meshCRef().vertices.row(i), 0, 0, 0;
-	for (int i = 0; i < num_v1; ++i) pc.row(i + num_v0) << p1.imFunc->meshCRef().vertices.row(i), 0, 0, 0;
-
-	
-	lmu::PointCloud debug_pc;
-
-	lmu::ManifoldSet ms;
-	ms.insert(ms.end(), p0.ms.begin(), p0.ms.end());
-	ms.insert(ms.end(), p1.ms.begin(), p1.ms.end());
-
-	auto afm = lmu::get_affinity_matrix(pc, ms, max_dist, false, debug_pc);
-
-	std::cout << "Points: " << std::endl << afm << std::endl;
-
-	return (afm.array() == 1.0).all();
+	return s >= am_quality_threshold;
 }
 
-lmu::PrimitiveSet lmu::merge_polytopes(const lmu::PrimitiveSet& ps, double max_dist)
+lmu::PrimitiveSet lmu::merge_polytopes(const lmu::PrimitiveSet& ps, double am_quality_threshold)
 {
-	std::list<Primitive> candidates(ps.begin(), ps.end()); 	
-	PrimitiveSet res;
+	lmu::PrimitiveSet candidates = ps; 	
 
-	while (!candidates.empty())
+	std::cout << "Candidates: " << candidates.size() << std::endl;
+	std::cout << "AM Quality Threshold: " << am_quality_threshold << std::endl;
+
+	bool something_was_merged = true;
+	while (something_was_merged)
 	{
-		auto cur_p = candidates.front();
-		candidates.pop_front();
-
-		PrimitiveSet to_merge; 
-		to_merge.push_back(cur_p);
+		something_was_merged = false;
 		
-		auto i = candidates.begin();
-		while (i != candidates.end())
+		for (int i = 0; i < candidates.size() && !something_was_merged; ++i)
 		{
-			if (can_be_merged(cur_p, *i, max_dist))
+			for (int j = i + 1; j < candidates.size(); ++j)
 			{
-				to_merge.push_back(*i);
-				i = candidates.erase(i);
-			}			
-			else
-			{
-				++i;
+				if (can_be_merged(candidates[i], candidates[j], am_quality_threshold))
+				{
+					something_was_merged = true;
+
+					PrimitiveSet to_merge;
+					to_merge.push_back(candidates[i]);
+					to_merge.push_back(candidates[j]);
+
+					std::cout << to_merge[0].imFunc->name() << " and " << to_merge[1].imFunc->name() << " are merged into ";
+
+					candidates[i] = merge_to_single_polytope(to_merge);
+
+					std::cout << candidates[i].imFunc->name() << "." << std::endl;
+
+					candidates.erase(candidates.begin() + j);
+
+					break;
+				}
 			}
 		}
-
-		res.push_back(merge_to_single_polytope(to_merge));
 	}
-
-	return res;
+	
+	return candidates;
 }
