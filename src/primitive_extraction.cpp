@@ -1460,9 +1460,15 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 	auto mesh = lmu::createFromPointCloud(pc);
 	s << "Poisson Reconstruction=" << t.tick() << std::endl;
 
-	recreate_from_mesh(mesh);	
-	s << "SDF Creation=" << t.tick() << std::endl;
-
+	if (!mesh.empty())
+	{
+		recreate_from_mesh(mesh);
+		s << "SDF Creation=" << t.tick() << std::endl;
+	}
+	else
+	{
+		throw std::runtime_error("Unable to create ModelSDF. Poisson mesh is empty.");
+	}
 }
 
 lmu::ModelSDF::~ModelSDF()

@@ -601,7 +601,7 @@ int main(int argc, char *argv[])
 		// Farthest point sampling applied to all manifolds.
 		for (const auto& m : ransacRes.manifolds)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 100);
+			m->pc = lmu::farthestPointSampling(m->pc, 200);
 		}		
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
@@ -616,6 +616,12 @@ int main(int argc, char *argv[])
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
 		polytopes = lmu::merge_polytopes(polytopes, prim_params.am_quality_threshold);
+
+		int i = 0;
+		for (const auto& polytope : polytopes)
+		{
+			igl::writeOBJ("res_mesh_" + std::to_string(i++) + ".obj", polytope.imFunc->meshCRef().vertices, polytope.imFunc->meshCRef().indices);
+		}
 		
 		g_primitiveSet = polytopes;
 		

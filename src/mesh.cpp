@@ -615,10 +615,7 @@ Mesh lmu::createFromPointCloud(const PointCloud & pc)
 		} while (hc != hc_end);
 		i++;
 	}
-
-
-	igl::writeOBJ("mesh_out.obj", vertices, indices);
-
+	
 	return Mesh(vertices, indices);
 }
 

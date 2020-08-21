@@ -91,7 +91,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	lmu::write_affinity_matrix(afm_path, aff_mat);
 
 	std::cout << "AM was written." << std::endl;
-
+	
 	// Call Python clustering script.
 		
 	std::cout << "Before init." << std::endl;
@@ -282,12 +282,20 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	std::cout << "----------------------------" << std::endl;
 	std::cout << "Points: " << convex_cluster.pc.rows() << std::endl;
 	std::cout << "Planes: " << convex_cluster.planes.size() << std::endl;
-
-
+	
 	// Compute model sdf. 
-	auto model_sdf = std::make_shared<lmu::ModelSDF>(convex_cluster.pc, params.sdf_voxel_size, s);
+	std::shared_ptr<lmu::ModelSDF> model_sdf = nullptr; 
+	try
+	{
+		model_sdf = std::make_shared<lmu::ModelSDF>(convex_cluster.pc, params.sdf_voxel_size, s);
+	}
+	catch (const std::runtime_error& ex)
+	{
+		std::cout << "Could not generate polytope. Reason: " << std::string(ex.what()) << std::endl;
+		return lmu::Primitive::None();
+	}
 
-	igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
+	//igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 	// Compute polytope center.
 	Eigen::Vector3d center = convex_cluster.compute_center(*model_sdf);

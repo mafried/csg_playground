@@ -131,6 +131,20 @@ void lmu::write_affinity_matrix(const std::string & file, const Eigen::MatrixXd 
 	f << af;
 }
 
+void lmu::write_affinity_matrix(const std::string & file, const Eigen::SparseMatrix<double> & af)
+{
+	std::ofstream f(file);
+
+	for (int k = 0; k < af.outerSize(); ++k) 
+	{
+		for (Eigen::SparseMatrix<double>::InnerIterator it(af, k); it; ++it)
+		{
+			if(it.value() != 0.0)
+				f << it.row() << " " << it.col() << std::endl;
+		}
+	}
+}
+
 Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::Mesh & surface_mesh, lmu::PointCloud& debug_pc)
 {
 	K::Plane_3 p;
@@ -208,13 +222,14 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 	return am;
 }
 
-Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, double max_dist, bool normal_check, lmu::PointCloud& debug_pc)
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, double max_dist, bool normal_check, lmu::PointCloud& debug_pc)
 {
 	auto planes = to_cgal_planes(p);
 	auto points = to_cgal_points(pc);
 
-	Eigen::MatrixXd am(pc.rows(), pc.rows());
-	am.setZero();
+	std::vector<Eigen::Triplet<double>> triplets;
+	triplets.reserve(pc.rows()); //TODO: better estimation?
+	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
 
 	PointTree tree(points.begin(), points.end());
 
@@ -281,12 +296,18 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 				}
 			}
 			OUT:
-			am.coeffRef(i, j) = hit;
-			am.coeffRef(j, i) = hit;			
+			if (hit == 1)
+			{
+				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
+				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
+
+			}		
 		}
 	}
 
 	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
+
+	am.setFromTriplets(triplets.begin(), triplets.end());
 
 	return am;
 }
