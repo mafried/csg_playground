@@ -5,6 +5,8 @@
 #include <boost/math/special_functions/erf.hpp>
 
 #include <CGAL/Simple_cartesian.h>
+#include <CGAL/compute_average_spacing.h>
+#include <CGAL/remove_outliers.h>
 
 typedef CGAL::Simple_cartesian<double> K;
 
@@ -43,10 +45,38 @@ std::tuple<double, double> scaled3MADAndMedian(const lmu::PointCloud& pc, const 
 }
 
 
-lmu::ConvexCluster::ConvexCluster(const IntermediateConvexCluster& icc) : 
+lmu::ConvexCluster::ConvexCluster(const IntermediateConvexCluster& icc, bool rem_outliers) : 
 	pc(lmu::pointCloudFromVector(icc.points)),
 	planes(icc.planes.begin(), icc.planes.end())
 {
+	if (rem_outliers)
+		remove_outliers();
+}
+
+void lmu::ConvexCluster::remove_outliers()
+{
+	typedef std::pair<K::Point_3, K::Vector_3> PointNormal;
+
+	std::vector<PointNormal> points;
+	points.reserve(pc.rows());
+	for (int i = 0; i < pc.rows(); ++i)
+		points.push_back(std::make_pair(
+			K::Point_3(pc.coeff(i, 0), pc.coeff(i, 1), pc.coeff(i, 2)), K::Vector_3(pc.coeff(i, 3), pc.coeff(i, 4), pc.coeff(i, 5))));
+
+	const int nb_neighbors = 24; 
+	auto average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(points, nb_neighbors, 
+		CGAL::parameters::point_map(CGAL::First_of_pair_property_map<PointNormal>()));
+	
+	auto first_to_remove = CGAL::remove_outliers(points.begin(), points.end(), CGAL::First_of_pair_property_map<PointNormal>(), nb_neighbors,  100., 2. * average_spacing);
+
+	std::cout << "Removed " << (100. * std::distance(first_to_remove, points.end()) / (double)(points.size())) << "% of the points." << std::endl;
+
+	points.erase(first_to_remove, points.end());
+
+	pc = lmu::PointCloud(points.size(), 6);
+	for (int i = 0; i < points.size(); ++i)
+		pc.row(i) << points[i].first.x(), points[i].first.y(), points[i].first.z(), points[i].second.x(), points[i].second.y(), points[i].second.z();
+		
 }
 
 Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) const
@@ -70,8 +100,8 @@ Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) co
 	return center;
 }
 
-std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script, double am_clustering_param)
-{	
+std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, const std::string& python_script, double am_clustering_param)
+{
 	std::string cluster_file = "clusters.dat";
 	std::string afm_path = "af.dat";
 	std::string pcaf_path = "pc_af.dat";
@@ -81,29 +111,29 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 
 	writePointCloud(pcaf_path, pc);
 
-	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), max_point_dist, true, debug_pc);
+	auto aff_mat = lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
 
 	auto n = std::to_string(aff_mat.rows());
 	std::cout << n << " " << afm_path << std::endl;
 
 	auto am_clustering_param_str = std::to_string(am_clustering_param);
-	
+
 	lmu::write_affinity_matrix(afm_path, aff_mat);
 
 	std::cout << "AM was written." << std::endl;
-	
+
 	// Call Python clustering script.
-		
+
 	std::cout << "Before init." << std::endl;
-		
+
 	Py_Initialize();
 
 	std::cout << "After init." << std::endl;
-	
+
 	PyObject* od_method_name = PyUnicode_FromString((char*)"clustering");
 
 	PyRun_SimpleString(("import sys\nsys.path.append('" + python_script + "')").c_str());
-		
+
 	PyObject* od_module = PyImport_Import(od_method_name);
 	PyObject* od_dict = PyModule_GetDict(od_module);
 	PyObject* od_method = PyDict_GetItemString(od_dict, (char*)"get_clusters_and_write_to_file");
@@ -113,7 +143,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	if (PyCallable_Check(od_method))
 	{
 		PyErr_Print();
-		
+
 		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str(), (char*)am_clustering_param_str.c_str()));
 		PyErr_Print();
 	}
@@ -121,19 +151,19 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	{
 		PyErr_Print();
 	}
-	
+
 	Py_DECREF(od_module);
 	Py_DECREF(od_method_name);
 
 	Py_Finalize();
 
 	std::cout << "After call" << std::endl;
-		
+
 	// Clustering result is in a file. Load it and create clusters.
-	
+
 	std::vector<int> per_point_cluster_ids;
 	int num_clusters;
-		
+
 	std::ifstream cf(cluster_file);
 
 	std::cout << "Stream is open: " << cf.is_open() << std::endl;
@@ -141,7 +171,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	cf >> num_clusters;
 	std::cout << "Num Clusters: " << num_clusters << std::endl;
 	while (!cf.eof())
-	{	
+	{
 		int cluster_id;
 		cf >> cluster_id;
 		per_point_cluster_ids.push_back(cluster_id);
@@ -168,7 +198,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, do
 	}
 
 	std::vector<ConvexCluster> clusters;
-	std::transform(im_clusters.begin(), im_clusters.end(), std::back_inserter(clusters), [](const auto& ic) { return ConvexCluster(ic); });
+	std::transform(im_clusters.begin(), im_clusters.end(), std::back_inserter(clusters), [](const auto& ic) { return ConvexCluster(ic, true); });
 
 	std::cout << "Clusters: " << clusters.size() << std::endl;
 
@@ -336,6 +366,12 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 
 	for (const auto& cc : convex_clusters)
 	{
+		if (cc.planes.size() < 4 || cc.pc.rows() == 0)
+		{
+			std::cout << "cluster skipped. Planes: " << cc.planes.size() << " Points: " << cc.pc.rows() << std::endl;
+			continue;
+		}
+
 		auto polytope = generate_polytope(cc, plane_graph, params, s);
 		if (!polytope.isNone())
 			ps.push_back(polytope);

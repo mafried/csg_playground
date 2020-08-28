@@ -51,7 +51,7 @@ lmu::PointCloud lmu::mergePointClouds(const std::vector<PointCloud>& pointClouds
 	return res_pc;
 }
 
-void lmu::writePointCloud(const std::string& file, PointCloud& points)
+void lmu::writePointCloud(const std::string& file, const PointCloud& points)
 {
 	//if (points.cols() != 6)
 	//	throw std::runtime_error("Number of columns must be 6.");

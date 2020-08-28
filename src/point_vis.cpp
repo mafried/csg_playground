@@ -9,12 +9,16 @@
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
-#include <CGAL/Polyhedron_3.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/AABB_triangle_primitive.h>
+
+#include <CGAL/Polyhedron_3.h>
+
 #include <CGAL/Orthogonal_k_neighbor_search.h>
 #include <CGAL/Search_traits_3.h>
 #include <CGAL/intersections.h>
 #include <CGAL/squared_distance_3.h>
+#include <CGAL/compute_average_spacing.h>
 
 #include <fstream>
 
@@ -24,6 +28,11 @@ typedef CGAL::Polyhedron_3<K> Polyhedron;
 typedef CGAL::AABB_face_graph_triangle_primitive<Polyhedron> Primitive;
 typedef CGAL::AABB_traits<K, Primitive> Traits;
 typedef CGAL::AABB_tree<Traits> Tree;
+
+typedef std::vector<K::Triangle_3>::iterator Iterator;
+typedef CGAL::AABB_triangle_primitive<K, Iterator> TrianglePrimitive;
+typedef CGAL::AABB_traits<K, TrianglePrimitive> AABB_triangle_traits;
+typedef CGAL::AABB_tree<AABB_triangle_traits> TriangleTree;
 
 typedef CGAL::Search_traits_3<K> TreeTraits;
 typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
@@ -222,20 +231,115 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 	return am;
 }
 
-Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, double max_dist, bool normal_check, lmu::PointCloud& debug_pc)
+struct ProximityGeo
+{
+	ProximityGeo(const lmu::PointCloud& pc, int num_neighbors, bool use_mesh = false) :
+		points(to_cgal_points(pc)),
+		avg_spacing(CGAL::compute_average_spacing<CGAL::Sequential_tag>(points, num_neighbors)),
+		point_tree(std::make_shared<PointTree>(points.begin(), points.end())),
+		mesh(use_mesh ? lmu::createFromPointCloud(pc) : lmu::Mesh())
+	{	
+		std::cout << "points: " << points.size() << " average spacing: " << avg_spacing << std::endl;
+
+		if (use_mesh)
+		{
+			igl::writeOBJ("res_mesh_prox.obj", mesh.vertices, mesh.indices);
+
+			std::vector<K::Triangle_3> triangles;
+			triangles.reserve(mesh.indices.rows());
+
+			for (int i = 0; i < mesh.indices.rows(); ++i)
+			{
+				int i0 = mesh.indices.coeff(i, 0);
+				int i1 = mesh.indices.coeff(i, 1);
+				int i2 = mesh.indices.coeff(i, 2);
+				
+				K::Point_3 p0 = K::Point_3(mesh.vertices.coeff(i0, 0), mesh.vertices.coeff(i0, 1), mesh.vertices.coeff(i0, 2));
+				K::Point_3 p1 = K::Point_3(mesh.vertices.coeff(i1, 0), mesh.vertices.coeff(i1, 1), mesh.vertices.coeff(i1, 2));
+				K::Point_3 p2 = K::Point_3(mesh.vertices.coeff(i2, 0), mesh.vertices.coeff(i2, 1), mesh.vertices.coeff(i2, 2));
+				
+				triangles.push_back(K::Triangle_3(p0,p1,p2));
+			}
+
+			triangle_tree = std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
+		}
+	}
+
+	bool is_close(const K::Point_3& p) const
+	{
+		if (mesh.empty()) // we don't use the mesh for the proximity check.
+		{
+			const int num_nn = 5;
+
+			Neighbor_search search(*point_tree, p, num_nn);
+
+			double acc_dist;
+
+			for (auto it = search.begin(); it != search.end(); ++it)
+			{
+				acc_dist += std::sqrt(it->second);
+			}
+
+			acc_dist /= (double)num_nn;
+
+			if (acc_dist <= 2.0 * avg_spacing)
+			{
+				return true;
+			}
+
+			return false;
+		}
+		else
+		{
+			double d = std::sqrt(triangle_tree->squared_distance(p));
+
+			if (d <= 2.0 * avg_spacing)
+			{
+				return true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}
+
+	double average_spacing() const 
+	{
+		return avg_spacing;
+	}
+	
+private:
+	std::vector<K::Point_3> points;
+	double avg_spacing;
+	std::shared_ptr<PointTree> point_tree;
+	std::shared_ptr<TriangleTree> triangle_tree;
+
+	lmu::Mesh mesh;
+};
+
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, bool normal_check, lmu::PointCloud& debug_pc)
 {
 	auto planes = to_cgal_planes(p);
 	auto points = to_cgal_points(pc);
+	
+	int nb_neighbors = 10;
+	std::vector<ProximityGeo> plane_geos;
+	plane_geos.reserve(p.size());
+	std::transform(p.begin(), p.end(), std::back_inserter(plane_geos), [nb_neighbors](const auto& plane) { return ProximityGeo(plane->pc, nb_neighbors); });
 
 	std::vector<Eigen::Triplet<double>> triplets;
 	triplets.reserve(pc.rows()); //TODO: better estimation?
 	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
 
-	PointTree tree(points.begin(), points.end());
+	ProximityGeo pc_geo(pc, nb_neighbors, true);
+
+	lmu::writePointCloud("pc_test.xyz", pc);
 
 	double epsilon = 0.000001;
 	int c = 0;
 	int wrong_side_c = 0;
+	int point_vis_c = 0;
 
 	for (int i = 0; i < pc.rows(); ++i)
 	{
@@ -262,10 +366,10 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc,
 				}
 			}
 			
-			int hit = 1;
-			for (const auto& plane : planes)
+			bool hit = false;
+			for (int k = 0; k < planes.size(); ++k)
 			{
-				auto result = CGAL::intersection(s, plane);
+				auto result = CGAL::intersection(s, planes[k]);
 				if (result)
 				{
 					if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
@@ -274,38 +378,26 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc,
 						if (CGAL::squared_distance(*p, p0) < epsilon || CGAL::squared_distance(*p, p1) < epsilon)
 							continue;
 
-						Neighbor_search search(tree, *p, 1);
-
-						for (auto it = search.begin(); it != search.end(); ++it) 
+						if(pc_geo.is_close(*p)) //if (plane_geos[k].is_close(*p)) <= if per-plane points should be used for proximity computation.
 						{
-							//std::cout << it->second << std::endl;
-
-							if (it->second <= max_dist)
-							{
-								// If end point is on the plane, ignore it.
-								// if (CGAL::squared_distance(plane, p1) < epsilon)
-								// {
-								//	continue;
-								// }
-
-								hit = 0;
-								goto OUT;
-							}
-						}
+							hit = true;
+							break;
+						}						
 					}
 				}
 			}
-			OUT:
-			if (hit == 1)
+			
+			if (!hit)
 			{
 				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
 				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
-
+				point_vis_c++;
 			}		
 		}
 	}
 
 	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
+	std::cout << "point visibilities: " << point_vis_c << std::endl;
 
 	am.setFromTriplets(triplets.begin(), triplets.end());
 
@@ -343,6 +435,96 @@ lmu::Mesh merge_meshes(const lmu::Mesh& m0, const lmu::Mesh& m1)
 	{
 		return lmu::Mesh();
 	}
+}
+
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix_old(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, bool normal_check, lmu::PointCloud& debug_pc)
+{
+	auto planes = to_cgal_planes(p);
+	auto points = to_cgal_points(pc);
+
+	std::vector<Eigen::Triplet<double>> triplets;
+	triplets.reserve(pc.rows()); //TODO: better estimation?
+	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
+
+	PointTree tree(points.begin(), points.end());
+
+	double epsilon = 0.000001;
+	int c = 0;
+	int wrong_side_c = 0;
+
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		for (int j = i + 1; j < pc.rows(); ++j)
+		{
+			if (c % 100000 == 0)
+				std::cout << c << " of " << (int)(pc.rows() * pc.rows()) * 0.5 << std::endl;
+			c++;
+
+			K::Point_3 p0(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
+			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
+			K::Segment_3 s(p0, p1);
+
+			if (normal_check)
+			{
+				Eigen::Vector3d n(pc.row(i).rightCols(3));
+				Eigen::Vector3d ep0(pc.row(i).leftCols(3));
+				Eigen::Vector3d ep1(pc.row(j).leftCols(3));
+
+				if ((n * -1.0).normalized().dot((ep1 - ep0).normalized()) < 0.0)
+				{
+					wrong_side_c++;
+					continue;
+				}
+			}
+
+			int hit = 1;
+			for (const auto& plane : planes)
+			{
+				auto result = CGAL::intersection(s, plane);
+				if (result)
+				{
+					if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
+					{
+						// filter out points exactly on the origin or target plane.
+						if (CGAL::squared_distance(*p, p0) < epsilon || CGAL::squared_distance(*p, p1) < epsilon)
+							continue;
+
+						Neighbor_search search(tree, *p);
+
+						for (auto it = search.begin(); it != search.end(); ++it)
+						{
+							//std::cout << it->second << std::endl;
+
+							if (it->second <= 0.01)
+							{
+								// If end point is on the plane, ignore it.
+								// if (CGAL::squared_distance(plane, p1) < epsilon)
+								// {
+								//	continue;
+								// }
+
+								hit = 0;
+								goto OUT;
+							}
+						}
+					}
+				}
+			}
+		OUT:
+			if (hit == 1)
+			{
+				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
+				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
+
+			}
+		}
+	}
+
+	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
+
+	am.setFromTriplets(triplets.begin(), triplets.end());
+
+	return am;
 }
 
 Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::Mesh& m0, const lmu::Mesh& m1)

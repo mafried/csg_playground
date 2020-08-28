@@ -19,7 +19,7 @@ namespace lmu
   PointCloud pointCloudFromVector(const std::vector<Eigen::Matrix<double, 1, 6>>& points);
   PointCloud mergePointClouds(const std::vector<PointCloud>& pointClouds);
 
-  void writePointCloud(const std::string& file, PointCloud& points);
+  void writePointCloud(const std::string& file, const PointCloud& points);
   void writePointCloudXYZ(const std::string& file, PointCloud& points);
   void writePointCloudXYZ(const std::string& file, const std::unordered_map<std::string, PointCloud>& points);
 

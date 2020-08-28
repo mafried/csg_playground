@@ -234,6 +234,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	if (g_show_sdf)
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 
+	return true;
+
 	if (!g_convex_clusters.empty())
 	{
 
@@ -267,7 +269,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 			viewer.data().add_points(debug_pc.leftCols(3), debug_pc.rightCols(3));
 		}
 		
-		std::cout << "CLUSTER: " << g_cluster_idx;
+		std::cout << "CLUSTER: " << g_cluster_idx << ": " << "Planes: " << g_convex_clusters[g_cluster_idx].planes.size() << std::endl;
 		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
 
 		auto c = g_convex_clusters[g_cluster_idx].compute_center(*msdf);
@@ -576,6 +578,7 @@ int main(int argc, char *argv[])
 
 		merged_cluster_pc = lmu::to_canonical_frame(merged_cluster_pc);
 
+
 		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
 
 		for (auto& c : clusters)
@@ -599,19 +602,28 @@ int main(int argc, char *argv[])
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
 				
 		// Farthest point sampling applied to all manifolds.
+		/*
 		for (const auto& m : ransacRes.manifolds)
 		{
 			m->pc = lmu::farthestPointSampling(m->pc, 200);
-		}		
-		res_f << "FPS Duration=" << t.tick() << std::endl;
+		}
+		*/
+		//res_f << "FPS Duration=" << t.tick() << std::endl;
 
 		// Create plane graph.
-		auto plane_graph = lmu::structure_pointcloud(ransacRes.manifolds, 0.015, g_res_pc);
+		auto plane_graph = lmu::create_plane_graph(ransacRes.manifolds, g_res_pc);
 		plane_graph.to_file("plane_graph.gv");
 
-		auto convex_clusters = lmu::get_convex_clusters(plane_graph, 0.01, prim_params.cluster_script_folder, prim_params.am_clustering_param);
+		auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
+		igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
+
+		lmu::resample_proportionally(plane_graph.planes(), 3000);
+						
+		auto convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
 
 		g_convex_clusters = convex_clusters;
+
+		goto _LAUNCH;
 
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 

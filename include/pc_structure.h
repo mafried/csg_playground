@@ -33,8 +33,11 @@ namespace lmu
 		std::unordered_map<ManifoldPtr, PlaneVertexDescriptor> vertex_map;
 	};
 
-	lmu::PlaneGraph structure_pointcloud(const lmu::ManifoldSet& ms, double epsilon, lmu::PointCloud& debug_pc);
+	lmu::PlaneGraph create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCloud& debug_pc, double epsilon = 0.0);
+	void resample_proportionally(const lmu::ManifoldSet& ms, int total_max_points);
 
+	std::pair<lmu::PointCloud, std::vector<int>> resample_pointcloud(const lmu::PlaneGraph& pg, double range_scale_factor);
+	std::pair<lmu::PointCloud, std::vector<int>> resample_pointcloud(const lmu::PlaneGraph& pg);
 
 }
 

@@ -13,15 +13,20 @@ namespace lmu
 
 	struct ConvexCluster
 	{
-		ConvexCluster(const IntermediateConvexCluster& icc);
+		ConvexCluster(const IntermediateConvexCluster& icc, bool rem_outliers);
 
 		lmu::ManifoldSet planes;
 		PointCloud pc;
 
 		Eigen::Vector3d compute_center(const lmu::ModelSDF& msdf) const;
+
+		void remove_outliers();
 	};
 
-	std::vector<ConvexCluster> get_convex_clusters(lmu::PlaneGraph& pg, double max_point_dist, const std::string& python_script, double am_clustering_param);
+	//std::vector<ConvexCluster> get_convex_clusters(const lmu::PointCloud& pc, const std::vector<int>& pc_to_plane_idx, 
+	//	const lmu::ManifoldSet& planes, const std::string& python_script, double am_clustering_param);
+
+	std::vector<ConvexCluster> get_convex_clusters(PlaneGraph& pg, const std::string& python_script, double am_clustering_param);
 
 	PrimitiveSet generate_polytopes(const std::vector<ConvexCluster>& convex_clusters, const PlaneGraph& plane_graph,
 		const lmu::PrimitiveGaParams& params, std::ofstream& s);
