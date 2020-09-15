@@ -611,7 +611,7 @@ int main(int argc, char *argv[])
 		//res_f << "FPS Duration=" << t.tick() << std::endl;
 
 		// Create plane graph.
-		auto plane_graph = lmu::create_plane_graph(ransacRes.manifolds, g_res_pc);
+		auto plane_graph = lmu::create_plane_graph(ransacRes.manifolds, g_res_pc, g_res_pc);
 		plane_graph.to_file("plane_graph.gv");
 
 		auto mesh_prox = lmu::createFromPointCloud(g_res_pc);

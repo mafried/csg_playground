@@ -15,6 +15,8 @@ namespace lmu
 	
 	Eigen::SparseMatrix<double> get_affinity_matrix(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check, lmu::PointCloud& debug_pc);
 
+	Eigen::SparseMatrix<double> get_affinity_matrix_with_triangulation(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check);
+
 	Eigen::SparseMatrix<double> get_affinity_matrix_old(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check, lmu::PointCloud& debug_pc);
 
 	Eigen::MatrixXd get_affinity_matrix(const lmu::Mesh& m0, const lmu::Mesh& m1);

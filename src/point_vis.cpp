@@ -11,6 +11,8 @@
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/AABB_triangle_primitive.h>
+#include <CGAL/Triangulation_2.h>
+
 
 #include <CGAL/Polyhedron_3.h>
 
@@ -29,6 +31,11 @@ typedef CGAL::AABB_face_graph_triangle_primitive<Polyhedron> Primitive;
 typedef CGAL::AABB_traits<K, Primitive> Traits;
 typedef CGAL::AABB_tree<Traits> Tree;
 
+typedef CGAL::Triangulation_2<K> Triangulation;
+typedef Triangulation::Face_handle Face_handle;
+//typedef Triangulation::Finite_face_handles Finite_face_handles;
+typedef Triangulation::Vertex_handle Vertex_handle;
+
 typedef std::vector<K::Triangle_3>::iterator Iterator;
 typedef CGAL::AABB_triangle_primitive<K, Iterator> TrianglePrimitive;
 typedef CGAL::AABB_traits<K, TrianglePrimitive> AABB_triangle_traits;
@@ -38,6 +45,72 @@ typedef CGAL::Search_traits_3<K> TreeTraits;
 typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
 typedef Neighbor_search::Tree PointTree;
 
+std::vector<K::Point_2> get_2DPoints(const lmu::ManifoldPtr& plane) 
+{
+	K::Plane_3 cPlane(K::Point_3(plane->p.x(), plane->p.y(), plane->p.z()), K::Vector_3(plane->n.x(), plane->n.y(), plane->n.z()));
+
+	std::vector<K::Point_2> points;
+	points.reserve(plane->pc.rows());
+	for (int i = 0; i < plane->pc.rows(); ++i) {
+		Eigen::Vector3d p = plane->pc.row(i).leftCols(3).transpose();
+		points.push_back(cPlane.to_2d(K::Point_3(p.x(), p.y(), p.z())));
+	}
+
+	return points;
+}
+
+
+K::Point_3 get_3DPoint(const lmu::ManifoldPtr& plane, const K::Point_2& point)
+{
+	K::Plane_3 cPlane(K::Point_3(plane->p.x(), plane->p.y(), plane->p.z()),
+		K::Vector_3(plane->n.x(), plane->n.y(), plane->n.z()));
+
+	K::Point_3 p = cPlane.to_3d(point);
+
+	return p;
+}
+
+std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet&ms)
+{
+	// For each manifold:
+	//  extract its points, and the corresponding plane information
+	//  given the points and the plane information, get 2D points
+	//  given the 2d points on one plane, compute its Delaunay triangulation
+	//  get the corresponding 3d points and add the 3d triangle to a list
+	//
+	// Create a triangle tree data-structure from the list of 3d triangles
+
+	std::vector<K::Triangle_3> triangles;
+
+	for (const auto& m : ms) 
+	{
+		if (m->type != lmu::ManifoldType::Plane) continue;
+
+		std::vector<K::Point_2> points2d = get_2DPoints(m);
+
+		Triangulation t;
+		t.insert(points2d.begin(), points2d.end());
+
+		for (auto fh = t.finite_faces_begin(); fh != t.finite_faces_end(); fh++) 
+		{
+			Vertex_handle v0 = fh->vertex(0);
+			Vertex_handle v1 = fh->vertex(1);
+			Vertex_handle v2 = fh->vertex(2);
+
+			K::Point_2 p0 = v0->point();
+			K::Point_2 p1 = v1->point();
+			K::Point_2 p2 = v2->point();
+
+			K::Point_3 p03d = get_3DPoint(m, p0);
+			K::Point_3 p13d = get_3DPoint(m, p1);
+			K::Point_3 p23d = get_3DPoint(m, p2);
+
+			triangles.push_back(K::Triangle_3(p03d, p13d, p23d));
+		}
+	}
+
+	return std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
+}
 
 std::vector<K::Plane_3> to_cgal_planes(const lmu::ManifoldSet& ms)
 {
@@ -317,6 +390,96 @@ private:
 
 	lmu::Mesh mesh;
 };
+
+bool is_close(const K::Point_3& p, TriangleTree& tree) 
+{
+	const double epsilon = 0.0001;
+	double d = std::sqrt(tree.squared_distance(p));
+	return d <= epsilon;
+}
+
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lmu::PointCloud & pc,	const lmu::ManifoldSet& ms, bool normal_check)
+{
+	auto planes = to_cgal_planes(ms);
+	auto tree = get_triangle_tree(ms);
+
+	std::vector<Eigen::Triplet<double>> triplets;
+	triplets.reserve(pc.rows()); //TODO: better estimation?
+	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
+
+	double epsilon = 0.0001; // 0.000001;
+	int c = 0;
+	int wrong_side_c = 0;
+	int point_vis_c = 0;
+
+	for (int i = 0; i < pc.rows(); ++i) 
+	{
+		for (int j = i + 1; j < pc.rows(); ++j) 
+		{
+			if (c % 100000 == 0)
+				std::cout << c << " of " << (int)(pc.rows() * pc.rows()) * 0.5 << std::endl;
+
+			c++;
+
+			K::Point_3 p0(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
+			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
+			K::Segment_3 s(p0, p1);
+
+			if (normal_check) 
+			{
+				Eigen::Vector3d en1(pc.row(j).rightCols(3));
+
+				Eigen::Vector3d ep0(pc.row(i).leftCols(3));
+				Eigen::Vector3d ep1(pc.row(j).leftCols(3));
+
+				if (en1.normalized().dot((ep1 - ep0).normalized()) < -0.01) 
+				{
+					// not front-facing (thus not visible)
+					wrong_side_c++;
+					continue;
+				}
+			}
+
+			bool hit = false;
+			for (int k = 0; k < planes.size(); ++k) 
+			{
+				auto result = CGAL::intersection(s, planes[k]);
+				if (result) 
+				{
+					if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
+					{
+						// filter out points exactly on the origin or target plane.
+						if (CGAL::squared_distance(*p, p0) < epsilon ||
+							CGAL::squared_distance(*p, p1) < epsilon)
+							continue;
+
+						if (is_close(*p, *tree)) 
+						{
+							hit = true;
+							break;
+						}
+
+					}
+				}
+			}
+
+			if (!hit)
+			{
+				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
+				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
+				point_vis_c++;
+			}
+		}
+	}
+
+	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
+	std::cout << "point visibilities: " << point_vis_c << std::endl;
+
+	am.setFromTriplets(triplets.begin(), triplets.end());
+
+	return am;
+}
+
 
 Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, bool normal_check, lmu::PointCloud& debug_pc)
 {
