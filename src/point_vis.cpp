@@ -14,6 +14,11 @@
 #include <CGAL/Triangulation_2.h>
 
 
+#include <CGAL/Alpha_shape_2.h>
+#include <CGAL/Alpha_shape_vertex_base_2.h>
+#include <CGAL/Alpha_shape_face_base_2.h>
+#include <CGAL/Delaunay_triangulation_2.h>
+
 #include <CGAL/Polyhedron_3.h>
 
 #include <CGAL/Orthogonal_k_neighbor_search.h>
@@ -32,6 +37,13 @@ typedef CGAL::AABB_traits<K, Primitive> Traits;
 typedef CGAL::AABB_tree<Traits> Tree;
 
 typedef CGAL::Triangulation_2<K> Triangulation;
+
+typedef CGAL::Alpha_shape_vertex_base_2<K>                   Vb;
+typedef CGAL::Alpha_shape_face_base_2<K>                     Fb;
+typedef CGAL::Triangulation_data_structure_2<Vb, Fb>         Tds;
+typedef CGAL::Delaunay_triangulation_2<K, Tds>               Triangulation_2;
+typedef CGAL::Alpha_shape_2<Triangulation_2>                 Alpha_shape_2;
+
 typedef Triangulation::Face_handle Face_handle;
 //typedef Triangulation::Finite_face_handles Finite_face_handles;
 typedef Triangulation::Vertex_handle Vertex_handle;
@@ -51,7 +63,8 @@ std::vector<K::Point_2> get_2DPoints(const lmu::ManifoldPtr& plane)
 
 	std::vector<K::Point_2> points;
 	points.reserve(plane->pc.rows());
-	for (int i = 0; i < plane->pc.rows(); ++i) {
+	for (int i = 0; i < plane->pc.rows(); ++i)
+	{
 		Eigen::Vector3d p = plane->pc.row(i).leftCols(3).transpose();
 		points.push_back(cPlane.to_2d(K::Point_3(p.x(), p.y(), p.z())));
 	}
@@ -82,32 +95,94 @@ std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet&ms)
 
 	std::vector<K::Triangle_3> triangles;
 
+	//std::vector<Eigen::Matrix<double, 1, 6>> pts;
+
 	for (const auto& m : ms) 
 	{
 		if (m->type != lmu::ManifoldType::Plane) continue;
 
 		std::vector<K::Point_2> points2d = get_2DPoints(m);
 
-		Triangulation t;
-		t.insert(points2d.begin(), points2d.end());
-
-		for (auto fh = t.finite_faces_begin(); fh != t.finite_faces_end(); fh++) 
+		/*
+		for (const auto p : points2d)
 		{
-			Vertex_handle v0 = fh->vertex(0);
-			Vertex_handle v1 = fh->vertex(1);
-			Vertex_handle v2 = fh->vertex(2);
+			Eigen::Matrix<double, 1, 6> pv;
+			auto p3d = get_3DPoint(m, p);
+			pv << p3d.x(), p3d.y(), p3d.z(), 0.0, 0.0, 0.0;
+			pts.push_back(pv);
+		}
+		*/
 
-			K::Point_2 p0 = v0->point();
-			K::Point_2 p1 = v1->point();
-			K::Point_2 p2 = v2->point();
+		//Triangulation t;
+		//t.insert(points2d.begin(), points2d.end());
 
-			K::Point_3 p03d = get_3DPoint(m, p0);
-			K::Point_3 p13d = get_3DPoint(m, p1);
-			K::Point_3 p23d = get_3DPoint(m, p2);
+		Alpha_shape_2 as(points2d.begin(), points2d.end(), 10000);
 
-			triangles.push_back(K::Triangle_3(p03d, p13d, p23d));
+		Alpha_shape_2::Alpha_iterator opt = as.find_optimal_alpha(1);
+		as.set_alpha(*opt);
+	
+		//for (auto fh = t.finite_faces_begin(); fh != t.finite_faces_end(); fh++) 
+		for (auto fh = as.finite_faces_begin(); fh != as.finite_faces_end(); fh++)
+		{
+			switch (as.classify(fh))
+			{
+			case Alpha_shape_2::REGULAR:
+			case Alpha_shape_2::SINGULAR:
+			case Alpha_shape_2::INTERIOR:
+			{
+				auto v0 = fh->vertex(0);
+				auto v1 = fh->vertex(1);
+				auto v2 = fh->vertex(2);
+
+				K::Point_2 p0 = v0->point();
+				K::Point_2 p1 = v1->point();
+				K::Point_2 p2 = v2->point();
+
+				K::Point_3 p03d = get_3DPoint(m, p0);
+				K::Point_3 p13d = get_3DPoint(m, p1);
+				K::Point_3 p23d = get_3DPoint(m, p2);
+
+				triangles.push_back(K::Triangle_3(p03d, p13d, p23d));
+
+			}
+			}
 		}
 	}
+
+	//lmu::writePointCloud("proj_pts.txt", lmu::pointCloudFromVector(pts));
+
+	lmu::Mesh m;
+
+	m.vertices = Eigen::MatrixXd(triangles.size() * 3, 3);
+	m.indices = Eigen::MatrixXi(triangles.size(), 3);
+	
+	lmu::PointCloud pc(m.vertices.rows(), 6);
+	
+	for (int i = 0; i < triangles.size(); ++i)
+	{
+		m.vertices.row(i * 3) << triangles[i].vertex(0).x(), triangles[i].vertex(0).y(), triangles[i].vertex(0).z();
+		m.vertices.row(i * 3 + 1) << triangles[i].vertex(1).x(), triangles[i].vertex(1).y(), triangles[i].vertex(1).z();
+		m.vertices.row(i * 3 + 2) << triangles[i].vertex(2).x(), triangles[i].vertex(2).y(), triangles[i].vertex(2).z();
+
+		m.indices.row(i) << (i * 3), (i * 3 + 1), (i * 3 + 2);
+	
+		pc.row(i * 3) << triangles[i].vertex(0).x(), triangles[i].vertex(0).y(), triangles[i].vertex(0).z(), 0.0, 0.0, 0.0;
+		pc.row(i * 3 + 1) << triangles[i].vertex(1).x(), triangles[i].vertex(1).y(), triangles[i].vertex(1).z(), 0.0, 0.0, 0.0;
+		pc.row(i * 3 + 2) << triangles[i].vertex(2).x(), triangles[i].vertex(2).y(), triangles[i].vertex(2).z(), 0.0, 0.0, 0.0;	
+	}
+
+	lmu::writePointCloud("pc_tri.txt", pc);
+	
+	/*
+	std::vector<lmu::PointCloud> pointclouds;
+	for (const auto& m : ms)
+	{
+		pointclouds.push_back(m->pc);
+	}
+	lmu::writePointCloud("plane_pc.txt", lmu::mergePointClouds(pointclouds));
+	*/
+	
+	igl::writeOBJ("triangulation.obj", m.vertices, m.indices);
 
 	return std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
 }
@@ -304,98 +379,10 @@ Eigen::MatrixXd lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::
 	return am;
 }
 
-struct ProximityGeo
+bool is_close(const K::Point_3& p, TriangleTree& tree, double epsilon) 
 {
-	ProximityGeo(const lmu::PointCloud& pc, int num_neighbors, bool use_mesh = false) :
-		points(to_cgal_points(pc)),
-		avg_spacing(CGAL::compute_average_spacing<CGAL::Sequential_tag>(points, num_neighbors)),
-		point_tree(std::make_shared<PointTree>(points.begin(), points.end())),
-		mesh(use_mesh ? lmu::createFromPointCloud(pc) : lmu::Mesh())
-	{	
-		std::cout << "points: " << points.size() << " average spacing: " << avg_spacing << std::endl;
-
-		if (use_mesh)
-		{
-			igl::writeOBJ("res_mesh_prox.obj", mesh.vertices, mesh.indices);
-
-			std::vector<K::Triangle_3> triangles;
-			triangles.reserve(mesh.indices.rows());
-
-			for (int i = 0; i < mesh.indices.rows(); ++i)
-			{
-				int i0 = mesh.indices.coeff(i, 0);
-				int i1 = mesh.indices.coeff(i, 1);
-				int i2 = mesh.indices.coeff(i, 2);
-				
-				K::Point_3 p0 = K::Point_3(mesh.vertices.coeff(i0, 0), mesh.vertices.coeff(i0, 1), mesh.vertices.coeff(i0, 2));
-				K::Point_3 p1 = K::Point_3(mesh.vertices.coeff(i1, 0), mesh.vertices.coeff(i1, 1), mesh.vertices.coeff(i1, 2));
-				K::Point_3 p2 = K::Point_3(mesh.vertices.coeff(i2, 0), mesh.vertices.coeff(i2, 1), mesh.vertices.coeff(i2, 2));
-				
-				triangles.push_back(K::Triangle_3(p0,p1,p2));
-			}
-
-			triangle_tree = std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
-		}
-	}
-
-	bool is_close(const K::Point_3& p) const
-	{
-		if (mesh.empty()) // we don't use the mesh for the proximity check.
-		{
-			const int num_nn = 5;
-
-			Neighbor_search search(*point_tree, p, num_nn);
-
-			double acc_dist;
-
-			for (auto it = search.begin(); it != search.end(); ++it)
-			{
-				acc_dist += std::sqrt(it->second);
-			}
-
-			acc_dist /= (double)num_nn;
-
-			if (acc_dist <= 2.0 * avg_spacing)
-			{
-				return true;
-			}
-
-			return false;
-		}
-		else
-		{
-			double d = std::sqrt(triangle_tree->squared_distance(p));
-
-			if (d <= 2.0 * avg_spacing)
-			{
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-	}
-
-	double average_spacing() const 
-	{
-		return avg_spacing;
-	}
-	
-private:
-	std::vector<K::Point_3> points;
-	double avg_spacing;
-	std::shared_ptr<PointTree> point_tree;
-	std::shared_ptr<TriangleTree> triangle_tree;
-
-	lmu::Mesh mesh;
-};
-
-bool is_close(const K::Point_3& p, TriangleTree& tree) 
-{
-	const double epsilon = 0.0001;
 	double d = std::sqrt(tree.squared_distance(p));
-	return d <= epsilon;
+	return d <= 0.0001;
 }
 
 Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lmu::PointCloud & pc,	const lmu::ManifoldSet& ms, bool normal_check)
@@ -412,6 +399,8 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 	int wrong_side_c = 0;
 	int point_vis_c = 0;
 
+	double avg_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(to_cgal_points(pc), 5);
+
 	for (int i = 0; i < pc.rows(); ++i) 
 	{
 		for (int j = i + 1; j < pc.rows(); ++j) 
@@ -425,22 +414,28 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
 			K::Segment_3 s(p0, p1);
 
+			
 			if (normal_check) 
 			{
-				Eigen::Vector3d en1(pc.row(j).rightCols(3));
+				//Eigen::Vector3d en1(pc.row(j).rightCols(3));
+				Eigen::Vector3d en0(pc.row(i).rightCols(3));
 
 				Eigen::Vector3d ep0(pc.row(i).leftCols(3));
 				Eigen::Vector3d ep1(pc.row(j).leftCols(3));
 
-				if (en1.normalized().dot((ep1 - ep0).normalized()) < -0.01) 
+				if (en0.normalized().dot((ep1 - ep0).normalized()) < -0.01) 
 				{
 					// not front-facing (thus not visible)
 					wrong_side_c++;
 					continue;
 				}
 			}
+			
 
+			
 			bool hit = false;
+			
+			/*
 			for (int k = 0; k < planes.size(); ++k) 
 			{
 				auto result = CGAL::intersection(s, planes[k]);
@@ -453,7 +448,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 							CGAL::squared_distance(*p, p1) < epsilon)
 							continue;
 
-						if (is_close(*p, *tree)) 
+						if (is_close(*p, *tree, avg_spacing))
 						{
 							hit = true;
 							break;
@@ -469,93 +464,34 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
 				point_vis_c++;
 			}
-		}
-	}
+			*/
 
-	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
-	std::cout << "point visibilities: " << point_vis_c << std::endl;
-
-	am.setFromTriplets(triplets.begin(), triplets.end());
-
-	return am;
-}
-
-
-Eigen::SparseMatrix<double> lmu::get_affinity_matrix(const lmu::PointCloud & pc, const lmu::ManifoldSet& p, bool normal_check, lmu::PointCloud& debug_pc)
-{
-	auto planes = to_cgal_planes(p);
-	auto points = to_cgal_points(pc);
-	
-	int nb_neighbors = 10;
-	std::vector<ProximityGeo> plane_geos;
-	plane_geos.reserve(p.size());
-	std::transform(p.begin(), p.end(), std::back_inserter(plane_geos), [nb_neighbors](const auto& plane) { return ProximityGeo(plane->pc, nb_neighbors); });
-
-	std::vector<Eigen::Triplet<double>> triplets;
-	triplets.reserve(pc.rows()); //TODO: better estimation?
-	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
-
-	ProximityGeo pc_geo(pc, nb_neighbors, true);
-
-	lmu::writePointCloud("pc_test.xyz", pc);
-
-	double epsilon = 0.000001;
-	int c = 0;
-	int wrong_side_c = 0;
-	int point_vis_c = 0;
-
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		for (int j = i + 1; j < pc.rows(); ++j)
-		{
-			if (c % 100000 == 0)
-				std::cout << c << " of " << (int)(pc.rows() * pc.rows()) * 0.5 << std::endl;
-			c++;
-
-			K::Point_3 p0(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
-			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
-			K::Segment_3 s(p0, p1);
-
-			if (normal_check)
+			std::vector<TriangleTree::Primitive_id> primitives;
+			tree->all_intersected_primitives(s, std::back_inserter(primitives));
+			if (!primitives.empty())
 			{
-				Eigen::Vector3d n(pc.row(i).rightCols(3));
-				Eigen::Vector3d ep0(pc.row(i).leftCols(3));
-				Eigen::Vector3d ep1(pc.row(j).leftCols(3));
-				
-				if ((n * -1.0).normalized().dot((ep1 - ep0).normalized()) < 0.0)
+				for (const auto& prim : primitives)
 				{
-					wrong_side_c++;
-					continue;
-				}
-			}
-			
-			bool hit = false;
-			for (int k = 0; k < planes.size(); ++k)
-			{
-				auto result = CGAL::intersection(s, planes[k]);
-				if (result)
-				{
-					if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
+					if (CGAL::squared_distance(*prim, p0) < epsilon || CGAL::squared_distance(*prim, p1) < epsilon)
 					{
-						// filter out points exactly on the origin or target plane.
-						if (CGAL::squared_distance(*p, p0) < epsilon || CGAL::squared_distance(*p, p1) < epsilon)
-							continue;
-
-						if(pc_geo.is_close(*p)) //if (plane_geos[k].is_close(*p)) <= if per-plane points should be used for proximity computation.
-						{
-							hit = true;
-							break;
-						}						
+						continue;
 					}
+					else
+					{
+						hit = true;
+						break;
+					}
+
 				}
 			}
-			
+
 			if (!hit)
 			{
 				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
 				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
 				point_vis_c++;
-			}		
+			}
+
 		}
 	}
 
