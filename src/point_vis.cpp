@@ -116,7 +116,7 @@ std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet&ms)
 		//Triangulation t;
 		//t.insert(points2d.begin(), points2d.end());
 
-		Alpha_shape_2 as(points2d.begin(), points2d.end(), 10000);
+		Alpha_shape_2 as(points2d.begin(), points2d.end(), 10000, Alpha_shape_2::REGULARIZED);
 
 		Alpha_shape_2::Alpha_iterator opt = as.find_optimal_alpha(1);
 		as.set_alpha(*opt);
@@ -183,6 +183,8 @@ std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet&ms)
 	*/
 	
 	igl::writeOBJ("triangulation.obj", m.vertices, m.indices);
+
+	std::cout << "Triangles: " << triangles.size() << std::endl;
 
 	return std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
 }
@@ -385,7 +387,8 @@ bool is_close(const K::Point_3& p, TriangleTree& tree, double epsilon)
 	return d <= 0.0001;
 }
 
-Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lmu::PointCloud & pc,	const lmu::ManifoldSet& ms, bool normal_check)
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lmu::PointCloud & pc,	const lmu::ManifoldSet& ms, 
+	bool normal_check)
 {
 	auto planes = to_cgal_planes(ms);
 	auto tree = get_triangle_tree(ms);
@@ -398,13 +401,14 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 	int c = 0;
 	int wrong_side_c = 0;
 	int point_vis_c = 0;
+	int col_c = 0;
 
 	double avg_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(to_cgal_points(pc), 5);
 
 	for (int i = 0; i < pc.rows(); ++i) 
 	{
 		for (int j = i + 1; j < pc.rows(); ++j) 
-		{
+		{		
 			if (c % 100000 == 0)
 				std::cout << c << " of " << (int)(pc.rows() * pc.rows()) * 0.5 << std::endl;
 
@@ -413,90 +417,58 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 			K::Point_3 p0(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
 			K::Point_3 p1(pc.row(j).x(), pc.row(j).y(), pc.row(j).z());
 			K::Segment_3 s(p0, p1);
+						
+			Eigen::Vector3d en0(pc.row(i).rightCols(3));
+			Eigen::Vector3d en1(pc.row(j).rightCols(3));
 
-			
-			if (normal_check) 
+			Eigen::Vector3d ep0(pc.row(i).leftCols(3));
+			Eigen::Vector3d ep1(pc.row(j).leftCols(3));
+
+			if (en0.normalized().dot((ep1 - ep0).normalized()) > 0.0 || en1.normalized().dot((ep0 - ep1).normalized()) > 0.0)
 			{
-				//Eigen::Vector3d en1(pc.row(j).rightCols(3));
-				Eigen::Vector3d en0(pc.row(i).rightCols(3));
-
-				Eigen::Vector3d ep0(pc.row(i).leftCols(3));
-				Eigen::Vector3d ep1(pc.row(j).leftCols(3));
-
-				if (en0.normalized().dot((ep1 - ep0).normalized()) < -0.01) 
-				{
-					// not front-facing (thus not visible)
-					wrong_side_c++;
-					continue;
-				}
+				// not front-facing (thus not visible)
+				wrong_side_c++;
+				
 			}
-			
-
-			
-			bool hit = false;
-			
-			/*
-			for (int k = 0; k < planes.size(); ++k) 
+			else
 			{
-				auto result = CGAL::intersection(s, planes[k]);
-				if (result) 
+				bool hit = false;
+							
+				std::vector<TriangleTree::Primitive_id> primitives;
+				tree->all_intersected_primitives(s, std::back_inserter(primitives));
+				if (!primitives.empty())
 				{
-					if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
-					{
-						// filter out points exactly on the origin or target plane.
-						if (CGAL::squared_distance(*p, p0) < epsilon ||
-							CGAL::squared_distance(*p, p1) < epsilon)
-							continue;
+					col_c++;
 
-						if (is_close(*p, *tree, avg_spacing))
+					for (const auto& prim : primitives)
+					{
+						double d0 = CGAL::squared_distance(*prim, p0);
+						double d1 = CGAL::squared_distance(*prim, p1);
+
+						if (std::isnan(d0) || std::isnan(d1))
+							std::cout << i << "/" << j << ": " << d0 << " " << d1 << std::endl;
+
+						if (CGAL::squared_distance(*prim, p0) > epsilon && CGAL::squared_distance(*prim, p1) > epsilon)						
 						{
 							hit = true;
 							break;
 						}
-
 					}
 				}
-			}
 
-			if (!hit)
-			{
-				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
-				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
-				point_vis_c++;
-			}
-			*/
-
-			std::vector<TriangleTree::Primitive_id> primitives;
-			tree->all_intersected_primitives(s, std::back_inserter(primitives));
-			if (!primitives.empty())
-			{
-				for (const auto& prim : primitives)
+				if (!hit)
 				{
-					if (CGAL::squared_distance(*prim, p0) < epsilon || CGAL::squared_distance(*prim, p1) < epsilon)
-					{
-						continue;
-					}
-					else
-					{
-						hit = true;
-						break;
-					}
-
+					triplets.push_back(Eigen::Triplet<double>(i, j, 1));
+					triplets.push_back(Eigen::Triplet<double>(j, i, 1));
+					point_vis_c++;
 				}
 			}
-
-			if (!hit)
-			{
-				triplets.push_back(Eigen::Triplet<double>(i, j, 1));
-				triplets.push_back(Eigen::Triplet<double>(j, i, 1));
-				point_vis_c++;
-			}
-
 		}
 	}
 
 	std::cout << "wrong side connections: " << wrong_side_c << std::endl;
 	std::cout << "point visibilities: " << point_vis_c << std::endl;
+	std::cout << "collisions: " << col_c << std::endl;
 
 	am.setFromTriplets(triplets.begin(), triplets.end());
 
