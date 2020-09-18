@@ -544,6 +544,12 @@ int main(int argc, char *argv[])
 		if (use_clusters)
 		{
 			clusters = lmu::readClusterFromFile(path + "clusters.txt", 1.0);
+			
+			for (auto& c : clusters)
+			{
+				c.manifoldTypes.clear();
+				c.manifoldTypes.insert( lmu::ManifoldType::Plane);
+			}
 		}
 		else
 		{
@@ -562,7 +568,7 @@ int main(int argc, char *argv[])
 				pc = lmu::readPointCloud(path + "pc.txt");
 			}
 
-			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Sphere, lmu::ManifoldType::Plane, lmu::ManifoldType::Cylinder });
+			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Plane, lmu::ManifoldType::Sphere,lmu::ManifoldType::Cylinder });
 			clusters = { cl };
 		}
 				
@@ -600,22 +606,24 @@ int main(int argc, char *argv[])
 					
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
-				
-		// Farthest point sampling applied to all manifolds.
-		/*
-		for (const auto& m : ransacRes.manifolds)
+		
+		
+		std::vector<lmu::PointCloud> pointclouds;
+		for (const auto& m : g_manifoldSet)
 		{
-			m->pc = lmu::farthestPointSampling(m->pc, 200);
+			pointclouds.push_back(m->pc);
 		}
-		*/
-		//res_f << "FPS Duration=" << t.tick() << std::endl;
+		lmu::writePointCloud("plane_pc.txt", lmu::mergePointClouds(pointclouds));
+	
 
 		// Create plane graph.
 		auto plane_graph = lmu::create_plane_graph(ransacRes.manifolds, g_res_pc, g_res_pc);
 		plane_graph.to_file("plane_graph.gv");
 
-		auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
-		igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
+		//goto _LAUNCH;
+
+		//auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
+		//igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
 
 		lmu::resample_proportionally(plane_graph.planes(), 3000);
 						

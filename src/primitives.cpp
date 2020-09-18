@@ -382,18 +382,17 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>
 
 		RansacShapeDetector detector(ransacOptions);
 
-
-		if (types.count(ManifoldType::Cylinder) || params.types.empty())
+		if (types.find(ManifoldType::Cylinder) != types.end())
 		{
 			detector.Add(new CylinderPrimitiveShapeConstructor());
 			std::cout << "Added cylinder detector." << std::endl;
 		}
-		if (types.count(ManifoldType::Plane) || params.types.empty())
+		if (types.find(ManifoldType::Plane) != types.end())
 		{
 			detector.Add(new PlanePrimitiveShapeConstructor());
 			std::cout << "Added plane detector." << std::endl;
 		}
-		if (types.count(ManifoldType::Sphere) || params.types.empty())
+		if (types.find(ManifoldType::Sphere) != types.end())
 		{
 			detector.Add(new SpherePrimitiveShapeConstructor());
 			std::cout << "Added sphere detector." << std::endl;

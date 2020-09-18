@@ -83,7 +83,7 @@ K::Point_3 get_3DPoint(const lmu::ManifoldPtr& plane, const K::Point_2& point)
 	return p;
 }
 
-std::vector<K::Triangle_3> get_triangles(const lmu::ManifoldSet&ms)
+std::vector<K::Triangle_3> get_triangles(const lmu::ManifoldSet&ms, bool save_mesh = false)
 {
 	// For each manifold:
 	//  extract its points, and the corresponding plane information
@@ -116,7 +116,7 @@ std::vector<K::Triangle_3> get_triangles(const lmu::ManifoldSet&ms)
 		//Triangulation t;
 		//t.insert(points2d.begin(), points2d.end());
 
-		Alpha_shape_2 as(points2d.begin(), points2d.end(), 10000, Alpha_shape_2::REGULARIZED);
+		Alpha_shape_2 as(points2d.begin(), points2d.end(), 10000, Alpha_shape_2::Mode::GENERAL);
 
 		Alpha_shape_2::Alpha_iterator opt = as.find_optimal_alpha(1);
 		as.set_alpha(*opt);
@@ -170,8 +170,6 @@ std::vector<K::Triangle_3> get_triangles(const lmu::ManifoldSet&ms)
 		pc.row(i * 3 + 1) << triangles[i].vertex(1).x(), triangles[i].vertex(1).y(), triangles[i].vertex(1).z(), 0.0, 0.0, 0.0;
 		pc.row(i * 3 + 2) << triangles[i].vertex(2).x(), triangles[i].vertex(2).y(), triangles[i].vertex(2).z(), 0.0, 0.0, 0.0;	
 	}
-
-	lmu::writePointCloud("pc_tri.txt", pc);
 	
 	/*
 	std::vector<lmu::PointCloud> pointclouds;
@@ -182,16 +180,19 @@ std::vector<K::Triangle_3> get_triangles(const lmu::ManifoldSet&ms)
 	lmu::writePointCloud("plane_pc.txt", lmu::mergePointClouds(pointclouds));
 	*/
 	
-	igl::writeOBJ("triangulation.obj", m.vertices, m.indices);
-
+	if (save_mesh)
+	{
+		lmu::writePointCloud("pc_tri.txt", pc);
+		igl::writeOBJ("triangulation.obj", m.vertices, m.indices);
+	}
 	std::cout << "Triangles: " << triangles.size() << std::endl;
 
 	return triangles;
 }
 
-std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet& planes)
+std::shared_ptr<TriangleTree> get_triangle_tree(const lmu::ManifoldSet& planes, bool save_mesh = false)
 {
-	auto triangles = get_triangles(planes);
+	auto triangles = get_triangles(planes, save_mesh);
 
 	return std::make_shared<TriangleTree>(triangles.begin(), triangles.end());
 }
@@ -413,7 +414,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 	bool normal_check)
 {
 	auto planes = to_cgal_planes(ms);
-	auto tree = get_triangle_tree(ms);
+	auto tree = get_triangle_tree(ms, true);
 
 	std::vector<std::shared_ptr<TriangleTree>> per_plane_trees; 
 	std::vector<std::vector<K::Triangle_3>> per_plane_triangles;
@@ -455,47 +456,13 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 			Eigen::Vector3d ep0(pc.row(i).leftCols(3));
 			Eigen::Vector3d ep1(pc.row(j).leftCols(3));
 
-			if (en0.normalized().dot((ep1 - ep0).normalized()) > 0.0 || en1.normalized().dot((ep0 - ep1).normalized()) > 0.0)
+			if (en0.normalized().dot((ep1 - ep0).normalized()) > epsilon || en1.normalized().dot((ep0 - ep1).normalized()) > epsilon)
 			{
 				// not front-facing (thus not visible)
-				wrong_side_c++;
-				
+				wrong_side_c++;				
 			}
 			else
 			{
-				// Intersection test with complete triangle tree.
-				/*
-				bool hit = false;
-							
-				std::vector<TriangleTree::Primitive_id> primitives;
-				tree->all_intersected_primitives(s, std::back_inserter(primitives));
-				if (!primitives.empty())
-				{
-					col_c++;
-
-					for (const auto& prim : primitives)
-					{
-						double d0 = CGAL::squared_distance(*prim, p0);
-						double d1 = CGAL::squared_distance(*prim, p1);
-
-						if (std::isnan(d0) || std::isnan(d1))
-							std::cout << i << "/" << j << ": " << d0 << " " << d1 << std::endl;
-
-						if (CGAL::squared_distance(*prim, p0) > epsilon && CGAL::squared_distance(*prim, p1) > epsilon)						
-						{
-							hit = true;
-							break;
-						}
-					}
-				}
-
-				if (!hit)
-				{
-					triplets.push_back(Eigen::Triplet<double>(i, j, 1));
-					triplets.push_back(Eigen::Triplet<double>(j, i, 1));
-					point_vis_c++;
-				}*/
-
 				// Test against planes first.
 				bool hit = false;
 				for (int k = 0; k < planes.size(); ++k)
@@ -503,8 +470,11 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 					auto result = CGAL::intersection(s, planes[k]);
 					if (result)
 					{
+
 						if (const K::Point_3* p = boost::get<K::Point_3>(&*result))
 						{
+							//double e = per_plane_avg_spacings[k];
+
 							// filter out points exactly on the origin or target plane.
 							if (CGAL::squared_distance(*p, p0) < epsilon ||
 								CGAL::squared_distance(*p, p1) < epsilon)
@@ -512,57 +482,18 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 								continue;
 							}
 							else
-							{
-								// Plane-only test.
-								/*
-								col_c++;
-								hit = true;
-								break;
-								*/
-								
+							{							
 								// Triangle list intersection test.
 								for (int l = 0; l < per_plane_triangles[k].size(); ++l)
 								{
 									auto result = CGAL::intersection(s, per_plane_triangles[k][l]);
-									if (result)
+									if (result && boost::get<K::Point_3>(&*result))
 									{
 										col_c++;
 										hit = true;
 										goto HIT;
 									}
 								}
-								
-								// Per-plane triangle tree intersection test.
-								/*
-								std::vector<TriangleTree::Primitive_id> primitives;
-								per_plane_trees[k]->all_intersected_primitives(s, std::back_inserter(primitives));
-								if (!primitives.empty())
-								{
-									col_c++;
-
-									for (const auto& prim : primitives)
-									{
-										double d0 = CGAL::squared_distance(*prim, p0);
-										double d1 = CGAL::squared_distance(*prim, p1);
-
-										if (CGAL::squared_distance(*prim, p0) > epsilon && CGAL::squared_distance(*prim, p1) > epsilon)
-										{
-											hit = true;
-											break;
-										}
-									}
-								}
-								*/
-								
-								// Distance-based test with per-plane triangle tree.
-								/*
-								if (std::sqrt(per_plane_trees[k]->squared_distance(*p)) < per_plane_avg_spacings[k])
-								{
-									col_c++;
-									hit = true;
-									break;
-								}
-								*/
 							}
 						}
 					}
