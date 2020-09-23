@@ -8,6 +8,8 @@
 
 namespace lmu
 {
+	extern Eigen::MatrixXd g_p1, g_p2, g_c;
+
 	void write_affinity_matrix(const std::string& file, const Eigen::MatrixXd& af);
 	void write_affinity_matrix(const std::string& file, const Eigen::SparseMatrix<double>& af);
 
@@ -16,6 +18,8 @@ namespace lmu
 	Eigen::SparseMatrix<double> get_affinity_matrix(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check, lmu::PointCloud& debug_pc);
 
 	Eigen::SparseMatrix<double> get_affinity_matrix_with_triangulation(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check);
+
+	Eigen::SparseMatrix<double> get_affinity_matrix_with_rays(const lmu::ManifoldSet& planes, bool normal_check);
 
 	Eigen::SparseMatrix<double> get_affinity_matrix_old(const lmu::PointCloud& pc, const lmu::ManifoldSet& planes, bool normal_check, lmu::PointCloud& debug_pc);
 

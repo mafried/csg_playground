@@ -231,6 +231,10 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	
 	viewer.data().clear();
 
+	viewer.data().show_lines = true;
+	viewer.data().add_edges(lmu::g_p1, lmu::g_p2, lmu::g_c);
+
+
 	if (g_show_sdf)
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 
@@ -630,7 +634,7 @@ int main(int argc, char *argv[])
 		auto convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
 
 		g_convex_clusters = convex_clusters;
-
+				
 		goto _LAUNCH;
 
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);

@@ -111,7 +111,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 
 	writePointCloud(pcaf_path, pc);
 
-	auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
+	auto aff_mat = lmu::get_affinity_matrix_with_rays(pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
 
 	auto n = std::to_string(aff_mat.rows());
 	std::cout << n << " " << afm_path << std::endl;
