@@ -519,22 +519,45 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 	return am;
 }
 
-std::vector<K::Triangle_3> get_splat_triangles(const lmu::ManifoldSet& planes, bool save_mesh = false)
+struct PointTriangle
 {
-	std::vector<K::Triangle_3> triangles;
+	PointTriangle(const K::Triangle_3& t, int point_idx) :
+		triangle(t),
+		point_idx(point_idx)
+	{	
+	}
+
+	K::Triangle_3 triangle;
+	int point_idx;
+};
+
+int get_global_point_idx(int plane_idx, int inner_plane_point_idx, const lmu::ManifoldSet& ms)
+{
+	int point_idx = 0;
+	for (int i = 0; i < plane_idx; ++i)
+		point_idx += ms[i]->pc.rows();
+
+	return point_idx + inner_plane_point_idx;
+}
+
+std::vector<PointTriangle> get_splat_triangles(const lmu::ManifoldSet& planes, bool save_mesh = false)
+{
+	std::vector<PointTriangle> triangles;
 	
-	for (const auto& plane : planes)
+	for (int i = 0; i < planes.size(); ++i)
 	{
+		auto plane = planes[i];
+
 		if (plane->type != lmu::ManifoldType::Plane)
 			continue;
 
 		double splat_size = CGAL::compute_average_spacing<CGAL::Sequential_tag>(to_cgal_points(plane->pc), 10);
-		double w = splat_size;// / 2.0;
+		double w = splat_size / 2.0;
 
-		for (int i = 0; i < plane->pc.rows(); ++i)
+		for (int j = 0; j < plane->pc.rows(); ++j)
 		{
-			K::Point_3  p0(plane->pc.coeff(i, 0), plane->pc.coeff(i, 1), plane->pc.coeff(i, 2));
-			K::Vector_3 n0(plane->pc.coeff(i, 3), plane->pc.coeff(i, 4), plane->pc.coeff(i, 5));
+			K::Point_3  p0(plane->pc.coeff(j, 0), plane->pc.coeff(j, 1), plane->pc.coeff(j, 2));
+			K::Vector_3 n0(plane->pc.coeff(j, 3), plane->pc.coeff(j, 4), plane->pc.coeff(j, 5));
 
 			K::Plane_3 c_plane(p0, n0);
 
@@ -545,8 +568,10 @@ std::vector<K::Triangle_3> get_splat_triangles(const lmu::ManifoldSet& planes, b
 			auto v2 = c_plane.to_3d(K::Point_2(c.x() + w, c.y() - w));
 			auto v3 = c_plane.to_3d(K::Point_2(c.x() + w, c.y() + w));
 
-			triangles.push_back(K::Triangle_3(v0, v1, v2));
-			triangles.push_back(K::Triangle_3(v0, v2, v3));
+			int point_idx = j;
+
+			triangles.push_back(PointTriangle(K::Triangle_3(v0, v1, v2), point_idx));
+			triangles.push_back(PointTriangle(K::Triangle_3(v0, v2, v3), point_idx));
 		}
 	}
 
@@ -559,15 +584,15 @@ std::vector<K::Triangle_3> get_splat_triangles(const lmu::ManifoldSet& planes, b
 
 	for (int i = 0; i < triangles.size(); ++i)
 	{
-		m.vertices.row(i * 3) << triangles[i].vertex(0).x(), triangles[i].vertex(0).y(), triangles[i].vertex(0).z();
-		m.vertices.row(i * 3 + 1) << triangles[i].vertex(1).x(), triangles[i].vertex(1).y(), triangles[i].vertex(1).z();
-		m.vertices.row(i * 3 + 2) << triangles[i].vertex(2).x(), triangles[i].vertex(2).y(), triangles[i].vertex(2).z();
+		m.vertices.row(i * 3) << triangles[i].triangle.vertex(0).x(), triangles[i].triangle.vertex(0).y(), triangles[i].triangle.vertex(0).z();
+		m.vertices.row(i * 3 + 1) << triangles[i].triangle.vertex(1).x(), triangles[i].triangle.vertex(1).y(), triangles[i].triangle.vertex(1).z();
+		m.vertices.row(i * 3 + 2) << triangles[i].triangle.vertex(2).x(), triangles[i].triangle.vertex(2).y(), triangles[i].triangle.vertex(2).z();
 
 		m.indices.row(i) << (i * 3), (i * 3 + 1), (i * 3 + 2);
 
-		pc.row(i * 3) << triangles[i].vertex(0).x(), triangles[i].vertex(0).y(), triangles[i].vertex(0).z(), 0.0, 0.0, 0.0;
-		pc.row(i * 3 + 1) << triangles[i].vertex(1).x(), triangles[i].vertex(1).y(), triangles[i].vertex(1).z(), 0.0, 0.0, 0.0;
-		pc.row(i * 3 + 2) << triangles[i].vertex(2).x(), triangles[i].vertex(2).y(), triangles[i].vertex(2).z(), 0.0, 0.0, 0.0;
+		pc.row(i * 3) << triangles[i].triangle.vertex(0).x(), triangles[i].triangle.vertex(0).y(), triangles[i].triangle.vertex(0).z(), 0.0, 0.0, 0.0;
+		pc.row(i * 3 + 1) << triangles[i].triangle.vertex(1).x(), triangles[i].triangle.vertex(1).y(), triangles[i].triangle.vertex(1).z(), 0.0, 0.0, 0.0;
+		pc.row(i * 3 + 2) << triangles[i].triangle.vertex(2).x(), triangles[i].triangle.vertex(2).y(), triangles[i].triangle.vertex(2).z(), 0.0, 0.0, 0.0;
 	}
 
 	/*
@@ -590,21 +615,12 @@ std::vector<K::Triangle_3> get_splat_triangles(const lmu::ManifoldSet& planes, b
 }
 
 
-std::vector<K::Triangle_3> get_splat_triangles(const lmu::ManifoldPtr& plane, bool save_mesh = false)
+std::vector<PointTriangle> get_splat_triangles(const lmu::ManifoldPtr& plane, bool save_mesh = false)
 {
 	lmu::ManifoldSet planes;
 	planes.push_back(plane);
 
 	return get_splat_triangles(planes, save_mesh);
-}
-
-int get_point_idx(int plane_idx, int inner_plane_point_idx, const lmu::ManifoldSet& ms)
-{
-	int point_idx = 0;
-	for (int i = 0; i < plane_idx; ++i)
-		point_idx += ms[i]->pc.rows();
-	
-	return point_idx + inner_plane_point_idx;
 }
 
 Eigen::MatrixXd lmu::g_p1, lmu::g_p2, lmu::g_c;
@@ -615,7 +631,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays(const lmu::Manifo
 
 	get_splat_triangles(ms, true);
 
-	std::vector<std::vector<K::Triangle_3>> per_plane_triangles;
+	std::vector<std::vector<PointTriangle>> per_plane_triangles;
 	std::vector<double> per_plane_avg_spacings;
 	int n = 0;
 	for (const auto& plane : ms)
@@ -648,18 +664,20 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays(const lmu::Manifo
 	g_p1 = Eigen::MatrixXd(max_rays, 3);
 	g_p2 = Eigen::MatrixXd(max_rays, 3);
 	g_c = Eigen::MatrixXd(max_rays, 3);
-
-		
+			
 	for (int i = 0; i < ms.size(); ++i)
 	{
 		for (int j = 0; j < ms[i]->pc.rows(); ++j)
 		{
-			int start_point_idx = get_point_idx(i, j, ms);
+			int start_point_idx = get_global_point_idx(i, j, ms);
 
 			if (c % 100 == 0)
 				std::cout << c << " of " << n << std::endl;
 			c++;
-			
+
+			// A point is always visible to itself.
+			triplets.push_back(Eigen::Triplet<double>(start_point_idx, start_point_idx, 1));
+
 			K::Point_3  p0(ms[i]->pc.coeff(j, 0), ms[i]->pc.coeff(j, 1), ms[i]->pc.coeff(j, 2));
 			K::Vector_3 n0(ms[i]->pc.coeff(j, 3), ms[i]->pc.coeff(j, 4), ms[i]->pc.coeff(j, 5));
 			
@@ -710,7 +728,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays(const lmu::Manifo
 								{
 									//std::cout << per_plane_triangles[l][m] << std::endl;
 
-									auto result = CGAL::intersection(view_ray, per_plane_triangles[l][m]);
+									auto result = CGAL::intersection(view_ray, per_plane_triangles[l][m].triangle);
 									if (result)
 									{
 										if (const K::Point_3* pi = boost::get<K::Point_3>(&*result))
@@ -718,7 +736,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays(const lmu::Manifo
 											g_p2.row(k) << pi->x(), pi->y(), pi->z();
 											triangle_hit = true; 
 
-											int inter_point_idx = get_point_idx(l, m / 2 /*two triangles per point, so m/2 is the point index*/, ms);
+											int inter_point_idx = get_global_point_idx(l, per_plane_triangles[l][m].point_idx, ms);
 
 											if (first_hit)
 											{
@@ -761,6 +779,148 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays(const lmu::Manifo
 
 	return am;
 }
+
+// -----
+
+Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays_2(const lmu::ManifoldSet& ms, bool normal_check)
+{
+	auto planes = to_cgal_planes(ms);
+
+	get_splat_triangles(ms, true);
+
+	std::vector<std::vector<PointTriangle>> per_plane_triangles;
+	std::vector<double> per_plane_avg_spacings;
+	int n = 0;
+	for (const auto& plane : ms) 
+	{
+		per_plane_triangles.push_back(get_splat_triangles(plane, false));
+		per_plane_avg_spacings.push_back(CGAL::compute_average_spacing<CGAL::Sequential_tag>(to_cgal_points(plane->pc), 1));
+		std::cout << "Plane spacing: " << per_plane_avg_spacings.back() << std::endl;
+
+		n += plane->pc.rows();
+	}
+
+	std::vector<Eigen::Triplet<double>> triplets;
+	Eigen::SparseMatrix<double> am(n, n);
+
+	double epsilon = 0.0001; // 0.000001;
+	int c = 0;
+	int wrong_side_c = 0;
+	int point_vis_c = 0;
+	int col_c = 0;
+
+	int max_rays = 100;
+	double cone_angle = 60.0 / 180.0 * M_PI;
+	double d = 0.1;
+	double R = std::tan(cone_angle / 2.0) * d;
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<> dis(0.0, 1.0);
+
+	g_p1 = Eigen::MatrixXd(max_rays, 3);
+	g_p2 = Eigen::MatrixXd(max_rays, 3);
+	g_c = Eigen::MatrixXd(max_rays, 3);
+
+	for (int i = 0; i < ms.size(); ++i) 
+	{
+		for (int j = 0; j < ms[i]->pc.rows(); ++j)
+		{
+
+			int start_point_idx = get_global_point_idx(i, j, ms);
+
+			// A point is visible by itself
+			triplets.push_back(Eigen::Triplet<double>(start_point_idx, start_point_idx, 1));
+
+			if (c % 100 == 0)
+				std::cout << c << " of " << n << std::endl;
+
+			c++;
+
+			K::Point_3  p0(ms[i]->pc.coeff(j, 0), ms[i]->pc.coeff(j, 1), ms[i]->pc.coeff(j, 2));
+			K::Vector_3 n0(ms[i]->pc.coeff(j, 3), ms[i]->pc.coeff(j, 4), ms[i]->pc.coeff(j, 5));
+
+			for (int k = 0; k < max_rays; k++) {
+				double r = R * std::sqrt(dis(gen));
+				double theta = dis(gen) * 2 * M_PI;
+
+				double x = r * std::cos(theta);
+				double y = r * std::sin(theta);
+
+				K::Vector_3 p_n = -1.0  * (n0 / CGAL::sqrt(n0.squared_length()));
+
+				K::Point_3 p_origin_3 = p0 + d * p_n;
+				K::Plane_3 plane(p_origin_3, p_n);
+				K::Point_2 p_origin_2 = plane.to_2d(p_origin_3);
+
+				K::Point_3 p1 = plane.to_3d(p_origin_2 + K::Vector_2(x, y));
+
+				K::Ray_3 view_ray(p0, p1 - p0);
+
+				g_p1.row(k) << p0.x(), p0.y(), p0.z();
+				g_c.row(k) << 1.0, 0.0, 0.0;
+
+				int closest_idx = -1;
+				float closest_d_sq = std::numeric_limits<float>::max();
+
+				for (int l = 0; l < planes.size(); ++l)
+				{
+					auto result = CGAL::intersection(view_ray, planes[l]);
+					if (!result) continue;
+
+					if (const K::Point_3* p = boost::get<K::Point_3>(&*result)) 
+					{
+						// filter out points exactly on the origin plane.
+						if (CGAL::squared_distance(*p, p0) < epsilon)
+							continue;
+
+						// Triangle list intersection test.
+						for (int m = 0; m < per_plane_triangles[l].size(); ++m) 
+						{
+							auto result = CGAL::intersection(view_ray, per_plane_triangles[l][m].triangle);
+							if (!result) continue;
+
+							if (const K::Point_3* pi = boost::get<K::Point_3>(&*result)) 
+							{
+								g_p2.row(k) << pi->x(), pi->y(), pi->z();
+
+								int inter_point_idx = get_global_point_idx(l, per_plane_triangles[l][m].point_idx, ms);
+
+								float d_sq = CGAL::squared_distance(p0, *pi);
+								if (d_sq < closest_d_sq) {
+									closest_d_sq = d_sq;
+									closest_idx = inter_point_idx;
+								}
+							}
+						}
+					}
+				}
+
+				if (closest_idx != -1) {
+					triplets.push_back(Eigen::Triplet<double>(start_point_idx, closest_idx, 1));
+					triplets.push_back(Eigen::Triplet<double>(closest_idx, start_point_idx, 1));
+				}
+
+			}
+		}
+	}
+
+	am.setFromTriplets(triplets.begin(), triplets.end());
+
+	for (int k = 0; k < am.outerSize(); ++k)
+	{
+		for (Eigen::SparseMatrix<double>::InnerIterator it(am, k); it; ++it)
+		{
+			if (it.value() != 0.0)
+				it.valueRef() = 1.0;
+		}
+	}
+
+	return am;
+}
+
+// -----
+
 
 
 lmu::Mesh merge_meshes(const lmu::Mesh& m0, const lmu::Mesh& m1)

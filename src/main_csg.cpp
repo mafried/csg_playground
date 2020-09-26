@@ -629,7 +629,7 @@ int main(int argc, char *argv[])
 		//auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
 		//igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
 
-		lmu::resample_proportionally(plane_graph.planes(), 3000);
+		lmu::resample_proportionally(plane_graph.planes(), 10000);
 						
 		auto convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
 
