@@ -629,19 +629,24 @@ int main(int argc, char *argv[])
 		//auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
 		//igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
 
-		lmu::resample_proportionally(plane_graph.planes(), 10000);
+		lmu::resample_proportionally(plane_graph.planes(), 3000);
 						
 		auto convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
 
 		g_convex_clusters = convex_clusters;
-				
-		goto _LAUNCH;
-
+			
+		
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
+
+		int i = 0;
+		for (const auto& polytope : polytopes)
+		{
+			igl::writeOBJ("unm_res_mesh_" + std::to_string(i++) + ".obj", polytope.imFunc->meshCRef().vertices, polytope.imFunc->meshCRef().indices);
+		}
 
 		polytopes = lmu::merge_polytopes(polytopes, prim_params.am_quality_threshold);
 
-		int i = 0;
+		i = 0;
 		for (const auto& polytope : polytopes)
 		{
 			igl::writeOBJ("res_mesh_" + std::to_string(i++) + ".obj", polytope.imFunc->meshCRef().vertices, polytope.imFunc->meshCRef().indices);

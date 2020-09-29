@@ -809,7 +809,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays_2(const lmu::Mani
 	int point_vis_c = 0;
 	int col_c = 0;
 
-	int max_rays = 100;
+	int max_rays = 50;
 	double cone_angle = 60.0 / 180.0 * M_PI;
 	double d = 0.1;
 	double R = std::tan(cone_angle / 2.0) * d;
@@ -863,6 +863,8 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays_2(const lmu::Mani
 				int closest_idx = -1;
 				float closest_d_sq = std::numeric_limits<float>::max();
 
+				std::vector<int> invisible_point_indices;
+
 				for (int l = 0; l < planes.size(); ++l)
 				{
 					auto result = CGAL::intersection(view_ray, planes[l]);
@@ -887,8 +889,13 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays_2(const lmu::Mani
 								int inter_point_idx = get_global_point_idx(l, per_plane_triangles[l][m].point_idx, ms);
 
 								float d_sq = CGAL::squared_distance(p0, *pi);
-								if (d_sq < closest_d_sq) {
+								if (d_sq < closest_d_sq) 
+								{
 									closest_d_sq = d_sq;
+									
+									if (closest_idx != -1)
+										invisible_point_indices.push_back(closest_idx);
+									
 									closest_idx = inter_point_idx;
 								}
 							}
@@ -896,9 +903,16 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_rays_2(const lmu::Mani
 					}
 				}
 
-				if (closest_idx != -1) {
+				if (closest_idx != -1)
+				{
 					triplets.push_back(Eigen::Triplet<double>(start_point_idx, closest_idx, 1));
 					triplets.push_back(Eigen::Triplet<double>(closest_idx, start_point_idx, 1));
+
+					for (int ipi : invisible_point_indices)
+					{
+						triplets.push_back(Eigen::Triplet<double>(start_point_idx, ipi, 0));
+						triplets.push_back(Eigen::Triplet<double>(ipi, start_point_idx, 0));
+					}
 				}
 
 			}
