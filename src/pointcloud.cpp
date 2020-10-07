@@ -13,9 +13,6 @@
 #include "..\include\mesh.h"
 #include "..\include\csgnode.h"
 
-#include <pcl/point_cloud.h>
-#include <pcl/octree/octree_search.h>
-
 lmu::PointCloud lmu::empty_pc()
 {
 	return PointCloud();
@@ -406,64 +403,17 @@ lmu::PointCloud lmu::pointCloudFromMesh(const lmu::Mesh& mesh, double delta, dou
 	return res;
 }
 
-lmu::PointCloudCharacteristics lmu::getPointCloudCharacteristics(const PointCloud & pc, int k, double octreeResolution)
-{
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-	cloud->width = pc.rows();
-	cloud->height = 1;
-	cloud->is_dense = false;
-	cloud->points.resize(pc.rows());
-		
-	double nodeSize = octreeResolution * computeAABBLength(pc);
-
-	std::cout << "Octree Node Size: " << nodeSize << std::endl;
-
-	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(nodeSize);
-	octree.setInputCloud(cloud);
-	octree.addPointsFromInputCloud();
-
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		cloud->points[i].x = pc.row(i).x();
-		cloud->points[i].y = pc.row(i).y();
-		cloud->points[i].z = pc.row(i).z();
-	}
-	
-	std::vector<double> distances(pc.rows());
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		Eigen::Vector3d searchP = pc.row(i).leftCols(3);
-
-		std::vector<int> indices(k);
-		std::vector<float> kdistances(k);
-				
-		octree.nearestKSearch(i, k, indices, kdistances);
-		std::cout << i << " of " << pc.rows() <<  std::endl;
-
-		distances[i] = std::accumulate(kdistances.begin(), kdistances.end(), 0.0) / (double)kdistances.size();
-	}
-
-	std::sort(distances.begin(), distances.end());
-
-	PointCloudCharacteristics pcc;
-	pcc.maxDistance = distances.back();
-	pcc.minDistance = distances.front(); 
-	pcc.medianDistance = distances[distances.size() / 2];
-	pcc.meanDistance = std::accumulate(distances.begin(), distances.end(), 0.0) / (double)distances.size();
-
-	return pcc;
-}
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+typedef CGAL::Exact_predicates_inexact_constructions_kernel  K;
 
 void lmu::projectPointCloudOnPlane(PointCloud & pc, const Eigen::Vector3d & p, const Eigen::Vector3d & n)
 {
+	K::Plane_3 plane(K::Point_3(p.x(), p.y(), p.z()), K::Vector_3(n.x(), n.y(), n.z()));
+
 	for (int i = 0; i < pc.rows(); ++i)
 	{
-		Eigen::Vector3d pt = pc.block<1, 3>(i, 0).transpose();
-
-		Eigen::Vector3d projPt = p + pt - (pt.dot(n)) * n;
-
-		pc.block<1, 3>(i, 0) << projPt.transpose();
+		K::Point_3 proj_pt = plane.projection(K::Point_3(pc.row(i).x(), pc.row(i).y(), pc.row(i).z()));
+		pc.block<1, 3>(i, 0) << proj_pt.x(), proj_pt.y(), proj_pt.z();
 	}
 }
 
@@ -547,129 +497,6 @@ lmu::PointCloud lmu::farthestPointSampling(const PointCloud & pc, int k)
 	return spc;
 }
 
-#include <pcl/ml/kmeans.h>
-
-std::vector<std::tuple<Eigen::Vector3d, lmu::PointCloud>> lmu::kMeansClustering(const PointCloud & p, int k)
-{
-	pcl::Kmeans real(p.rows(), 3);
-	real.setClusterSize(k);
-	for (size_t i = 0; i < p.rows(); i++)
-	{
-		std::vector<float> data(3);
-		data[0] = p.row(i).x();
-		data[1] = p.row(i).y();
-		data[2] = p.row(i).z();
-		real.addDataPoint(data);
-	}
-
-	real.kMeans();
-	
-	pcl::Kmeans::Centroids pclCentroids = real.get_centroids();
-	//std::cout << "centroid count: " << pclCentroids.size() << std::endl;
-	std::vector<Eigen::Vector3d> centroids(pclCentroids.size());
-	for (int i = 0; i < pclCentroids.size(); i++)
-	{
-		centroids[i] = Eigen::Vector3d(pclCentroids[i][0], pclCentroids[i][1], pclCentroids[i][2]);
-
-		//std::cout << "Centroid: " << centroids[i] << std::endl;
-	}
-	std::vector<std::vector<size_t>> clusters(centroids.size());
-
-	for (size_t i = 0; i < p.rows(); i++)
-	{
-		Eigen::Vector3d point = p.row(i).leftCols(3).transpose();
-		double minD = std::numeric_limits<double>::max();
-		double cIdxMinD = 0;
-		for (int j = 0; j < centroids.size(); ++j)
-		{
-			double d = (point - centroids[j]).squaredNorm();
-			if (minD > d) {
-				minD = d;
-				cIdxMinD = j;
-			}
-		}
-		clusters[cIdxMinD].push_back(i);
-	}
-
-	std::vector<std::tuple<Eigen::Vector3d, lmu::PointCloud>> res;
-
-	for (int i = 0; i < centroids.size(); ++i)
-	{
-		Eigen::Vector3d c = centroids[i];
-		lmu::PointCloud cPc(clusters[i].size(), 6);
-		for (int j = 0; j < clusters[i].size(); j++)
-		{
-			cPc.row(j) << p.row(clusters[i][j]);
-
-			//std::cout << "Cluster " << i << "Row " << j << " " << cPc.row(i) << std::endl;
-		}
-
-		//std::cout << cPc << std::endl;
-
-		res.push_back(std::make_tuple(c, cPc));
-	}
-	
-	return res;
-}
-#include <pcl/common/centroid.h>
-
-pcl::PointCloud<pcl::PointXYZ>::Ptr PointCloudToPCLPointCloud(const lmu::PointCloud& pc)
-{
-	pcl::PointCloud<pcl::PointXYZ>::Ptr pcl(new pcl::PointCloud<pcl::PointXYZ>());
-
-	pcl->width = pc.rows();
-	pcl->height = 1;
-	pcl->is_dense = false;
-	pcl->points.resize(pc.rows());
-
-	for (int i = 0; i < pc.rows(); ++i)
-	{
-		pcl->points[i].x = pc.row(i).x();
-		pcl->points[i].y = pc.row(i).y();
-		pcl->points[i].z = pc.row(i).z();
-	}
-
-	return pcl;
-}
-
-#include <pcl/common/eigen.h>
-
-Eigen::Affine3d lmu::getOrientation(const PointCloud & p)
-{
-	Eigen::Vector4f centroid;
-	Eigen::Matrix3f covariance_matrix;
-
-	// Extract the eigenvalues and eigenvectors
-	Eigen::Vector3f eigen_values;
-	Eigen::Matrix3f eigen_vectors;
-
-	auto pcl = PointCloudToPCLPointCloud(p);
-
-	pcl::compute3DCentroid(*pcl, centroid);
-
-	// Compute the 3x3 covariance matrix
-	pcl::computeCovarianceMatrix(*pcl, centroid, covariance_matrix);
-	pcl::eigen33(covariance_matrix, eigen_vectors, eigen_values);
-
-    https://stackoverflow.com/questions/28701213/how-to-find-principal-components-and-orientation-of-a-point-cloud-using-point-cl
-
-	auto v1 = eigen_vectors.col(0).normalized();
-	auto v2 = eigen_vectors.col(1).normalized();
-
-	//std::cout << "EV:" << std::endl;
-	//std::cout << eigen_vectors << std::endl;
-
-	v2 = v2 - (v1 * v1.dot(v2));
-
-  	Eigen::Matrix3f rot;
-	rot.col(0) << v1;
-	rot.col(1) << v2;
-	rot.col(2) << v1.cross(v2);
-
-	auto res = Eigen::Affine3d(Eigen::Translation3d(centroid.cast<double>().topRows(3))) * Eigen::Affine3d(rot.cast<double>());
-
-	return res;
-}
 
 void lmu::transform(PointCloud &p, const Eigen::Affine3d& t)
 {
@@ -686,25 +513,6 @@ void lmu::transform(PointCloud &p, const Eigen::Affine3d& t)
 
 		p.row(i) << point.transpose(), normal.transpose();
 	}
-}
-
-Eigen::Vector3d lmu::computeOBBDims(const PointCloud & p)
-{
-	auto trans = getOrientation(p);
-	auto pTransformed = p;
-
-	//std::cout << "Computed Orientation: " << std::endl << trans.matrix()<< std::endl;
-
-	Eigen::Matrix4d inv;
-	bool invertible;
-	trans.matrix().computeInverseWithCheck(inv, invertible);	
-	//std::cout << "Invertible: " << invertible << std::endl;
-
-	transform(pTransformed, trans.inverse());
-
-	//std::cout << "Transformed" << std::endl;
-
-	return computeAABBDims(pTransformed);
 }
 
 /*
@@ -794,3 +602,44 @@ Eigen::Vector3d lmu::computeOBBDims(const PointCloud & p)
 
 	return resultMat;
 }*/
+
+lmu::NearestNeighborSearch::NearestNeighborSearch(const lmu::PointCloud& pc) :
+		tree(create_point_tree(pc))
+{		
+}
+
+Eigen::Vector3d lmu::NearestNeighborSearch::get_nn(const Eigen::Vector3d& p) const
+{	
+	Neighbor_search search(*tree, Kernel::Point_3(p.x(), p.y(), p.z()));
+
+	for (auto it = search.begin(); it != search.end(); ++it)
+	{
+		auto found_p = it->first;
+		return Eigen::Vector3d(found_p.x(), found_p.y(), found_p.z());
+	}
+	return Eigen::Vector3d(0, 0, 0);
+}
+
+double lmu::NearestNeighborSearch::get_nn_distance(const Eigen::Vector3d& p) const
+{
+	Neighbor_search search(*tree, Kernel::Point_3(p.x(), p.y(), p.z()));
+
+	for (auto it = search.begin(); it != search.end(); ++it)
+	{
+		return it->second;
+	}
+	return std::numeric_limits<double>::max();
+}
+
+std::shared_ptr<lmu::PointTree> lmu::NearestNeighborSearch::create_point_tree(const lmu::PointCloud& pc) const
+{
+	std::vector<Kernel::Point_3> points;
+	points.reserve(pc.rows());
+
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		points.push_back(Kernel::Point_3(pc.coeff(i, 0), pc.coeff(i, 1), pc.coeff(i, 2)));
+	}
+
+	return std::make_shared<PointTree>(points.begin(), points.end());
+}

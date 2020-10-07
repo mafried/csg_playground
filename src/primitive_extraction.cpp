@@ -1533,7 +1533,9 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 
 lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const
 {
-	Eigen::Vector3i p_int = ((p - origin) / voxel_size).array().round().cast<int>();
+	// Eigen::Vector3i p_int = ((p - origin) / voxel_size).array().round().cast<int>();
+	Eigen::Vector3i p_int = ((p - origin) / voxel_size).cast<int>();
+
 	int idx = p_int.x() + grid_size.x() * p_int.y() + grid_size.x() * grid_size.y() * p_int.z();
 
 	return 

@@ -6,6 +6,11 @@
 
 #include <unordered_map>
 
+#include <CGAL/Orthogonal_k_neighbor_search.h>
+#include <CGAL/Search_traits_3.h>
+#include <CGAL/Simple_cartesian.h>
+
+
 namespace lmu
 {
   struct Mesh;
@@ -42,26 +47,29 @@ namespace lmu
 
   PointCloud farthestPointSampling(const PointCloud& p, int k);
 
-  std::vector<std::tuple<Eigen::Vector3d, lmu::PointCloud>> kMeansClustering(const PointCloud& p, int k);
-  Eigen::Affine3d getOrientation(const PointCloud& p);
-
   void transform(PointCloud &p, const Eigen::Affine3d& t);
-  
-  Eigen::Vector3d computeOBBDims(const PointCloud &p);
-
-  struct PointCloudCharacteristics
-  {
-	  double meanDistance;
-	  double maxDistance; 
-	  double minDistance;
-	  double medianDistance;
-  };
-
-  PointCloudCharacteristics getPointCloudCharacteristics(const PointCloud& pc, int k, double octreeResolution);
 
   void projectPointCloudOnPlane(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& n);
   void projectPointCloudOnSphere(PointCloud& pc, const Eigen::Vector3d& p, double r);
   void projectPointCloudOnCylinder(PointCloud& pc, const Eigen::Vector3d& p, const Eigen::Vector3d& dir, double r);
+
+
+  typedef CGAL::Simple_cartesian<double> Kernel;
+  typedef CGAL::Search_traits_3<Kernel> TreeTraits;
+  typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
+  typedef Neighbor_search::Tree PointTree;
+
+  struct NearestNeighborSearch
+  {
+	  NearestNeighborSearch(const PointCloud& pc);
+
+	  Eigen::Vector3d get_nn(const Eigen::Vector3d& p) const;
+	  double get_nn_distance(const Eigen::Vector3d& p) const;
+
+  private:
+	  std::shared_ptr<PointTree> create_point_tree(const lmu::PointCloud & pc) const;
+	  std::shared_ptr<PointTree> tree;
+  };
 
 }
 

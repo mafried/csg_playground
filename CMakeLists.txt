@@ -49,10 +49,10 @@ include_directories(${PROJECT_SOURCE_DIR}/third_party/inih)
 include_directories(${PROJECT_SOURCE_DIR}/third_party/concaveman/src/main/cpp) 
 
 #PCL
-find_package(PCL 1.8 COMPONENTS common io features search kdtree keypoints surface ml)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+#find_package(PCL 1.8 COMPONENTS common io features search kdtree keypoints surface ml)
+#include_directories(${PCL_INCLUDE_DIRS})
+#link_directories(${PCL_LIBRARY_DIRS})
+#add_definitions(${PCL_DEFINITIONS})
 
 #OpenMP
 find_package(OpenMP)

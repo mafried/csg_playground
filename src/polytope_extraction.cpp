@@ -95,10 +95,61 @@ Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) co
 			num_points += 1.0;
 		}
 	}
+	
+	if (num_points == 0.0)
+	{
+		std::cout << "Could not compute cluster center. No points left after outlier detection. Try again without outlier detection." <<std::endl;
+		for (int i = 0; i < pc.rows(); ++i)
+		{
+			Eigen::Vector3d p(pc.row(i).x(), pc.row(i).y(), pc.row(i).z());
+
+			center += p;
+			num_points += 1.0;			
+		}
+	}
+
 	center /= num_points;
+
 
 	return center;
 }
+
+std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const std::string& cluster_file, bool remove_outliers)
+{
+	std::ifstream s(cluster_file);
+
+	// Skip over header. 
+	std::string header_line;
+	while (s >> header_line && header_line != "end_header");
+	
+	// Read in cluster points. 
+	std::unordered_map<unsigned long, std::vector<Eigen::Matrix<double, 1, 6>>> per_cluster_points;
+	while (!s.eof())
+	{		
+		double x, y, z, nx, ny, nz; 
+		int r, g, b, a;
+		s >> x >> y >> z >> nx >> ny >> nz >> r >> g >> b >> a;
+
+		unsigned long cluster_id = ((r & 0xff) << 24) + ((g & 0xff) << 16) + ((b & 0xff) << 8) + (a & 0xff);
+
+		Eigen::Matrix<double, 1, 6> point;
+		point.row(0) << x, y, z, nx, ny, nz;
+		per_cluster_points[cluster_id].push_back(point);
+	}
+
+	std::vector<lmu::ConvexCluster> convex_clusters; 
+	for (const auto& cp : per_cluster_points)
+	{
+		IntermediateConvexCluster icc; 
+		icc.points = cp.second;
+
+		lmu::ConvexCluster cc(icc, remove_outliers);
+		convex_clusters.push_back(cc);
+	}
+
+	return convex_clusters;
+}
+
 
 std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, const std::string& python_script, double am_clustering_param)
 {
@@ -111,8 +162,8 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 
 	writePointCloud(pcaf_path, pc);
 
-	//auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
-	auto aff_mat = lmu::get_affinity_matrix_with_rays_2(pg.planes(), true);
+	auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
+	//auto aff_mat = lmu::get_affinity_matrix_with_rays_2(pg.planes(), true);
 
 	auto n = std::to_string(aff_mat.rows());
 	std::cout << n << " " << afm_path << std::endl;
@@ -245,7 +296,7 @@ lmu::Primitive polytope_from_planes(const lmu::ManifoldSet& planes, const Eigen:
 
 }
 
-lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster, const lmu::PlaneGraph& plane_graph,
+lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_cluster, const lmu::PlaneGraph& plane_graph,
 	const lmu::PrimitiveGaParams& params, std::ofstream& s, const std::shared_ptr<lmu::PrimitiveSetRanker>& ranker, 
 	const Eigen::Vector3d& polytope_center)
 {
@@ -259,6 +310,7 @@ lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster
 	lmu::PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, params.maxPrimitiveSetSize, angle_t, 0.001,
 		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes, polytope_center, convex_cluster.planes);
 
+	std::cout << "Geo Weight: " << params.geo_weight << " Per Prim Weight: " << params.per_prim_geo_weight << " Size weight: " << params.size_weight << std::endl;
 	lmu::PrimitiveSetPopMan popMan(*ranker, params.maxPrimitiveSetSize, params.geo_weight, params.per_prim_geo_weight, params.size_weight,
 		params.num_elite_injections);
 	
@@ -282,6 +334,7 @@ lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster
 	polytopes = sf.filter(polytopes, *ranker);
 
 	// Get best polytope
+	/*
 	auto geo_scores = ranker->rank(polytopes).per_primitive_geo_scores;	
 	int max_score_idx = 0;
 	double max_score = -std::numeric_limits<double>::max();
@@ -299,18 +352,20 @@ lmu::Primitive generate_polytope_with_ga(const lmu::ConvexCluster convex_cluster
 	{
 		std::cout << "RANK: " << res.population[0].rank.per_primitive_geo_scores[0] << std::endl;
 	}
-
+	
 	return polytope;
+	*/
+
+	return polytopes;
 }
 
 #include <igl/writeOBJ.h>
 
-lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const lmu::PlaneGraph& plane_graph, 
+lmu::PrimitiveSet generate_cluster_polytopes(const lmu::ConvexCluster convex_cluster, int cluster_idx, const lmu::PlaneGraph& plane_graph, 
 	const lmu::PrimitiveGaParams& params, std::ofstream& s)
 {
-	static int i = 0;
-
 	std::cout << "----------------------------" << std::endl;
+	std::cout << "Cluster: " << cluster_idx << std::endl;
 	std::cout << "Points: " << convex_cluster.pc.rows() << std::endl;
 	std::cout << "Planes: " << convex_cluster.planes.size() << std::endl;
 	
@@ -322,11 +377,11 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 	}
 	catch (const std::runtime_error& ex)
 	{
-		std::cout << "Could not generate polytope. Reason: " << std::string(ex.what()) << std::endl;
-		return lmu::Primitive::None();
+		std::cout << "Could not generate polytopes. Reason: " << std::string(ex.what()) << std::endl;
+		return lmu::PrimitiveSet();
 	}
 
-	//igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
+	//igl::writeOBJ("p_mesh_" + std::to_string(cluster_idx) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 	// Compute polytope center.
 	Eigen::Vector3d center = convex_cluster.compute_center(*model_sdf);
@@ -341,12 +396,14 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 
 	// Try to create a polytope with all planes in the convex cluster.
 	// If not possible, use ga. 
+	/*
 	auto polytope = polytope_from_planes(convex_cluster.planes, center);
 	lmu::PrimitiveSet ps; ps.push_back(polytope);
 	double polytope_score = ranker->rank(ps).per_primitive_geo_scores[0];
 
 	if (!polytope.isNone() && polytope_score >= params.ga_threshold)
-	{		
+	{	
+		std::cout << "Could create polytope without GA. Score: " << polytope_score << std::endl;
 		return polytope;
 	}
 	else
@@ -355,6 +412,8 @@ lmu::Primitive generate_polytope(const lmu::ConvexCluster convex_cluster, const 
 
 		return generate_polytope_with_ga(convex_cluster, plane_graph, params, s, ranker, center);
 	}
+	*/
+	return generate_polytopes_with_ga(convex_cluster, plane_graph, params, s, ranker, center);
 }
 
 lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& convex_clusters, const PlaneGraph& plane_graph,
@@ -365,17 +424,21 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 	// Initialize polytope creator.
 	initializePolytopeCreator();
 
+	int cluster_idx = 0;
 	for (const auto& cc : convex_clusters)
-	{
+	{		
 		if (cc.planes.size() < 4 || cc.pc.rows() == 0)
 		{
 			std::cout << "cluster skipped. Planes: " << cc.planes.size() << " Points: " << cc.pc.rows() << std::endl;
+			cluster_idx++;
 			continue;
 		}
 
-		auto polytope = generate_polytope(cc, plane_graph, params, s);
-		if (!polytope.isNone())
-			ps.push_back(polytope);
+		auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
+		if (!polytopes.empty())
+			ps.insert(ps.end(), polytopes.begin(), polytopes.end());
+
+		cluster_idx++;
 	}
 
 	std::cout << "Created polytopes: " << ps.size() << std::endl;

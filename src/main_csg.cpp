@@ -26,8 +26,10 @@
 
 
 lmu::ManifoldSet g_manifoldSet;
+int g_clusterIdx = 0;
 int g_manifoldIdx = 0;
 lmu::PointCloud g_res_pc;
+lmu::PointCloud g_res_pc_2;
 lmu::PointCloud g_sdf_model_pc;
 bool g_show_res = false;
 lmu::PrimitiveSet g_primitiveSet;
@@ -202,6 +204,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
 	std::cout << "Primitive Idx: " << g_prim_idx << std::endl;
+	std::cout << "Cluster Idx: " << g_cluster_idx << std::endl;
 
 	/*
 	lmu::PrimitiveSet ps;
@@ -233,10 +236,22 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	viewer.data().show_lines = true;
 	viewer.data().add_edges(lmu::g_p1, lmu::g_p2, lmu::g_c);
-
-
+	
 	if (g_show_sdf)
+	{
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
+		viewer.data().add_points(g_res_pc_2.leftCols(3), g_res_pc_2.rightCols(3));
+	}
+
+	if (!g_manifoldSet.empty())
+	{
+		viewer.data().add_points(g_manifoldSet[g_manifoldIdx]->pc.leftCols(3), Eigen::Vector3d(1.0,0.0,0.0));
+	}
+
+	if (!g_convex_clusters.empty())
+	{
+		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+	}
 
 	return true;
 
@@ -483,6 +498,8 @@ int main(int argc, char *argv[])
 	std::transform(source.begin(), source.end(), source.begin(), ::tolower);
 	double sampling_rate = s.getDouble("Data", "SamplingRate", 0.05);
 	bool use_clusters = s.getBool("Data", "UseClusters", true);
+	bool convex_clusters_from_file = s.getBool("Data", "ConvexClustersFromFile", false);
+
 
 
 	lmu::PrimitiveGaParams prim_params;
@@ -535,15 +552,11 @@ int main(int argc, char *argv[])
 	prim_ga_f.open(out_path + "prim_ga.txt");
 
 	try
-	{							
-		// read complete point cloud
+	{
+		// ===================================================
+		// Load cluster point clouds for primitive estimation.
+		// ===================================================
 
-		//viewer.data().set_points(pc.leftCols(3), pc.rightCols(3));
-
-		//goto _LAUNCH;
-
-
-		// Primitive estimation based on clusters.
 		std::vector<lmu::Cluster> clusters;
 		if (use_clusters)
 		{
@@ -558,8 +571,6 @@ int main(int argc, char *argv[])
 		else
 		{
 			lmu::PointCloud pc;
-
-			std::cout << "Source: " << source << std::endl;
 
 			if (source == "mesh")
 			{
@@ -579,18 +590,14 @@ int main(int argc, char *argv[])
 		// Scale cluster point clouds to canonical frame defined by complete point cloud.
 		std::vector<lmu::PointCloud> cluster_pcs;
 		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs),[](const auto& c) { return c.pc; });
-		
-		
+				
 		auto merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
 			
 		Eigen::Vector3d mc_min = merged_cluster_pc.leftCols(3).colwise().minCoeff();
 		Eigen::Vector3d mc_max = merged_cluster_pc.leftCols(3).colwise().maxCoeff();
 
 		merged_cluster_pc = lmu::to_canonical_frame(merged_cluster_pc);
-
-
-		std::cout << "Complete point cloud dims: " << lmu::computeAABBDims(merged_cluster_pc).transpose() << std::endl;
-
+				
 		for (auto& c : clusters)
 		{
 			c.pc = lmu::to_canonical_frame(c.pc, mc_min, mc_max);
@@ -600,41 +607,139 @@ int main(int argc, char *argv[])
 		cluster_pcs.clear();
 		std::transform(clusters.begin(), clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
 		merged_cluster_pc = lmu::mergePointClouds(cluster_pcs);
-		
+
 		lmu::TimeTicker t;
 
-		// RANSAC 
+		// ==================================
+		// Primitive fitting based on RANSAC.
+		// ==================================
+
 		auto ransacRes = lmu::extractManifoldsWithOrigRansac(clusters, params, true, ransac_iterations, ransac_params);
 
 		g_manifoldSet = ransacRes.manifolds;
-					
+		
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
 		
+		//goto _LAUNCH;
 		
-		std::vector<lmu::PointCloud> pointclouds;
-		for (const auto& m : g_manifoldSet)
-		{
-			pointclouds.push_back(m->pc);
-		}
-		lmu::writePointCloud("plane_pc.txt", lmu::mergePointClouds(pointclouds));
-	
+		// =============================
+		// Get (weakly) convex clusters.
+		// =============================
 
-		// Create plane graph.
-		auto plane_graph = lmu::create_plane_graph(ransacRes.manifolds, g_res_pc, g_res_pc);
+		lmu::PlaneGraph plane_graph;
+		std::vector<lmu::ConvexCluster> convex_clusters;
+		lmu::ManifoldSet manifolds;
+
+		if (convex_clusters_from_file)
+		{
+			// Load convex clusters. 
+			convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", false);
+
+			std::vector<lmu::PointCloud> convex_cluster_pcs;
+			std::transform(convex_clusters.begin(), convex_clusters.end(), std::back_inserter(convex_cluster_pcs), [](const auto& c) { return c.pc; });
+			auto merged_convex_cluster_pcs = lmu::mergePointClouds(convex_cluster_pcs);
+
+			Eigen::Vector3d cc_min = merged_convex_cluster_pcs.leftCols(3).colwise().minCoeff();
+			Eigen::Vector3d cc_max = merged_convex_cluster_pcs.leftCols(3).colwise().maxCoeff();
+			
+			for (auto& c : convex_clusters)
+			{
+				c.pc = lmu::to_canonical_frame(c.pc, cc_min, cc_max);
+			}	
+
+			g_manifoldSet = ransacRes.manifolds;
+			
+			//std::vector<lmu::PointCloud> cluster_pcs;
+			//std::transform(convex_clusters.begin(), convex_clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
+			//g_res_pc = lmu::mergePointClouds(cluster_pcs);
+
+			g_convex_clusters = convex_clusters;
+						
+			//std::vector<lmu::PointCloud> m_pcs;
+			//std::transform(ransacRes.manifolds.begin(), ransacRes.manifolds.end(), std::back_inserter(m_pcs), [](const auto& c) { return c->pc; });
+			//g_res_pc_2 = lmu::mergePointClouds(m_pcs);
+			
+
+			//std::vector<lmu::PointCloud> cluster_pcs;
+			//std::transform(convex_clusters.begin(), convex_clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
+			//g_res_pc_2 = lmu::mergePointClouds(cluster_pcs);
+
+			//std::cout << "Manifold PC: " << g_res_pc.rows() << " Cluster PC: " << g_res_pc_2.rows() << std::endl;
+			
+			
+			// Redistribute cluster points among fitted planes and assign planes to clusters.
+
+			std::unordered_map<int, std::vector<Eigen::Matrix<double, 1, 6>>> per_manifold_points;
+			
+			std::vector<lmu::NearestNeighborSearch> per_manifold_search;
+			std::transform(ransacRes.manifolds.begin(), ransacRes.manifolds.end(), 
+				std::back_inserter(per_manifold_search), [](const auto& m) {return lmu::NearestNeighborSearch(m->pc); });
+
+			for (auto& cc : convex_clusters)
+			{			
+				std:unordered_set<lmu::ManifoldPtr> per_cluster_manifolds; 
+				for (int i = 0; i < cc.pc.rows(); ++i)
+				{
+					double closest_manifold_d = std::numeric_limits<double>::max(); 
+					int closest_manifold_idx = -1;
+					Eigen::Vector3d p(cc.pc.row(i).x(), cc.pc.row(i).y(), cc.pc.row(i).z());
+
+					for (int j = 0; j < ransacRes.manifolds.size(); ++j)
+					{
+						auto m = ransacRes.manifolds[j];												
+						double d = per_manifold_search[j].get_nn_distance(p);
+						if (d < closest_manifold_d)
+						{
+							closest_manifold_d = d;
+							closest_manifold_idx = j;
+						}						
+					}
+
+					if (closest_manifold_idx != -1)
+					{
+						per_cluster_manifolds.insert(ransacRes.manifolds[closest_manifold_idx]);
+						per_manifold_points[closest_manifold_idx].push_back(cc.pc.row(i));
+					}					
+				}
+				cc.planes = std::vector<lmu::ManifoldPtr>(per_cluster_manifolds.begin(), per_cluster_manifolds.end());
+			}
+			
+			for (auto& mp : per_manifold_points)
+			{
+				auto m = ransacRes.manifolds[mp.first];
+				m->pc = lmu::pointCloudFromVector(mp.second);
+				manifolds.push_back(m);
+			}
+
+			/*
+			std::vector<lmu::PointCloud> m_pcs;
+			std::transform(manifolds.begin(), manifolds.end(), std::back_inserter(m_pcs), [](const auto& c) { return c->pc; });
+			g_res_pc = lmu::mergePointClouds(m_pcs);
+			*/
+
+			g_manifoldSet = manifolds;
+
+			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
+		}
+		else
+		{
+			manifolds = ransacRes.manifolds;
+
+			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
+
+			convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
+		}
+
 		plane_graph.to_file("plane_graph.gv");
 
-		//goto _LAUNCH;
-
-		//auto mesh_prox = lmu::createFromPointCloud(g_res_pc);
-		//igl::writeOBJ("res_mesh_prox_00.obj", mesh_prox.vertices, mesh_prox.indices);
-
-		lmu::resample_proportionally(plane_graph.planes(), 3000);
-						
-		auto convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
-
 		g_convex_clusters = convex_clusters;
+
+		std::cout << "Convex Clusters: " << convex_clusters.size() << std::endl;
 			
+		// ================================================
+		// Generate Polytopes for (weakly) convex clusters.
+		// ================================================
 		
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
 
@@ -685,8 +790,6 @@ int main(int argc, char *argv[])
 		primitives = sf.filter(primitives, *res.ranker);
 		res_f << "Similarity Filter=" << t.tick() << std::endl;
 				
-		lmu::ManifoldSet manifolds = ransacRes.manifolds;
-
 		for (const auto& p : primitives)
 			std::cout << "Primitive: " << p << std::endl;
 		

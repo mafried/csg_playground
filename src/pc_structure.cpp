@@ -15,10 +15,10 @@
 
 
 // Type declarations
-typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
-typedef Kernel::Point_3                                      Point;
+typedef CGAL::Exact_predicates_inexact_constructions_kernel  K;
+typedef K::Point_3                                      Point;
 
-typedef std::tuple<Kernel::Point_3, Kernel::Vector_3, int> Point_with_normal_and_plane_idx;
+typedef std::tuple<K::Point_3, K::Vector_3, int> Point_with_normal_and_plane_idx;
 
 
 typedef std::vector<Point_with_normal_and_plane_idx>         Pwn_vector;
@@ -26,7 +26,7 @@ typedef CGAL::Nth_of_tuple_property_map<0, Point_with_normal_and_plane_idx>  Poi
 typedef CGAL::Nth_of_tuple_property_map<1, Point_with_normal_and_plane_idx> Normal_map;
 // Efficient RANSAC types
 typedef CGAL::Shape_detection_3::Shape_detection_traits
-<Kernel, Pwn_vector, Point_map, Normal_map>					 Traits;
+<K, Pwn_vector, Point_map, Normal_map>					 Traits;
 typedef CGAL::Shape_detection_3::Efficient_RANSAC<Traits>    Efficient_ransac;
 typedef CGAL::Shape_detection_3::Plane<Traits>				 Plane;
 
@@ -51,8 +51,8 @@ Pwn_vector to_cgal_points(const lmu::ManifoldSet& ms)
 		for (int i = 0; i < m->pc.rows(); ++i)
 		{
 			v.push_back(Point_with_normal_and_plane_idx(
-				Kernel::Point_3(m->pc.coeff(i, 0), m->pc.coeff(i, 1), m->pc.coeff(i, 2)),
-				Kernel::Vector_3(m->pc.coeff(i, 3), m->pc.coeff(i, 4), m->pc.coeff(i, 5)),
+				K::Point_3(m->pc.coeff(i, 0), m->pc.coeff(i, 1), m->pc.coeff(i, 2)),
+				K::Vector_3(m->pc.coeff(i, 3), m->pc.coeff(i, 4), m->pc.coeff(i, 5)),
 				plane_idx)
 			);
 		}
@@ -80,14 +80,14 @@ lmu::PointCloud from_cgal_points(const Pwn_vector& points)
 }
 
 
-Kernel::Vector_3 findNormalOrientation(const Pwn_vector& points, const std::vector<std::size_t>& indices,
-	const Kernel::Vector_3& normal)
+K::Vector_3 findNormalOrientation(const Pwn_vector& points, const std::vector<std::size_t>& indices,
+	const K::Vector_3& normal)
 {
 	int same_orientation = 0;
 	int opposite_orientation = 0;
 
 	for (std::size_t i = 0; i < indices.size(); ++i) {
-		Kernel::Vector_3 curr_normal = std::get<1>(points[indices[i]]);
+		K::Vector_3 curr_normal = std::get<1>(points[indices[i]]);
 		if (curr_normal*normal > 0) {
 			same_orientation++;
 		}
@@ -99,7 +99,7 @@ Kernel::Vector_3 findNormalOrientation(const Pwn_vector& points, const std::vect
 	if (same_orientation > opposite_orientation)
 		return normal;
 
-	Kernel::Vector_3 opposite_normal = Kernel::Vector_3(-normal.x(), -normal.y(), -normal.z());
+	K::Vector_3 opposite_normal = K::Vector_3(-normal.x(), -normal.y(), -normal.z());
 	return opposite_normal;
 }
 
@@ -140,11 +140,11 @@ Efficient_ransac::Plane_range to_cgal_planes(const lmu::ManifoldSet& ms, const P
 		Kernel::Vector_3(normal.x(), normal.y(), normal.z())));
 		*/
 
-		Kernel::Vector_3 normal = Kernel::Vector_3(ms[i]->n.x(), ms[i]->n.y(), ms[i]->n.z());
-		Kernel::Vector_3 out_normal = findNormalOrientation(points, indices, normal);
+		K::Vector_3 normal = K::Vector_3(ms[i]->n.x(), ms[i]->n.y(), ms[i]->n.z());
+		K::Vector_3 out_normal = findNormalOrientation(points, indices, normal);
 
 		plane->update(Traits::Plane_3(
-			Kernel::Point_3(ms[i]->p.x(), ms[i]->p.y(), ms[i]->p.z()),
+			K::Point_3(ms[i]->p.x(), ms[i]->p.y(), ms[i]->p.z()),
 			out_normal));
 
 		planes->push_back(plane);
@@ -153,7 +153,7 @@ Efficient_ransac::Plane_range to_cgal_planes(const lmu::ManifoldSet& ms, const P
 	return Efficient_ransac::Plane_range(planes);
 }
 
-lmu::ManifoldSet get_plane_manifolds(const std::vector<Kernel::Plane_3>& planes, std::vector<std::pair<Kernel::Plane_3, lmu::ManifoldPtr>>& planes_to_manifolds)
+lmu::ManifoldSet get_plane_manifolds(const std::vector<K::Plane_3>& planes, std::vector<std::pair<K::Plane_3, lmu::ManifoldPtr>>& planes_to_manifolds)
 {
 	lmu::ManifoldSet ms;
 
@@ -215,8 +215,8 @@ std::pair<lmu::PointCloud, std::vector<int>> lmu::resample_pointcloud(const lmu:
 		for (int i = 0; i < plane->pc.rows(); ++i)
 		{
 			points.push_back(Point_with_normal_and_plane_idx(
-				Kernel::Point_3(plane->pc.coeff(i, 0), plane->pc.coeff(i, 1), plane->pc.coeff(i, 2)),
-				Kernel::Vector_3(plane->pc.coeff(i, 3), plane->pc.coeff(i, 4), plane->pc.coeff(i, 5)),
+				K::Point_3(plane->pc.coeff(i, 0), plane->pc.coeff(i, 1), plane->pc.coeff(i, 2)),
+				K::Vector_3(plane->pc.coeff(i, 3), plane->pc.coeff(i, 4), plane->pc.coeff(i, 5)),
 				plane_idx
 			));
 		}
@@ -226,10 +226,10 @@ std::pair<lmu::PointCloud, std::vector<int>> lmu::resample_pointcloud(const lmu:
 	if (points.size() > max_points)
 	{
 		// Re-sample point cloud.
-		std::vector<Kernel::Point_3> pts;
+		std::vector<K::Point_3> pts;
 		pts.reserve(points.size());
 		std::transform(points.begin(), points.end(), std::back_inserter(pts), [](const auto& pn) {return std::get<0>(pn); });
-		Kernel::FT range_scale = CGAL::estimate_global_range_scale(pts);
+		K::FT range_scale = CGAL::estimate_global_range_scale(pts);
 
 		double removed_percentage = (double)(points.size() - max_points) / (double)points.size() * 100.0;
 
@@ -271,7 +271,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 
 	Efficient_ransac::Plane_range planes = to_cgal_planes(ms, points);
 
-	CGAL::Point_set_with_structure<Kernel> psws(points,
+	CGAL::Point_set_with_structure<K> psws(points,
 		planes,
 		epsilon,
 		CGAL::parameters::point_map(Point_map()).
@@ -281,7 +281,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 
 
 	lmu::PlaneGraph graph;
-	std::vector<std::pair<Kernel::Plane_3, lmu::ManifoldPtr>> planes_to_manifolds;
+	std::vector<std::pair<K::Plane_3, lmu::ManifoldPtr>> planes_to_manifolds;
 	std::unordered_map<lmu::ManifoldPtr, std::vector<Eigen::Matrix<double, 1, 6>>> manifolds_to_points;
 
 	std::vector<Eigen::Matrix<double, 1, 6>> struct_points;
@@ -289,7 +289,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 
 	for (int i = 0; i < psws.size(); ++i)
 	{
-		std::vector<Kernel::Plane_3> adjacent_planes;
+		std::vector<K::Plane_3> adjacent_planes;
 
 		psws.adjacency(i, std::back_inserter(adjacent_planes));
 
@@ -300,7 +300,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 			for (const auto& plane : planes)
 			{
 				Eigen::Matrix<double, 1, 6> pn;
-				Kernel::FT m = psws.normal(i).squared_length();
+				K::FT m = psws.normal(i).squared_length();
 				m = sqrt(m);
 				pn << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(), psws.normal(i).x() / m, psws.normal(i).y() / m, psws.normal(i).z() / m;
 
@@ -347,7 +347,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 					<< adjacent_planes.size() << ")." << std::endl;
 			}
 
-			Kernel::FT m = psws.normal(i).squared_length();
+			K::FT m = psws.normal(i).squared_length();
 			m = sqrt(m);
 			struct_pt_wn << psws.point(i).x(), psws.point(i).y(), psws.point(i).z(),
 				psws.normal(i).x() / m, psws.normal(i).y() / m, psws.normal(i).z() / m;
@@ -358,7 +358,7 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 
 
 	debug_pc = lmu::pointCloudFromVector(struct_points);
-	pcwn = lmu::pointCloudFromVector(struct_points_wn);
+	//pcwn = lmu::pointCloudFromVector(struct_points_wn);
 
 
 	// fill plane point clouds.

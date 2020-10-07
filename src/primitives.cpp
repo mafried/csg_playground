@@ -8,16 +8,16 @@
 #include <CGAL/property_map.h>
 #include <CGAL/Shape_detection_3.h>
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
-typedef Kernel::FT                                           FT;
-typedef std::pair<Kernel::Point_3, Kernel::Vector_3>         Point_with_normal;
+typedef CGAL::Exact_predicates_inexact_constructions_kernel  K;
+typedef K::FT                                           FT;
+typedef std::pair<K::Point_3, K::Vector_3>         Point_with_normal;
 typedef std::vector<Point_with_normal>                       Pwn_vector;
 typedef CGAL::First_of_pair_property_map<Point_with_normal>  Point_map;
 typedef CGAL::Second_of_pair_property_map<Point_with_normal> Normal_map;
 
 // In Efficient_RANSAC_traits the basic types, i.e., Point and Vector types
 // as well as iterator type and property maps, are defined.
-typedef CGAL::Shape_detection_3::Shape_detection_traits<Kernel,
+typedef CGAL::Shape_detection_3::Shape_detection_traits<K,
 	Pwn_vector, Point_map, Normal_map>            Traits;
 typedef CGAL::Shape_detection_3::Efficient_RANSAC<Traits> Efficient_ransac;
 typedef CGAL::Shape_detection_3::Cone<Traits>             CGALCone;
@@ -155,8 +155,8 @@ lmu::RansacResult lmu::extractManifoldsWithCGALRansac(const lmu::PointCloud& pc,
 		//std::cout << pc.row(i) << std::endl;
 
 		Point_with_normal pn;
-		pn.first = Kernel::Point_3(p.x(), p.y(), p.z());
-		pn.second = Kernel::Vector_3(n.x(), n.y(), n.z());
+		pn.first = K::Point_3(p.x(), p.y(), p.z());
+		pn.second = K::Vector_3(n.x(), n.y(), n.z());
 		pointsWithNormals.push_back(pn);
 	}
 
@@ -423,8 +423,12 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>
 	std::cout << "RANSAC: " << t.current << "ms" << std::endl;
 
 	// std::cout << "Merge" << std::endl;
+	
 	MergeSimilarPrimitives(primitives, pointClouds, 
 		rmParams.dist_threshold, rmParams.dot_threshold, rmParams.angle_threshold, mergedShapes, mergedPointclouds);
+
+	//mergedShapes = primitives;
+	//mergedPointclouds = pointClouds;
 
 	t.tick();
 	std::cout << "MERGE: " << t.current << "ms" << std::endl;
