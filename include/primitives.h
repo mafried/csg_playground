@@ -64,7 +64,8 @@ namespace lmu
 			n(m.n),
 			r(m.r),
 			type(m.type),
-			pc(m.pc)
+			pc(m.pc),
+			name(m.name)
 		{
 			//std::cout << "copy" << std::endl;
 		}
@@ -105,6 +106,7 @@ namespace lmu
 		Eigen::Vector3d r; 
 		ManifoldType type; 
 		PointCloud pc;
+		std::string name;
 
 		friend std::ostream& operator<<(std::ostream& os, const Manifold& m);
 	};

@@ -528,6 +528,10 @@ lmu::RansacResult lmu::extractManifoldsWithOrigRansac(const std::vector<Cluster>
 	std::transform(manifolds.begin(), manifolds.end(), std::back_inserter(pcs), [](const ManifoldPtr& mp) { return mp->pc; });
 	res.pc = lmu::mergePointClouds(pcs);
 
+	int i = 0;
+	for (auto& m : manifolds)
+		m->name = std::to_string(i++);
+
 	std::cout << "number of manifolds: " << manifolds.size() << std::endl;
 	
 	return res;
@@ -662,7 +666,7 @@ lmu::ManifoldType lmu::manifoldTypeFromString(std::string type)
 
 std::ostream& lmu::operator <<(std::ostream& os, const Manifold& m)
 {
-	os << manifoldTypeToString(m.type) << " n: " << m.n.x() << " " << m.n.y() << " " << m.n.z() << " p: " << m.p.x() << " " << m.p.y() << " " << m.p.z();
+	os << m.name << " " << manifoldTypeToString(m.type) << " n: " << m.n.x() << " " << m.n.y() << " " << m.n.z() << " p: " << m.p.x() << " " << m.p.y() << " " << m.p.z();
 
 	return os;
 }

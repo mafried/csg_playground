@@ -296,13 +296,15 @@ lmu::Primitive polytope_from_planes(const lmu::ManifoldSet& planes, const Eigen:
 
 }
 
+#include <igl/writeOBJ.h>
+
+
 lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_cluster, const lmu::PlaneGraph& plane_graph,
 	const lmu::PrimitiveGaParams& params, std::ofstream& s, const std::shared_ptr<lmu::PrimitiveSetRanker>& ranker, 
 	const Eigen::Vector3d& polytope_center)
 {
 	double angle_t = M_PI / 9.0;
 	
-
 	lmu::PrimitiveSetGA::Parameters ga_params(50, 2, 0.4, 0.4, true, lmu::Schedule(), lmu::Schedule(), true);
 
 	lmu::PrimitiveSetTournamentSelector selector(2);
@@ -327,12 +329,28 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 
 	auto polytopes = res.population[0].creature;
 
+	/*
+	int i = 0;
+	for (const auto& p : polytopes)
+	{
+		igl::writeOBJ("p_mesh_" + std::to_string(i++) + ".obj", p.imFunc->meshCRef().vertices, p.imFunc->meshCRef().indices);
+	}
+	*/
+
+
 	polytopes = polytopes.without_duplicates();
 
 	polytopes = od.remove_outliers(polytopes, *ranker);
 
 	polytopes = sf.filter(polytopes, *ranker);
 
+	std::cout << "Number of polytopes: " << polytopes.size() << std::endl;
+	std::cout << "Distance of first polytope to center point: " << polytopes[0].imFunc->signedDistance(polytope_center) << std::endl;
+	for (const auto& p : polytopes[0].ms)
+	{
+		std::cout << p->name << " ";
+	}
+	std::cout << std::endl;
 	// Get best polytope
 	/*
 	auto geo_scores = ranker->rank(polytopes).per_primitive_geo_scores;	
@@ -359,7 +377,6 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 	return polytopes;
 }
 
-#include <igl/writeOBJ.h>
 
 lmu::PrimitiveSet generate_cluster_polytopes(const lmu::ConvexCluster convex_cluster, int cluster_idx, const lmu::PlaneGraph& plane_graph, 
 	const lmu::PrimitiveGaParams& params, std::ofstream& s)
@@ -381,7 +398,7 @@ lmu::PrimitiveSet generate_cluster_polytopes(const lmu::ConvexCluster convex_clu
 		return lmu::PrimitiveSet();
 	}
 
-	//igl::writeOBJ("p_mesh_" + std::to_string(cluster_idx) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
+	igl::writeOBJ("sdf_mesh_" + std::to_string(cluster_idx) + ".obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 	// Compute polytope center.
 	Eigen::Vector3d center = convex_cluster.compute_center(*model_sdf);
@@ -434,9 +451,12 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 			continue;
 		}
 
-		auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
-		if (!polytopes.empty())
-			ps.insert(ps.end(), polytopes.begin(), polytopes.end());
+		//if (cluster_idx == 2)
+		//{
+			auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
+			if (!polytopes.empty())
+				ps.insert(ps.end(), polytopes.begin(), polytopes.end());
+		//}
 
 		cluster_idx++;
 	}

@@ -544,24 +544,36 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 
 	case PrimitiveType::Polytope:
 	{
-		ManifoldSet planes = fixed_planes;
-		int num_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
+		ManifoldSet planes;
+		ManifoldSet usable_fixed_planes = fixed_planes;
 		
+		int max_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
+		int max_fixed_planes = du(rndEngine, parmu_t{ 0, 1}) == 1 ? du(rndEngine, parmu_t{ 0, (int)usable_fixed_planes.size() }) : (int)usable_fixed_planes.size();
+		int num_fixed_planes = 0;
 		ManifoldPtr cur_plane = getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
-		if (cur_plane)
+		for( int i = 0; i < max_planes; ++i)
 		{
-			planes.push_back(cur_plane);
-			for (int i = 1; i < num_planes; ++i)
+			if (cur_plane)
 			{
-				cur_plane = getNeighborPlane(cur_plane, planes);//getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
-				if (cur_plane)
-				{
-					planes.push_back(cur_plane);
-				}
+				planes.push_back(cur_plane);
 			}
-			
-			primitive = createPolytopePrimitive(planes, polytope_center);
+
+			if (num_fixed_planes < max_fixed_planes)
+			{
+				int idx = du(rndEngine, parmu_t{ 0, (int)usable_fixed_planes.size()-1 });
+
+				cur_plane = usable_fixed_planes[idx];
+				usable_fixed_planes.erase(usable_fixed_planes.begin() + idx);
+				num_fixed_planes++;
+			}
+			else
+			{
+				cur_plane = getNeighborPlane(cur_plane, planes);
+			}
 		}
+		//std::cout << "planes: " << planes.size() << " of " << max_planes << std::endl;
+				
+		primitive = createPolytopePrimitive(planes, polytope_center);		
 	}
 	break;
 

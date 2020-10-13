@@ -37,6 +37,7 @@ def write_cluster_labels(path, cluster_labels):
 
 def get_clusters(affinity_matrix, max_eigval):
 
+	
     topK = 1
     L = csgraph.laplacian(affinity_matrix, normed=True)
     n_components = affinity_matrix.shape[0]
@@ -61,7 +62,8 @@ def get_clusters(affinity_matrix, max_eigval):
             break
         else:
             count = count + 1
-
+	
+	
     nb_clusters = count
 
     # index_largest_gap = np.argsort(np.diff(eigval))[::-1][:topK]

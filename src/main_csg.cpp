@@ -243,14 +243,18 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		viewer.data().add_points(g_res_pc_2.leftCols(3), g_res_pc_2.rightCols(3));
 	}
 
-	if (!g_manifoldSet.empty())
-	{
-		viewer.data().add_points(g_manifoldSet[g_manifoldIdx]->pc.leftCols(3), Eigen::Vector3d(1.0,0.0,0.0));
-	}
+	//if (!g_manifoldSet.empty())
+	//{
+	//	viewer.data().add_points(g_manifoldSet[g_manifoldIdx]->pc.leftCols(3), Eigen::Vector3d(1.0,0.0,0.0));
+	//}
 
 	if (!g_convex_clusters.empty())
 	{
-		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+		for (const auto& p : g_convex_clusters[g_cluster_idx].planes)
+		{
+			//viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+			viewer.data().add_points(p->pc.leftCols(3), p->pc.rightCols(3));
+		}
 	}
 
 	return true;
