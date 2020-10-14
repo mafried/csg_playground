@@ -13,13 +13,15 @@ namespace lmu
 {
 	struct PrimitiveSetRank
 	{
-		PrimitiveSetRank(double geo, double per_prim_geo_sum, double size, double combined,
-			const std::vector<double>& per_primitive_geo_scores = std::vector<double>()) :
+		PrimitiveSetRank(double geo, double per_prim_geo_sum, double per_prim_coverage_sum, double size, double combined,
+			const std::vector<double>& per_primitive_geo_scores = std::vector<double>(), const std::vector<double>& per_primitive_coverage_scores = std::vector<double>()) :
 			geo(geo),
 			per_prim_geo_sum(per_prim_geo_sum),
+			per_prim_coverage_sum(per_prim_coverage_sum),
 			size(size),
 			combined(combined),
-			per_primitive_geo_scores(per_primitive_geo_scores)
+			per_primitive_geo_scores(per_primitive_geo_scores),
+			per_primitive_coverage_scores(per_primitive_coverage_scores)
 		{
 		}
 
@@ -29,7 +31,7 @@ namespace lmu
 		}
 
 		explicit PrimitiveSetRank(double v) :
-			PrimitiveSetRank(v, v, v, v)
+			PrimitiveSetRank(v, v, v, v, v)
 		{
 		}
 
@@ -37,9 +39,11 @@ namespace lmu
 
 		double geo;
 		double per_prim_geo_sum;
+		double per_prim_coverage_sum;
 		double size;
 		double combined;
 		std::vector<double> per_primitive_geo_scores;
+		std::vector<double> per_primitive_coverage_scores;
 
 		double per_primitive_mean_score;
 		double size_unnormalized;
@@ -60,6 +64,8 @@ namespace lmu
 		{
 			geo += rhs.geo;
 			per_prim_geo_sum += rhs.per_prim_geo_sum;
+			per_prim_coverage_sum += rhs.per_prim_coverage_sum;
+
 			size += rhs.size;
 			combined += rhs.combined;
 
@@ -70,6 +76,7 @@ namespace lmu
 		{
 			geo -= rhs.geo;
 			per_prim_geo_sum -= rhs.per_prim_geo_sum;
+			per_prim_coverage_sum -= rhs.per_prim_coverage_sum;
 			size -= rhs.size;
 			combined -= rhs.combined;
 
@@ -96,7 +103,7 @@ namespace lmu
 		PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
 			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes,
-			const Eigen::Vector3d& polytope_center, const ManifoldSet& fixed_planes);
+			const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -118,7 +125,7 @@ namespace lmu
 
 		ManifoldPtr getManifold(ManifoldType type, const Eigen::Vector3d& direction, const ManifoldSet& alreadyUsed, 
 			double angleEpsilon, bool ignoreDirection = false, 
-			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0, bool ignorePointDistance = false) const;
+			const Eigen::Vector3d& point = Eigen::Vector3d(0,0,0), double minimumPointDistance = 0.0, bool ignorePointDistance = false, bool use_cluster_planes_only = false) const;
 
 		ManifoldPtr getNeighborPlane(const ManifoldPtr& plane, const ManifoldSet& already_used) const;
 
@@ -150,7 +157,7 @@ namespace lmu
 		mutable std::random_device rndDevice;
 
 		Eigen::Vector3d polytope_center;
-		ManifoldSet fixed_planes;
+		ManifoldSet cluster_planes;
 	};
 	
 	struct PrimitiveSetRanker;
@@ -219,7 +226,7 @@ namespace lmu
 	{
 		PrimitiveSetRanker(const PointCloud& pc,
 			double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
-			double geo_weight, double per_prim_geo_weight, double size_weight);
+			double geo_weight, double per_prim_geo_weight, double per_prim_coverage_weight, double size_weight);
 
 		PrimitiveSetRank rank(const PrimitiveSet& ps) const;
 		PrimitiveSetRank rank(const PrimitiveSet& ps, std::vector<Eigen::Matrix<double, 1, 6>>& debug_points) const;
@@ -232,7 +239,7 @@ namespace lmu
 		
 	private:
 
-		double get_geo_score(const PrimitiveSet& ps) const;
+		std::tuple<double, std::vector<double>> get_geo_score(const PrimitiveSet& ps) const;
 	
 		PointCloud pc;
 		double distanceEpsilon;
@@ -241,13 +248,14 @@ namespace lmu
 		bool allow_cube_cutout;
 		double geo_weight;	
 		double per_prim_geo_weight;
+		double per_prim_coverage_weight;
 		double size_weight;
 	};
 
 	struct PrimitiveSetPopMan
 	{
 		PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, int maxPrimitiveSetSize,
-			double geoWeight, double perPrimGeoWeight, double sizeWeight,
+			double geoWeight, double perPrimGeoWeight, double perPrimCoverageWeight, double sizeWeight,
 			int num_elite_injections);
 
 		void manipulateBeforeRanking(std::vector<RankedCreature<PrimitiveSet, PrimitiveSetRank>>& population) const;
@@ -256,6 +264,7 @@ namespace lmu
 
 		double geoWeight;
 		double perPrimGeoWeight;
+		double perPrimCoverageWeight;
 		double sizeWeight;
 		int num_elite_injections;
 		int maxPrimitiveSetSize;
@@ -274,11 +283,14 @@ namespace lmu
 		double size_weight;// = 0.1;
 		double geo_weight;// = 0.0;
 		double per_prim_geo_weight;// = 1.0;//0.1;
+		double per_prim_coverage_weight;
 
 		int maxPrimitiveSetSize;// = 75;
 		double polytope_prob; // = 0.0;
 		int min_polytope_planes;
 		int max_polytope_planes;
+
+		int population_size;
 
 		double ranker_voxel_size;// = 0.05;
 		double sdf_voxel_size;

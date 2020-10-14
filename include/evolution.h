@@ -346,12 +346,12 @@ namespace lmu
 
 			void print()
 			{
-				std::cout << "--- Iteration Statistics ---" << std::endl;
-				std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
-				std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
-				std::cout << "Cache Hits: " << numCacheHits << " Tried: " << numCacheTries << " (" << (double)numCacheHits / (double)numCacheTries * 100.0 << "%)" << std::endl;
+				//std::cout << "--- Iteration Statistics ---" << std::endl;
+				//std::cout << "Mutations: " << numMutations << " Tried: " << numMutationTries << " (" << (double)numMutations / (double)numMutationTries * 100.0 << "%)" << std::endl;
+				//std::cout << "Crossovers: " << numCrossovers << " Tried: " << numCrossoverTries << " (" << (double)numCrossovers / (double)numCrossoverTries * 100.0 << "%)" << std::endl;
+				//std::cout << "Cache Hits: " << numCacheHits << " Tried: " << numCacheTries << " (" << (double)numCacheHits / (double)numCacheTries * 100.0 << "%)" << std::endl;
 
-				std::cout << "Score Best: " << bestScore << " Worst: " << worstScore << std::endl;				
+				std::cout << "Score Best: " << bestScore << std::endl;//" Worst: " << worstScore << std::endl;				
 			}
 
 			void save(std::ostream& stream, const Creature* bestCreature = nullptr)
@@ -508,7 +508,7 @@ namespace lmu
 				
 				population = newPopulation; 
 				stats.update();
-				//stats.print();
+				stats.print();
 				iterationCount++;
 
 				// Update the cross-over rate and mutation rate based on 

@@ -267,7 +267,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
 			lmu::farthestPointSampling(g_convex_clusters[g_cluster_idx].pc, g_prim_params.num_geo_score_samples),
 			g_prim_params.max_dist, 2, g_prim_params.ranker_voxel_size, g_prim_params.allow_cube_cutout, msdf,
-			g_prim_params.geo_weight, g_prim_params.per_prim_geo_weight, g_prim_params.size_weight);
+			g_prim_params.geo_weight, g_prim_params.per_prim_geo_weight, g_prim_params.per_prim_coverage_weight, g_prim_params.size_weight);
 
 		if (g_prim_idx >= 0)
 		{
@@ -513,10 +513,13 @@ int main(int argc, char *argv[])
 	prim_params.size_weight = s.getDouble("Primitives", "SizeWeight", 0.1);// = 0.1;
 	prim_params.geo_weight = s.getDouble("Primitives", "GeoWeight", 0.0);// = 0.0;
 	prim_params.per_prim_geo_weight = s.getDouble("Primitives", "PerPrimGeoWeight", 1.0);// = 1.0;//0.1;
+	prim_params.per_prim_coverage_weight = s.getDouble("Primitives", "PerPrimCoverageWeight", 0.0);// = 1.0;//0.1;
 
 	prim_params.num_geo_score_samples = s.getInt("Primitives", "NumGeoScoreSamples", 100);
 
 	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
+	prim_params.population_size = s.getInt("Primitives", "PopulationSize", 50);// = 75;
+
 	prim_params.polytope_prob = s.getDouble("Primitives", "PolytopeProbability", 0.0); // = 0.0;
 	prim_params.min_polytope_planes = s.getInt("Primitives", "MinPolytopePlanes", 4); // = 0.0;
 	prim_params.max_polytope_planes = s.getInt("Primitives", "MaxPolytopePlanes", 6); // = 0.0;

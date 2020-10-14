@@ -305,7 +305,7 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 {
 	double angle_t = M_PI / 9.0;
 	
-	lmu::PrimitiveSetGA::Parameters ga_params(50, 2, 0.4, 0.4, true, lmu::Schedule(), lmu::Schedule(), true);
+	lmu::PrimitiveSetGA::Parameters ga_params(params.population_size, 2, 0.4, 0.4, true, lmu::Schedule(), lmu::Schedule(), true);
 
 	lmu::PrimitiveSetTournamentSelector selector(2);
 	lmu::PrimitiveSetIterationStopCriterion criterion(params.max_count, lmu::PrimitiveSetRank(0.00001), params.max_iterations);
@@ -313,7 +313,7 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes, polytope_center, convex_cluster.planes);
 
 	std::cout << "Geo Weight: " << params.geo_weight << " Per Prim Weight: " << params.per_prim_geo_weight << " Size weight: " << params.size_weight << std::endl;
-	lmu::PrimitiveSetPopMan popMan(*ranker, params.maxPrimitiveSetSize, params.geo_weight, params.per_prim_geo_weight, params.size_weight,
+	lmu::PrimitiveSetPopMan popMan(*ranker, params.maxPrimitiveSetSize, params.geo_weight, params.per_prim_geo_weight, params.per_prim_coverage_weight, params.size_weight,
 		params.num_elite_injections);
 	
 	lmu::PrimitiveSetGA ga;
@@ -345,12 +345,23 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 	polytopes = sf.filter(polytopes, *ranker);
 
 	std::cout << "Number of polytopes: " << polytopes.size() << std::endl;
-	std::cout << "Distance of first polytope to center point: " << polytopes[0].imFunc->signedDistance(polytope_center) << std::endl;
-	for (const auto& p : polytopes[0].ms)
+	
+	auto geo_scores = ranker->rank(polytopes).per_primitive_geo_scores;
+
+	int i = 0;
+	for (const auto& polytope : polytopes)
 	{
-		std::cout << p->name << " ";
+		std::cout << "Distance of first polytope to center point: " << polytope.imFunc->signedDistance(polytope_center) << std::endl;
+
+		for (const auto& p : polytope.ms)
+		{
+			std::cout << p->name << " ";
+		}
+		std::cout << std::endl;
+
+		std::cout << "Score: " << geo_scores[i++] << std::endl;
 	}
-	std::cout << std::endl;
+
 	// Get best polytope
 	/*
 	auto geo_scores = ranker->rank(polytopes).per_primitive_geo_scores;	
@@ -409,7 +420,7 @@ lmu::PrimitiveSet generate_cluster_polytopes(const lmu::ConvexCluster convex_clu
 	auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
 		lmu::farthestPointSampling(convex_cluster.pc, params.num_geo_score_samples),
 		params.max_dist, params.maxPrimitiveSetSize, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf,
-		params.geo_weight, params.per_prim_geo_weight, params.size_weight);
+		params.geo_weight, params.per_prim_geo_weight, params.per_prim_coverage_weight, params.size_weight);
 
 	// Try to create a polytope with all planes in the convex cluster.
 	// If not possible, use ga. 
@@ -451,12 +462,12 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 			continue;
 		}
 
-		//if (cluster_idx == 2)
-		//{
+		if (cluster_idx == 1)
+		{
 			auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
 			if (!polytopes.empty())
 				ps.insert(ps.end(), polytopes.begin(), polytopes.end());
-		//}
+		}
 
 		cluster_idx++;
 	}

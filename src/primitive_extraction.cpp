@@ -77,7 +77,7 @@ lmu::Mesh computeMeshFromPrimitives(const lmu::PrimitiveSet& ps, int primitive_i
 std::ostream & lmu::operator<<(std::ostream & out, const PrimitiveSetRank & r)
 {
 	out << "{ \"combined\": " << r.combined << ", \"geo\": " << r.geo << ", \"size\": " << r.size << ", \"per_prim_geo_sum\": " << r.per_prim_geo_sum << 
-		", \"size_unnormalized\": " << r.size_unnormalized << ", \"geo_unnormalized\":" << r.geo_unnormalized << ", \"per_prim_mean_score\": " << r.per_primitive_mean_score << "}";
+		", \"size_unnormalized\": " << r.size_unnormalized << ", \"geo_unnormalized\":" << r.geo_unnormalized << ", \"per_prim_mean_score\": " << r.per_primitive_mean_score << ", \"per_prim_coverage_sum_score\": " << r.per_prim_coverage_sum << "}";
 	return out;
 }
 
@@ -119,7 +119,8 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 	double size_weight = params.size_weight;
 	double geo_weight = params.geo_weight;
 	double per_prim_geo_weight = params.per_prim_geo_weight;
-	
+	double per_prim_coverage_weight = params.per_prim_coverage_weight;
+
 	lmu::PrimitiveSetGA::Parameters paramsGA1(50, 2, 0.4, 0.4, true, Schedule(), Schedule(), true);
 
 	// Initialize polytope creator.
@@ -136,9 +137,9 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(farthestPointSampling(plane_pointcloud, params.num_geo_score_samples),
 		params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf, 
-		geo_weight, per_prim_geo_weight, size_weight);
+		geo_weight, per_prim_geo_weight, per_prim_coverage_weight, size_weight);
 
-	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, size_weight, params.num_elite_injections);
+	PrimitiveSetPopMan popMan(*ranker, maxPrimitiveSetSize, geo_weight, per_prim_geo_weight, per_prim_coverage_weight, size_weight, params.num_elite_injections);
 	PrimitiveSetGA ga;
 
 	std::cout << "Start GA" << std::endl;
@@ -175,7 +176,7 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
 	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, 
-	int max_polytope_planes, const Eigen::Vector3d& polytope_center, const ManifoldSet& fixed_planes) :
+	int max_polytope_planes, const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes) :
 	plane_graph(plane_graph),
 	intraCrossProb(intraCrossProb),
 	mutationDistribution(mutationDistribution),
@@ -188,7 +189,7 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, dou
 	min_polytope_planes(min_polytope_planes), 
 	max_polytope_planes(max_polytope_planes),
 	polytope_center(polytope_center),
-	fixed_planes(fixed_planes)
+	cluster_planes(cluster_planes)
 {
 	rndEngine.seed(rndDevice());
 }
@@ -361,7 +362,7 @@ std::string lmu::PrimitiveSetCreator::info() const
 
 lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const Eigen::Vector3d& direction,
 	const ManifoldSet& alreadyUsed, double angleEpsilon, bool ignoreDirection,
-	const Eigen::Vector3d& point, double minimumPointDistance, bool ignorePointDistance) const
+	const Eigen::Vector3d& point, double minimumPointDistance, bool ignorePointDistance, bool use_cluster_planes_only) const
 {
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
@@ -369,7 +370,7 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getManifold(ManifoldType type, const 
 	ManifoldSet candidates;
 	const double cos_e = std::cos(angleEpsilon);
 
-	auto all_planes = plane_graph.planes();
+	auto all_planes = use_cluster_planes_only ? cluster_planes : plane_graph.planes();
 
 	// Filter manifold list.
 	std::copy_if(all_planes.begin(), all_planes.end(), std::back_inserter(candidates),
@@ -545,34 +546,31 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 	case PrimitiveType::Polytope:
 	{
 		ManifoldSet planes;
-		ManifoldSet usable_fixed_planes = fixed_planes;
+		ManifoldSet usable_cluster_planes = cluster_planes;
 		
 		int max_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
-		int max_fixed_planes = du(rndEngine, parmu_t{ 0, 1}) == 1 ? du(rndEngine, parmu_t{ 0, (int)usable_fixed_planes.size() }) : (int)usable_fixed_planes.size();
+		int max_fixed_planes = du(rndEngine, parmu_t{ 0, 1}) == 1 ? du(rndEngine, parmu_t{ 1, (int)usable_cluster_planes.size() }) : (int)usable_cluster_planes.size();
 		int num_fixed_planes = 0;
-		ManifoldPtr cur_plane = getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
+		ManifoldPtr cur_plane;
 		for( int i = 0; i < max_planes; ++i)
 		{
-			if (cur_plane)
-			{
-				planes.push_back(cur_plane);
-			}
-
 			if (num_fixed_planes < max_fixed_planes)
 			{
-				int idx = du(rndEngine, parmu_t{ 0, (int)usable_fixed_planes.size()-1 });
+				int idx = du(rndEngine, parmu_t{ 0, (int)usable_cluster_planes.size()-1 });
 
-				cur_plane = usable_fixed_planes[idx];
-				usable_fixed_planes.erase(usable_fixed_planes.begin() + idx);
+				cur_plane = usable_cluster_planes[idx];
+				usable_cluster_planes.erase(usable_cluster_planes.begin() + idx);
 				num_fixed_planes++;
 			}
 			else
 			{
-				cur_plane = getNeighborPlane(cur_plane, planes);
+				cur_plane = getNeighborPlane(cur_plane, planes); // getManifold(ManifoldType::Plane, anyDirection, planes, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true);
 			}
+
+			planes.push_back(cur_plane);
 		}
 		//std::cout << "planes: " << planes.size() << " of " << max_planes << std::endl;
-				
+		
 		primitive = createPolytopePrimitive(planes, polytope_center);		
 	}
 	break;
@@ -648,7 +646,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 	case PrimitiveType::Polytope:
 	{
 		int plane_idx = du(rndEngine, parmu_t{ 0, (int)p.ms.size() - 1 });
-		auto new_plane = getManifold(ManifoldType::Plane, anyDirection, p.ms, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true); 
+		auto new_plane = getManifold(ManifoldType::Plane, anyDirection, p.ms, 0.0, true, Eigen::Vector3d(0, 0, 0), 0.0, true, false); 
 		if (new_plane)
 		{
 			auto new_planes = ManifoldSet(p.ms);
@@ -687,7 +685,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 
 lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc,
 	double distanceEpsilon, int maxPrimitiveSetSize, double cell_size, bool allow_cube_cutout, const std::shared_ptr<ModelSDF>& model_sdf,
-	double geo_weight, double per_prim_geo_weight, double size_weight) :
+	double geo_weight, double per_prim_geo_weight, double per_prim_coverage_weight, double size_weight) :
 	pc(pc),
 	distanceEpsilon(distanceEpsilon),
 	cell_size(cell_size),
@@ -696,16 +694,18 @@ lmu::PrimitiveSetRanker::PrimitiveSetRanker(const PointCloud& pc,
 	allow_cube_cutout(allow_cube_cutout),
 	geo_weight(geo_weight),
 	per_prim_geo_weight(per_prim_geo_weight),
+	per_prim_coverage_weight(per_prim_coverage_weight),
 	size_weight(size_weight)
 {
 }
 
-double lmu::PrimitiveSetRanker::get_geo_score(const lmu::PrimitiveSet& ps) const
+std::tuple<double, std::vector<double>> lmu::PrimitiveSetRanker::get_geo_score(const lmu::PrimitiveSet& ps) const
 {
-
 	const double delta = 0.001;
 	int validPoints = 0;
 	int checkedPoints = 0;
+
+	std::vector<double> per_polytope_coverage_score(ps.size(), 0.0);
 
 	for (int i = 0; i < pc.rows(); ++i)
 	{
@@ -715,13 +715,14 @@ double lmu::PrimitiveSetRanker::get_geo_score(const lmu::PrimitiveSet& ps) const
 		// Get distance to closest primitive. 
 		double min_d = std::numeric_limits<double>::max();
 		Eigen::Vector3d min_normal;
+		int min_d_polytope_idx = -1;
 
-		for (const auto& p : ps)
+		for (int i = 0; i < ps.size(); ++i)
 		{
-			if (p.isNone())
+			if (ps[i].isNone())
 				continue;
 
-			auto dg = p.imFunc->signedDistanceAndGradient(point);
+			auto dg = ps[i].imFunc->signedDistanceAndGradient(point);
 			double d = dg[0];
 
 			Eigen::Vector3d g = dg.bottomRows(3);
@@ -732,16 +733,26 @@ double lmu::PrimitiveSetRanker::get_geo_score(const lmu::PrimitiveSet& ps) const
 			{
 				min_d = d;
 				min_normal = g.normalized();
+				min_d_polytope_idx = i;
 			}
 		}
 
 		//if (std::abs(min_d) < delta && n.dot(min_normal) > 0.9) validPoints++;
-		if (std::abs(min_d) < delta) validPoints++;
+		if (std::abs(min_d) < delta)
+		{
+			validPoints++;
+
+			if (min_d_polytope_idx != -1)
+				per_polytope_coverage_score[min_d_polytope_idx] += 1.0;
+		}
 
 		checkedPoints++;
 	}
+	
+	for (auto& v : per_polytope_coverage_score)
+		v /= (double)checkedPoints;
 
-	return (double)validPoints / (double)checkedPoints;
+	return std::make_tuple((double)validPoints / (double)checkedPoints, per_polytope_coverage_score);
 }
 
 void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std::function<void(const Eigen::Vector3d&)> f)
@@ -962,23 +973,26 @@ std::vector<double> lmu::PrimitiveSetRanker::get_per_prim_geo_score(const Primit
 lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps) const
 {
 	if (ps.empty())
-		return PrimitiveSetRank::Invalid;	
-	
-	// Geometry score
-	double geo_score = geo_weight == 0.0 ? 0.0 : get_geo_score(ps);
+		return PrimitiveSetRank::Invalid;
+
+	// Geometry and per primitive coverage score
+	auto geo_score = geo_weight == 0.0 && per_prim_coverage_weight == 0.0 ? 
+		std::make_tuple(0.0, std::vector<double>(ps.size(), 0.0)) : get_geo_score(ps);
+
+	auto per_prim_coverage_scores = std::get<1>(geo_score);
 
 	// Size score
 	double size_score = size_weight == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
 
 	// Per prim score
-		
 	std::vector<Eigen::Matrix<double, 1, 6>> points;
-
 	auto per_prim_geo_scores = get_per_prim_geo_score(ps, points, false);
 
 	auto per_prim_geo_score_sum = std::accumulate(per_prim_geo_scores.begin(), per_prim_geo_scores.end(), 0.0);
+	auto per_prim_coverage_score_sum = std::accumulate(per_prim_coverage_scores.begin(), per_prim_coverage_scores.end(), 0.0);
 
-	auto score = PrimitiveSetRank(geo_score, per_prim_geo_score_sum, size_score, 0.0 /*computed later*/, per_prim_geo_scores);
+	auto score = PrimitiveSetRank(std::get<0>(geo_score), per_prim_geo_score_sum, per_prim_coverage_score_sum, size_score, 
+		0.0 /*computed later*/, per_prim_geo_scores, per_prim_coverage_scores);
 
 	score.capture_score_stats();
 
@@ -990,8 +1004,11 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, std:
 	if (ps.empty())
 		return PrimitiveSetRank::Invalid;
 
-	// Geometry score
-	double geo_score = geo_weight == 0.0 ? 0.0 : get_geo_score(ps);
+	// Geometry and per primitive coverage score
+	auto geo_score = geo_weight == 0.0 && per_prim_coverage_weight == 0.0 ? 
+		std::make_tuple(0.0, std::vector<double>(ps.size(), 0.0)) : get_geo_score(ps);
+
+	auto per_prim_coverage_scores = std::get<1>(geo_score);
 
 	// Size score
 	double size_score = size_weight == 0.0 ? 0.0 : (double)ps.size() / (double)maxPrimitiveSetSize;
@@ -1001,8 +1018,10 @@ lmu::PrimitiveSetRank lmu::PrimitiveSetRanker::rank(const PrimitiveSet& ps, std:
 	auto per_prim_geo_scores = get_per_prim_geo_score(ps, debug_points, false);
 
 	auto per_prim_geo_score_sum = std::accumulate(per_prim_geo_scores.begin(), per_prim_geo_scores.end(), 0.0);
+	auto per_prim_coverage_score_sum = std::accumulate(per_prim_coverage_scores.begin(), per_prim_coverage_scores.end(), 0.0);
 
-	auto score = PrimitiveSetRank(geo_score, per_prim_geo_score_sum, size_score, 0.0 /*computed later*/, per_prim_geo_scores);
+	auto score = PrimitiveSetRank(std::get<0>(geo_score), per_prim_geo_score_sum, per_prim_coverage_score_sum, size_score, 
+		0.0 /*computed later*/, per_prim_geo_scores, per_prim_coverage_scores);
 
 	score.capture_score_stats();
 
@@ -1018,13 +1037,14 @@ std::string lmu::PrimitiveSetRanker::info() const
 // ==================== Population Manipulator ====================
 
 lmu::PrimitiveSetPopMan::PrimitiveSetPopMan(const PrimitiveSetRanker& ranker, int maxPrimitiveSetSize,
-	double geoWeight, double perPrimGeoWeight, double sizeWeight,
+	double geoWeight, double perPrimGeoWeight, double perPrimCoverageWeight, double sizeWeight,
 	int num_elite_injections) :
 	ranker(&ranker),
 	maxPrimitiveSetSize(maxPrimitiveSetSize),
 	geoWeight(geoWeight),
 	perPrimGeoWeight(perPrimGeoWeight),
 	sizeWeight(sizeWeight),
+	perPrimCoverageWeight(perPrimCoverageWeight),
 	num_elite_injections(num_elite_injections)
 {
 }
@@ -1058,8 +1078,8 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		
 			for (int i = 0; i < ps.creature.size(); ++i)
 			{
-				auto geo_score = ps.rank.per_primitive_geo_scores[i];
-				all_primitives.push_back(std::make_pair(&(ps.creature[i]), geo_score));
+				auto score = perPrimGeoWeight * ps.rank.per_primitive_geo_scores[i] + perPrimCoverageWeight * ps.rank.per_primitive_coverage_scores[i];
+				all_primitives.push_back(std::make_pair(&(ps.creature[i]), score));
 			}
 		}
 
@@ -1096,10 +1116,12 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		
 		max_r.geo = max_r.geo < ps.rank.geo ? ps.rank.geo : max_r.geo;
 		max_r.per_prim_geo_sum = max_r.per_prim_geo_sum < ps.rank.per_prim_geo_sum ? ps.rank.per_prim_geo_sum : max_r.per_prim_geo_sum;
+		max_r.per_prim_coverage_sum = max_r.per_prim_coverage_sum < ps.rank.per_prim_coverage_sum ? ps.rank.per_prim_coverage_sum : max_r.per_prim_coverage_sum;
 		max_r.size = max_r.size < ps.rank.size ? ps.rank.size : max_r.size;
 
 		min_r.geo = min_r.geo > ps.rank.geo ? ps.rank.geo : min_r.geo;
 		min_r.per_prim_geo_sum = min_r.per_prim_geo_sum > ps.rank.per_prim_geo_sum ? ps.rank.per_prim_geo_sum : min_r.per_prim_geo_sum;
+		min_r.per_prim_coverage_sum = min_r.per_prim_coverage_sum > ps.rank.per_prim_coverage_sum ? ps.rank.per_prim_coverage_sum : min_r.per_prim_coverage_sum;
 		min_r.size = min_r.size > ps.rank.size ? ps.rank.size : min_r.size;
 			
 	}
@@ -1122,9 +1144,10 @@ void lmu::PrimitiveSetPopMan::manipulateAfterRanking(std::vector<RankedCreature<
 		// Normalized
 		ps.rank.geo              = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
 		ps.rank.per_prim_geo_sum = ps.rank.per_prim_geo_sum < 0.0 || diff_r.per_prim_geo_sum == 0.0 ? 0.0 : (ps.rank.per_prim_geo_sum - min_r.per_prim_geo_sum) / diff_r.per_prim_geo_sum;
+		ps.rank.per_prim_coverage_sum = ps.rank.per_prim_coverage_sum < 0.0 || diff_r.per_prim_coverage_sum == 0.0 ? 0.0 : (ps.rank.per_prim_coverage_sum - min_r.per_prim_coverage_sum) / diff_r.per_prim_coverage_sum;
 		ps.rank.size             = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight - ps.rank.size * sizeWeight;
+		ps.rank.combined = ps.rank.geo * geoWeight + ps.rank.per_prim_geo_sum * perPrimGeoWeight + ps.rank.per_prim_coverage_sum * perPrimCoverageWeight - ps.rank.size * sizeWeight;
 		
 		
 		//std::cout << "Combined: " << ps.rank.combined << std::endl;
@@ -1242,46 +1265,43 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 		p.push_back(new_plane->p);
 	}*/
 
-	Eigen::Vector3d center;
-	if (db(rndEngine(), parmb_t{ 0.5 }))
-	{
-		int num_points = 0;
+	static std::uniform_int_distribution<> du{};
+	using parmu_t = decltype(du)::param_type;
+
+
+	if (db(rndEngine(), parmb_t{ 0.5 })) // Here is the problem! Maybe we need a better plane normal estimation.
+	{	
 		for (const auto& plane : planes)
 		{
-			for (int i = 0; i < plane->pc.rows(); ++i)
-			{
-				Eigen::Vector3d p(plane->pc.row(i).x(), plane->pc.row(i).y(), plane->pc.row(i).z());
-
-				center += p;
-				num_points += 1.0;
-			}
+			int point_idx = du(rndEngine(), parmu_t{ 0, (int)plane->pc.rows()-1 });
+						
+			Eigen::Vector3d point_n(plane->pc.row(point_idx).rightCols(3));
+			n.push_back(point_n);
+			p.push_back(plane->p);			
 		}
-		center /= num_points;
 	}
 	else
 	{
-		center = cluster_center;
-	}
-	
-	// Get point that is guaranteed to be inside of the polytope. 
-	// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
-	
 
-	for (int i = 0; i < planes.size(); ++i)
-	{
-		auto new_plane = std::make_shared<Manifold>(*planes[i]);
+		// Get point that is guaranteed to be inside of the polytope. 
+		// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
 
-		// Flip plane normal if inside_point would be outside.
-		double d = (center - new_plane->p).dot(new_plane->n);
-		if (d > 0.0)
+
+		for (int i = 0; i < planes.size(); ++i)
 		{
-			new_plane->n = -1.0 * new_plane->n;
-		}
+			auto new_plane = std::make_shared<Manifold>(*planes[i]);
 
-		n.push_back(new_plane->n);
-		p.push_back(new_plane->p);
+			// Flip plane normal if inside_point would be outside.
+			double d = (cluster_center - new_plane->p).dot(new_plane->n);
+			if (d > 0.0)
+			{
+				new_plane->n = -1.0 * new_plane->n;
+			}
+
+			n.push_back(new_plane->n);
+			p.push_back(new_plane->p);
+		}
 	}
-		
 	
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
 
