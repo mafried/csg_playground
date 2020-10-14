@@ -1195,7 +1195,7 @@ Eigen::Vector3d findNormalByMajority(const lmu::PointCloud& pc)
 	}
 }
 
-lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& polytope_center)
+lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& cluster_center)
 {
 	if (planes.size() < 4)
 	{
@@ -1241,7 +1241,27 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 		n.push_back(new_plane->n);
 		p.push_back(new_plane->p);
 	}*/
-	
+
+	Eigen::Vector3d center;
+	if (db(rndEngine(), parmb_t{ 0.5 }))
+	{
+		int num_points = 0;
+		for (const auto& plane : planes)
+		{
+			for (int i = 0; i < plane->pc.rows(); ++i)
+			{
+				Eigen::Vector3d p(plane->pc.row(i).x(), plane->pc.row(i).y(), plane->pc.row(i).z());
+
+				center += p;
+				num_points += 1.0;
+			}
+		}
+		center /= num_points;
+	}
+	else
+	{
+		center = cluster_center;
+	}
 	
 	// Get point that is guaranteed to be inside of the polytope. 
 	// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
@@ -1252,7 +1272,7 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 		auto new_plane = std::make_shared<Manifold>(*planes[i]);
 
 		// Flip plane normal if inside_point would be outside.
-		double d = (polytope_center - new_plane->p).dot(new_plane->n);
+		double d = (center - new_plane->p).dot(new_plane->n);
 		if (d > 0.0)
 		{
 			new_plane->n = -1.0 * new_plane->n;
