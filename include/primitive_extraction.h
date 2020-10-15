@@ -313,7 +313,8 @@ namespace lmu
 		std::string cluster_script_folder;
 		double ga_threshold; 
 		double am_quality_threshold;
-		double am_clustering_param;
+		int am_min_clusters;
+		int am_max_clusters;
 	};
 
 	PrimitiveSet extractNonPlanarPrimitives(const ManifoldSet& manifolds);

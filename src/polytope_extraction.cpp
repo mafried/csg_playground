@@ -116,6 +116,8 @@ Eigen::Vector3d lmu::ConvexCluster::compute_center(const lmu::ModelSDF& msdf) co
 
 std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const std::string& cluster_file, bool remove_outliers)
 {
+	std::map<unsigned long, std::string> color_map;
+
 	std::ifstream s(cluster_file);
 
 	// Skip over header. 
@@ -129,13 +131,18 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const st
 		double x, y, z, nx, ny, nz; 
 		int r, g, b, a;
 		s >> x >> y >> z >> nx >> ny >> nz >> r >> g >> b >> a;
-
+		
 		unsigned long cluster_id = ((r & 0xff) << 24) + ((g & 0xff) << 16) + ((b & 0xff) << 8) + (a & 0xff);
+
+		color_map[cluster_id] = "[" + std::to_string(r) + ", " + std::to_string(g) + ", " + std::to_string(b) + ", " + std::to_string(a) + "]";
 
 		Eigen::Matrix<double, 1, 6> point;
 		point.row(0) << x, y, z, nx, ny, nz;
 		per_cluster_points[cluster_id].push_back(point);
 	}
+
+	for (const auto& c : color_map)
+		std::cout << c.second << "," << std::endl;
 
 	std::vector<lmu::ConvexCluster> convex_clusters; 
 	for (const auto& cp : per_cluster_points)
@@ -151,8 +158,10 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const st
 }
 
 
-std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, const std::string& python_script, double am_clustering_param)
+std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, const std::string& python_script, int min_cluster_size, int max_cluster_size, std::ofstream& info)
 {
+	lmu::TimeTicker t;
+
 	std::string cluster_file = "clusters.dat";
 	std::string afm_path = "af.dat";
 	std::string pcaf_path = "pc_af.dat";
@@ -161,14 +170,17 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 	lmu::PointCloud debug_pc;
 
 	writePointCloud(pcaf_path, pc);
+	
+	t.tick();
 
 	auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
 	//auto aff_mat = lmu::get_affinity_matrix_with_rays_2(pg.planes(), true);
 
+	info << "Affinity Matrix Creation=" << t.tick() << std::endl;
+
+
 	auto n = std::to_string(aff_mat.rows());
 	std::cout << n << " " << afm_path << std::endl;
-
-	auto am_clustering_param_str = std::to_string(am_clustering_param);
 
 	lmu::write_affinity_matrix(afm_path, aff_mat);
 
@@ -192,17 +204,22 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 
 	std::cout << "Before call" << std::endl;
 
+	t.tick();
+
 	if (PyCallable_Check(od_method))
 	{
 		PyErr_Print();
 
-		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str(), (char*)am_clustering_param_str.c_str()));
+		PyObject_CallObject(od_method, Py_BuildValue("(z, z, z, z, z)", (char*)afm_path.c_str(), (char*)n.c_str(), (char*)cluster_file.c_str(), (char*)std::to_string(min_cluster_size).c_str(), (char*)std::to_string(max_cluster_size).c_str()));
 		PyErr_Print();
 	}
 	else
 	{
 		PyErr_Print();
 	}
+	
+	info << "Convex Clustering=" << t.tick() << std::endl;
+
 
 	Py_DECREF(od_module);
 	Py_DECREF(od_method_name);
@@ -462,12 +479,12 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 			continue;
 		}
 
-		if (cluster_idx == 1)
-		{
+		//if (cluster_idx == 1)
+		//{
 			auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
 			if (!polytopes.empty())
 				ps.insert(ps.end(), polytopes.begin(), polytopes.end());
-		}
+		//}
 
 		cluster_idx++;
 	}

@@ -503,7 +503,8 @@ int main(int argc, char *argv[])
 	double sampling_rate = s.getDouble("Data", "SamplingRate", 0.05);
 	bool use_clusters = s.getBool("Data", "UseClusters", true);
 	bool convex_clusters_from_file = s.getBool("Data", "ConvexClustersFromFile", false);
-
+	int num_resampling_points = s.getInt("Data", "NumResamplingPoints", 3000);
+	bool create_only_affinity_matrix = s.getBool("Data", "CreateOnlyAffinityMatrix", false);
 
 
 	lmu::PrimitiveGaParams prim_params;
@@ -543,7 +544,9 @@ int main(int argc, char *argv[])
 
 	prim_params.ga_threshold = s.getDouble("Primitives", "GaThreshold", 0.99);
 	prim_params.am_quality_threshold = s.getDouble("Primitives", "AmQualityThreshold", 0.9);
-	prim_params.am_clustering_param = s.getDouble("Primitives", "AmClusteringParam", 0.4);
+	prim_params.am_min_clusters = s.getInt("Primitives", "AmMinClusters", 1);
+	prim_params.am_max_clusters = s.getInt("Primitives", "AmMaxClusters", 15);
+
 
 	g_prim_params = prim_params;
 
@@ -634,11 +637,29 @@ int main(int argc, char *argv[])
 		// Get (weakly) convex clusters.
 		// =============================
 
+		
+
 		lmu::PlaneGraph plane_graph;
 		std::vector<lmu::ConvexCluster> convex_clusters;
 		lmu::ManifoldSet manifolds;
+		if (create_only_affinity_matrix)
+		{
+			manifolds = ransacRes.manifolds;
 
-		if (convex_clusters_from_file)
+			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
+
+			lmu::resample_proportionally(plane_graph.planes(), num_resampling_points);
+
+			auto aff_mat = lmu::get_affinity_matrix_with_triangulation(plane_graph.plane_points(), plane_graph.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
+			std::string afm_path = "af.dat";
+			std::string pcaf_path = "pc_af.dat";
+
+			lmu::writePointCloud(pcaf_path, plane_graph.plane_points());
+			lmu::write_affinity_matrix(afm_path, aff_mat);
+
+			goto _LAUNCH;
+		}
+		else if (convex_clusters_from_file)
 		{
 			// Load convex clusters. 
 			convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", false);
@@ -654,6 +675,7 @@ int main(int argc, char *argv[])
 			{
 				c.pc = lmu::to_canonical_frame(c.pc, cc_min, cc_max);
 			}	
+			std::cout << "Convex Clusters: " << convex_clusters.size() << std::endl;
 
 			g_manifoldSet = ransacRes.manifolds;
 			
@@ -730,12 +752,20 @@ int main(int argc, char *argv[])
 			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
 		}
 		else
-		{
+		{			
 			manifolds = ransacRes.manifolds;
+
+			t.tick();
 
 			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
 
-			convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_clustering_param);
+			res_f << "Plane Graph Creation=" << t.tick() << std::endl;
+
+			lmu::resample_proportionally(plane_graph.planes(), num_resampling_points);
+
+			res_f << "Proportional Resampling=" << t.tick() << std::endl;
+
+			convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_min_clusters, prim_params.am_max_clusters, res_f);
 		}
 
 		plane_graph.to_file("plane_graph.gv");
@@ -748,7 +778,12 @@ int main(int argc, char *argv[])
 		// Generate Polytopes for (weakly) convex clusters.
 		// ================================================
 		
+		t.tick();
+
 		auto polytopes = lmu::generate_polytopes(convex_clusters, plane_graph, prim_params, prim_ga_f);
+
+		res_f << "Polytope Generation=" << t.tick() << std::endl;
+
 
 		int i = 0;
 		for (const auto& polytope : polytopes)
@@ -756,7 +791,11 @@ int main(int argc, char *argv[])
 			igl::writeOBJ("unm_res_mesh_" + std::to_string(i++) + ".obj", polytope.imFunc->meshCRef().vertices, polytope.imFunc->meshCRef().indices);
 		}
 
+		t.tick();
+
 		polytopes = lmu::merge_polytopes(polytopes, prim_params.am_quality_threshold);
+
+		res_f << "Polytope Merge=" << t.tick() << std::endl;
 
 		i = 0;
 		for (const auto& polytope : polytopes)
@@ -766,7 +805,7 @@ int main(int argc, char *argv[])
 		
 		g_primitiveSet = polytopes;
 		
-		goto _LAUNCH;
+		/*
 
 		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
 
@@ -804,8 +843,8 @@ int main(int argc, char *argv[])
 		g_sdf_model_pc = res.ranker->model_sdf->to_pc();
 		g_res_pc = merged_cluster_pc;
 
-		goto _LAUNCH;
 
+		
 		// Extract CSG tree 
 		t.tick();
 		auto node = lmu::opNo();
@@ -850,7 +889,8 @@ int main(int argc, char *argv[])
 		viewer.data().add_points(pc_n.leftCols(3), pc_n.rightCols(3));
 
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
-		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);	
+		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);
+		*/
 				
 		res_f.close();
 	}

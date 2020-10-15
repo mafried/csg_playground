@@ -427,6 +427,8 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 		std::cout << "Plane spacing: " << per_plane_avg_spacings.back() << std::endl;
 	}
 
+	std::cout << "num points: " << pc.rows() << std::endl;
+
 	std::vector<Eigen::Triplet<double>> triplets;
 	triplets.reserve(pc.rows()); //TODO: better estimation?
 	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
