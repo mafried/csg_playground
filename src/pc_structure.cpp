@@ -357,8 +357,8 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 	}
 
 
-	debug_pc = lmu::pointCloudFromVector(struct_points);
-	//pcwn = lmu::pointCloudFromVector(struct_points_wn);
+	//debug_pc = lmu::pointCloudFromVector(struct_points);
+	pcwn = lmu::pointCloudFromVector(struct_points_wn);
 
 
 	// fill plane point clouds.

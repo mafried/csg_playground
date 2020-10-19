@@ -659,7 +659,19 @@ int main(int argc, char *argv[])
 
 			goto _LAUNCH;
 		}
-		else if (convex_clusters_from_file)
+		
+		
+		manifolds = ransacRes.manifolds;
+
+		t.tick();
+
+		lmu::PointCloud full_pc;
+		plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, full_pc);
+		std::cout << "Full: " << full_pc.rows() << std::endl;
+
+		res_f << "Plane Graph Creation=" << t.tick() << std::endl;
+		
+		if (convex_clusters_from_file)
 		{
 			// Load convex clusters. 
 			convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", false);
@@ -675,6 +687,7 @@ int main(int argc, char *argv[])
 			{
 				c.pc = lmu::to_canonical_frame(c.pc, cc_min, cc_max);
 			}	
+			std::cout << "Convex Cluster PC size: " << merged_convex_cluster_pcs.rows() << std::endl;
 			std::cout << "Convex Clusters: " << convex_clusters.size() << std::endl;
 
 			g_manifoldSet = ransacRes.manifolds;
@@ -741,26 +754,27 @@ int main(int argc, char *argv[])
 				manifolds.push_back(m);
 			}
 
+			
+			/*
+			g_manifoldSet = manifolds;
+
+			lmu::PointCloud full_pc;
+			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, full_pc);
+			std::cout << "Full: " << full_pc.rows() << std::endl;
+			
+			reassign_convex_cluster_pointclouds(convex_clusters, full_pc);
+			*/
+
 			/*
 			std::vector<lmu::PointCloud> m_pcs;
 			std::transform(manifolds.begin(), manifolds.end(), std::back_inserter(m_pcs), [](const auto& c) { return c->pc; });
-			g_res_pc = lmu::mergePointClouds(m_pcs);
+			std::cout << "MERGED PLANE PC: " << lmu::mergePointClouds(m_pcs).rows() << std::endl;
 			*/
 
-			g_manifoldSet = manifolds;
-
-			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
+			
 		}
 		else
-		{			
-			manifolds = ransacRes.manifolds;
-
-			t.tick();
-
-			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
-
-			res_f << "Plane Graph Creation=" << t.tick() << std::endl;
-
+		{
 			lmu::resample_proportionally(plane_graph.planes(), num_resampling_points);
 
 			res_f << "Proportional Resampling=" << t.tick() << std::endl;
@@ -768,7 +782,11 @@ int main(int argc, char *argv[])
 			convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_min_clusters, prim_params.am_max_clusters, res_f);
 		}
 
+		reassign_convex_cluster_pointclouds(convex_clusters, full_pc);
+
 		plane_graph.to_file("plane_graph.gv");
+
+		write_convex_clusters_to_ply("convex_clusters.ply", convex_clusters);
 
 		g_convex_clusters = convex_clusters;
 
@@ -891,7 +909,8 @@ int main(int argc, char *argv[])
 		auto m = lmu::computeMesh(node, Eigen::Vector3i(100, 100, 100), Eigen::Vector3d(-1, -1, -1), Eigen::Vector3d(1, 1, 1));
 		igl::writeOBJ(out_path + "mesh.obj", m.vertices, m.indices);
 		*/
-				
+		
+		std::cout << "Close file" << std::endl;
 		res_f.close();
 	}
 	catch (const std::exception& ex)

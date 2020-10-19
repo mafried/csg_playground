@@ -157,6 +157,58 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const st
 	return convex_clusters;
 }
 
+void lmu::write_convex_clusters_to_ply(const std::string & cluster_file, const std::vector<lmu::ConvexCluster>& convex_clusters)
+{
+	static std::vector<std::array<int, 4>> colors =
+	{
+		{0, 46, 255, 255},
+		{0, 185, 255, 255},
+		{0, 255, 46, 255},
+		{0, 255, 185, 255},
+		{92, 0, 255, 255},
+		{92, 255, 0, 255},
+		{231, 0, 255, 255},
+		{231, 255, 0, 255},
+		{255, 0, 0, 255},
+		{255, 0, 139, 255},
+		{255, 139, 0, 255}
+	};
+
+	std::ofstream s(cluster_file);
+
+	int n = 0; 
+	for (const auto& c : convex_clusters)
+		n += c.pc.rows();
+
+	s << "ply" << std::endl;
+	s << "format ascii 1.0" << std::endl;
+	s << "element vertex " << n << std::endl;
+
+	s << "property float x" << std::endl;
+	s << "property float y" << std::endl;
+	s << "property float z" << std::endl;
+	s << "property float nx" << std::endl;
+	s << "property float ny" << std::endl;
+	s << "property float nz" << std::endl;
+	s << "property uchar red" << std::endl;
+	s << "property uchar green" << std::endl;
+	s << "property uchar blue" << std::endl;
+	s << "property uchar alpha" << std::endl;
+	s << "end_header" << std::endl;
+
+	for (int i = 0; i < convex_clusters.size(); ++i)
+	{
+		for (int j = 0; j < convex_clusters[i].pc.rows(); ++j)
+		{	
+			auto row = convex_clusters[i].pc.row(j);
+			auto color = colors[i % colors.size()];
+
+			s << row.coeff(0, 0) << " " << row.coeff(0, 1) << " " << row.coeff(0, 2) << " " << row.coeff(0, 3) << " " << row.coeff(0, 4) << " " << row.coeff(0, 5) << " " << 
+				color[0] << " " << color[1] << " " << color[2] << " " << color[3] << std::endl;
+		}
+	}
+}
+
 
 std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, const std::string& python_script, int min_cluster_size, int max_cluster_size, std::ofstream& info)
 {
@@ -272,6 +324,40 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 	std::cout << "Clusters: " << clusters.size() << std::endl;
 
 	return clusters;
+}
+
+void lmu::reassign_convex_cluster_pointclouds(std::vector<ConvexCluster>& clusters, const lmu::PointCloud& pc)
+{
+	// Re-assign full point cloud points to clusters. 
+	std::vector <std::vector<Eigen::Matrix<double, 1, 6>>> cluster_pcs(clusters.size());
+	std::vector<lmu::NearestNeighborSearch> per_cluster_search;
+	std::transform(clusters.begin(), clusters.end(),
+		std::back_inserter(per_cluster_search), [](const auto& c) {return lmu::NearestNeighborSearch(c.pc); });
+
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		int best_cluster_idx = -1;
+		double best_cluster_d = std::numeric_limits<double>::max();
+		for (int j = 0; j < clusters.size(); ++j)
+		{
+			Eigen::Vector3d p(pc.row(i).leftCols(3));
+
+			double d = per_cluster_search[j].get_nn_distance(p);
+			if (d < best_cluster_d)
+			{
+				best_cluster_idx = j;
+				best_cluster_d = d;
+			}
+		}
+		if (best_cluster_idx >= 0)
+		{
+			cluster_pcs[best_cluster_idx].push_back(pc.row(i));
+		}
+	}
+	for (int j = 0; j < clusters.size(); ++j)
+	{
+		clusters[j].pc = lmu::pointCloudFromVector(cluster_pcs[j]);
+	}
 }
 
 bool is_mesh_out_of_range(const lmu::Mesh& mesh)

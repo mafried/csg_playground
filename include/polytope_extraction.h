@@ -27,8 +27,11 @@ namespace lmu
 	//	const lmu::ManifoldSet& planes, const std::string& python_script, double am_clustering_param);
 
 	std::vector<ConvexCluster> get_convex_clusters_without_planes(const std::string& cluster_file, bool remove_outliers);
+	void write_convex_clusters_to_ply(const std::string& cluster_file, const std::vector<lmu::ConvexCluster>& convex_clusters);
 
 	std::vector<ConvexCluster> get_convex_clusters(PlaneGraph& pg, const std::string& python_script, int min_cluster_size, int max_cluster_size, std::ofstream& info);
+
+	void reassign_convex_cluster_pointclouds(std::vector<ConvexCluster>& convex_clusters, const lmu::PointCloud& pc);
 
 	PrimitiveSet generate_polytopes(const std::vector<ConvexCluster>& convex_clusters, const PlaneGraph& plane_graph,
 		const lmu::PrimitiveGaParams& params, std::ofstream& s);
