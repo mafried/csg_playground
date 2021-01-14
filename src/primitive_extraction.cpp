@@ -118,7 +118,7 @@ void name_primitives(const lmu::PrimitiveSet& ps)
 		p.imFunc->setName(lmu::primitiveTypeToString(p.type) + std::to_string((counter[p.type]++)));
 }
 
-lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream)
+lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const PointCloud& full_pc, const PrimitiveGaParams& params, std::ostream& stream)
 {	
 	double distT = 0.02;
 	double angleT = M_PI / 9.0;
@@ -146,7 +146,8 @@ lmu::GAResult lmu::extractPrimitivesWithGA(const RansacResult& ransacRes, const 
 		[](const ManifoldPtr m) {return m->pc; });
 	auto non_static_pointcloud = lmu::mergePointClouds(pointClouds);
 
-	//auto model_sdf = std::make_shared<ModelSDF>(full_pc, params.sdf_voxel_size);
+	//auto model_sdf = std::make_shared<ModelSDF>(/*full_pc*/non_static_pointcloud, cell_size, block_radius, sigma_sq);
+	auto model_sdf = std::make_shared<ModelSDF>(full_pc, params.sdf_voxel_size);
 
 	 
 	// First GA for candidate box generation.
@@ -432,8 +433,8 @@ lmu::ManifoldPtr lmu::PrimitiveSetCreator::getClosestPlane(const ManifoldPtr& pl
 		std::transform(closest_planes.begin(), closest_planes.end(), std::back_inserter(probs), [min, max](const auto& e) { return (e.second-min)/(max-min); });
 
 		//std::cout << "#" << std::endl;
-		//for (auto& p : probs)
-		//	p = 1.0;
+		for (auto& p : probs)
+			p = 1.0;
 		//std::cout << std::endl;
 
 		std::discrete_distribution<> d(probs.begin(), probs.end());
@@ -1199,29 +1200,11 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 	{
 		return Primitive::None();
 	}
-		
+
+	/*
 	std::vector<Eigen::Vector3d> p;
 	std::vector<Eigen::Vector3d> n;
 
-	static std::bernoulli_distribution db{};
-	using parmb_t = decltype(db)::param_type;
-
-	/*
-	for (int i = 0; i < planes.size(); ++i)
-	{
-		auto new_plane = std::make_shared<Manifold>(*planes[i]);
-		
-		if (db(rndEngine(), parmb_t{ 0.5 }))
-		{
-			new_plane->n = -1.0 * new_plane->n;
-		}
-
-		n.push_back(new_plane->n);
-		p.push_back(new_plane->p);
-	}
-	*/
-
-	/*
 	for (int i = 0; i < planes.size(); ++i)
 	{
 		auto new_plane = std::make_shared<Manifold>(*planes[i]);
@@ -1238,12 +1221,11 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 
 		n.push_back(new_plane->n);
 		p.push_back(new_plane->p);
-	}*/
-	
-	
+	}
+	*/
+
 	// Get point that is guaranteed to be inside of the polytope. 
 	// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
-	
 	Eigen::Vector3d inside_point;
 	double num_points = 0.0;
 	for (const auto& p : planes)
@@ -1255,6 +1237,9 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 		}
 	}
 	inside_point /= num_points;
+
+	std::vector<Eigen::Vector3d> p;
+	std::vector<Eigen::Vector3d> n;
 
 	for (int i = 0; i < planes.size(); ++i)
 	{
@@ -1270,8 +1255,6 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes)
 		n.push_back(new_plane->n);
 		p.push_back(new_plane->p);
 	}
-	
-	
 	
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");
 
@@ -1491,7 +1474,7 @@ lmu::ManifoldPtr lmu::estimateSecondCylinderPlaneFromPointCloud(const Manifold& 
 }
 
 
-lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& s) :
+lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size) :
 	data(nullptr),
 	voxel_size(voxel_size)
 {
@@ -1518,15 +1501,7 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 	
 	std::cout << "Create mesh" << std::endl;
 
-	lmu::TimeTicker t;
-
-	t.tick();
-	auto mesh = lmu::createFromPointCloud(pc);
-	s << "Poisson Reconstruction=" << t.tick() << std::endl;
-
-	recreate_from_mesh(mesh);	
-	s << "SDF Creation=" << t.tick() << std::endl;
-
+	recreate_from_mesh(lmu::createFromPointCloud(pc));	
 }
 
 lmu::ModelSDF::~ModelSDF()
@@ -2076,24 +2051,11 @@ lmu::CSGNode lmu::CapOptimizer::optimize_caps(const PrimitiveSet& ps, const CSGN
 				continue;
 			}
 
-			if (closest_top_plane_d > cap_plane_adjustment_max_dist && closest_bottom_plane_d > cap_plane_adjustment_max_dist)
+			if (closest_top_plane_d > cap_plane_adjustment_max_dist || closest_bottom_plane_d > cap_plane_adjustment_max_dist)
 			{
-				std::cout << "Both planes are farther away than allowed (allowed: " << cap_plane_adjustment_max_dist << ")." << std::endl;
+				std::cout << "At least one of the planes is farther away than allowed (allowed: " << cap_plane_adjustment_max_dist << ")." << std::endl;
 				continue;
 			}
-			else if (closest_top_plane_d > cap_plane_adjustment_max_dist)
-			{
-				auto top_cyl = cyl->signedDistanceAndGradient(top_p);
-				auto top_n = Eigen::Vector3d(top_cyl.bottomRows(3)).normalized();
-				closest_top_plane = std::make_shared<IFPlane>(top_p, top_n, cyl->name() + "_Top");
-			}
-			else if (closest_bottom_plane_d > cap_plane_adjustment_max_dist)
-			{
-				auto bottom_cyl = cyl->signedDistanceAndGradient(bottom_p);
-				auto bottom_n = Eigen::Vector3d(bottom_cyl.bottomRows(3)).normalized();
-				closest_bottom_plane = std::make_shared<IFPlane>(bottom_p, bottom_n, cyl->name() + "_Bottom");
-			}
-
 
 			lmu::visit(res_node, [&closest_top_plane, &closest_bottom_plane, cyl, max_height](CSGNode& n) 
 			{

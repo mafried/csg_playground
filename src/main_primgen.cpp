@@ -19,7 +19,7 @@ lmu::Mesh g_mesh;
 lmu::PointCloud g_pc;
 Eigen::MatrixXd g_lines;
 
-#define WITH_VIEWER_GUI
+//#define WITH_VIEWER_GUI
 
 
 

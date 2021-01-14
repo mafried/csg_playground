@@ -130,8 +130,6 @@ namespace lmu
 		return std::abs(x - y) <= epsilon * std::abs(x);
 		// see Knuth section 4.2.2 pages 217-218
 	}
-
-	
 }
 
 #endif

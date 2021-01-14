@@ -629,63 +629,8 @@ private:
 
 };
 
-//////////////////////////// Stop Criterion ////////////////////////////
-
-
-struct SelectionIterationStopCriterion
-{
-	SelectionIterationStopCriterion(int maxCount, double delta, int maxIterations) :
-		_maxCount(maxCount),
-		_delta(delta),
-		_maxIterations(maxIterations),
-		_currentCount(0),
-		_lastBestRank(0.0)
-	{
-	}
-
-	bool shouldStop(const std::vector<RankedCreature<PrimitiveSelection, SelectionRank>>& population, int iterationCount)
-	{
-		std::cout << "Iteration " << iterationCount << std::endl;
-
-		if (iterationCount >= _maxIterations)
-			return true;
-
-		if (population.empty())
-			return true;
-
-		SelectionRank currentBestRank = population[0].rank;
-
-		if (std::abs(currentBestRank.geo_unnormalized - _lastBestRank.geo_unnormalized) < _delta)
-		{
-			//No change
-			_currentCount++;
-		}
-		else
-		{
-			_currentCount = 0;
-		}
-
-		_lastBestRank = currentBestRank;
-
-		return _currentCount >= _maxCount;
-	}
-
-	std::string info() const
-	{
-		std::stringstream ss;
-		ss << "No Change Stop Criterion Selector (maxCount=" << _maxCount << ", delta=" << _delta << ", maxIterations=" << _maxIterations << ")";
-		return ss.str();
-	}
-
-private:
-	int _maxCount;
-	int _currentCount;
-	int _maxIterations;
-	double _delta;
-	SelectionRank _lastBestRank;
-};
-
 using SelectionTournamentSelector = TournamentSelector<RankedCreature<PrimitiveSelection, SelectionRank>>;
+using SelectionIterationStopCriterion = NoFitnessIncreaseStopCriterion<RankedCreature<PrimitiveSelection, SelectionRank>, SelectionRank>;
 using SelectionGA = GeneticAlgorithm<PrimitiveSelection, SelectionCreator, SelectionRanker, SelectionRank,
 	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
 using NodeGA = GeneticAlgorithm<PrimitiveSelection, CSGNodeCreator, SelectionRanker, SelectionRank,
@@ -898,7 +843,7 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 	double size_weight = params.size_weight;
 
 	SelectionTournamentSelector selector(2);
-	SelectionIterationStopCriterion criterion(params.max_count, 0.000001, params.max_iterations);
+	SelectionIterationStopCriterion criterion(params.max_count, SelectionRank(0.00000001), params.max_iterations);
 
 	auto primitives = decomposition.get_primitives(params.use_all_prims_for_ga);
 	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);

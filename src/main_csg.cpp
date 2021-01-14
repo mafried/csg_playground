@@ -20,8 +20,6 @@
 
 #include "optimizer_red.h"
 
-#include "pc_structure.h"
-
 
 lmu::ManifoldSet g_manifoldSet;
 int g_manifoldIdx = 0;
@@ -36,47 +34,6 @@ bool g_show_sdf = false;
 double g_voxel_size = 0.0;
 double g_t_inside = 0.0;
 double g_t_outside = 0.0;
-
-Eigen::Vector3d HSVtoRGB(int H, double S, double V)
-{
-	double C = S * V;
-	double X = C * (1 - abs(fmod(H / 60.0, 2) - 1));
-	double m = V - C;
-	double Rs, Gs, Bs;
-
-	if (H >= 0 && H < 60) {
-		Rs = C;
-		Gs = X;
-		Bs = 0;
-	}
-	else if (H >= 60 && H < 120) {
-		Rs = X;
-		Gs = C;
-		Bs = 0;
-	}
-	else if (H >= 120 && H < 180) {
-		Rs = 0;
-		Gs = C;
-		Bs = X;
-	}
-	else if (H >= 180 && H < 240) {
-		Rs = 0;
-		Gs = X;
-		Bs = C;
-	}
-	else if (H >= 240 && H < 300) {
-		Rs = X;
-		Gs = 0;
-		Bs = C;
-	}
-	else {
-		Rs = C;
-		Gs = 0;
-		Bs = X;
-	}
-
-	return Eigen::Vector3d((Rs + m), (Gs + m), (Bs + m));
-}
 
 lmu::Mesh computeMeshFromPrimitives2(const lmu::PrimitiveSet& ps, int primitive_idx = -1)
 {
@@ -186,22 +143,20 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	
 	lmu::PrimitiveSet ps;
-	if (g_primitiveSet.size() > 0)
-	{
+	if(g_primitiveSet.size() > 0)
 		ps.push_back(g_primitiveSet[g_prim_idx > 0 ? g_prim_idx : 0]);
+	
+	std::vector<Eigen::Matrix<double, 1, 6>> points;
+	std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
+	points.clear();
+	std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], g_t_inside, g_t_outside, g_voxel_size, points, true) << std::endl;
+	std::cout << "Show Result: " << g_show_res << std::endl;
+	std::cout << "====================" << std::endl;
 
-		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		std::cout << "Primitive score: " << (g_ranker ? g_ranker->get_per_prim_geo_score(ps, points, true)[0] : 0.0) << std::endl;
-		points.clear();
-		std::cout << "Primitive DH:" << g_ranker->model_sdf->get_dh_type(ps[0], g_t_inside, g_t_outside, g_voxel_size, points, true) << std::endl;
-		std::cout << "Show Result: " << g_show_res << std::endl;
-		std::cout << "====================" << std::endl;
-
-		viewer.data().clear();
-
-		auto points_pc = lmu::pointCloudFromVector(points);
-		viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
-	}
+	viewer.data().clear();
+	
+	auto points_pc = lmu::pointCloudFromVector(points);
+	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 
 	
 	//viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
@@ -210,7 +165,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	*/
 	
-	
+	//viewer.data().clear();
+
 	if (g_show_sdf)
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 
@@ -219,108 +175,45 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	
 	if (!g_manifoldSet.empty())
 	{
-		viewer.data().clear();
-
-		int cyl_n = 0;
-		int sph_n = 0;
-		int pla_n = 0;
 
 		for (int i = 0; i < g_manifoldSet.size(); ++i)
 		{
-			switch (g_manifoldSet[i]->type)
-			{
-			case lmu::ManifoldType::Cylinder:
-				cyl_n++;
-				break;
-			case lmu::ManifoldType::Plane:
-				pla_n++;
-				break;
-			case lmu::ManifoldType::Sphere:
-				sph_n++;
-				break;
-			}
-		}
-
-		int cyl_c = 0;
-		int sph_c = 0;
-		int pla_c = 0;
-
-		for (int i = 0; i < g_manifoldSet.size(); ++i)
-		{
-			//if (i == g_manifoldIdx)
+			//if (i != g_manifoldIdx)
 			//{
 			//	Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
 			//	cm.setZero();
 			//	viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-
-			//	std::cout << " Type: " << lmu::manifoldTypeToString(g_manifoldSet[g_manifoldIdx]->type) << std::endl;
-
 			//}
 			//else
+			//{
+			Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
+
+			for (int j = 0; j < cm.rows(); ++j)
 			{
-				switch (g_manifoldSet[i]->type)
+				Eigen::Vector3d c;
+				switch (i % 5)//((int)(g_manifoldSet[i]->type))
 				{
-				case lmu::ManifoldType::Cylinder:
-					cyl_c++;
+				case 4:
+					c = Eigen::Vector3d(1, 1, 1);
 					break;
-				case lmu::ManifoldType::Plane:
-					pla_c++;
+				case 0:
+					c = Eigen::Vector3d(0, 1, 0);
 					break;
-				case lmu::ManifoldType::Sphere:
-					sph_c++;
+				case 1:
+					c = Eigen::Vector3d(1, 1, 0);
+					break;
+				case 2:
+					c = Eigen::Vector3d(1, 0, 1);
+					break;
+				case 3:
+					c = Eigen::Vector3d(0, 0, 1);
 					break;
 				}
-
-				Eigen::Matrix<double, -1, 3> cm(g_manifoldSet[i]->pc.rows(), 3);
-
+				cm.row(j) << c.transpose();
+			}
 			
-				for (int j = 0; j < cm.rows(); ++j)
-				{
-					Eigen::Vector3d c;
-					switch (/*(int)g_manifoldSet[i]->type*/ i % 5)
-					{
-					case 0:
-						c = Eigen::Vector3d(0, 1, 0);
-						break;
-					case 1:
-						c = Eigen::Vector3d(1, 0, 0);
-						break;
-					case 2:
-						c = Eigen::Vector3d(.5, .5, .5);
-						break;
-					case 3:
-						c = Eigen::Vector3d(0, 0, 1);
-						break;
-					case 4:
-						c = Eigen::Vector3d(1.0,96.0/255.0, 0);
-						break;
-					}
-
-					double v = 0.0;
-					switch (g_manifoldSet[i]->type)
-					{
-					case lmu::ManifoldType::Cylinder:
-						v = (double)cyl_c / (double)cyl_n;
-						c = HSVtoRGB(200, 1.0, v);
-						break;
-					case lmu::ManifoldType::Plane:
-						v = (double)pla_c / (double)pla_n;
-						c = HSVtoRGB(22, 1.0, v);
-						break;
-					case lmu::ManifoldType::Sphere:
-						v = (double)sph_c / (double)sph_n;
-						c = HSVtoRGB(0, 0.0, v - 0.2);
-						break;
-					}
-
-					cm.row(j) << c.transpose();
-				}
-
-				
-				
-
-				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
-			}			
+			//viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
+			
 		}
 	}
 	
@@ -513,12 +406,7 @@ int main(int argc, char *argv[])
 
 		g_manifoldSet = ransacRes.manifolds;
 
-		int ii; 
-		std::cin >> ii;
-		structure_pointcloud(merged_cluster_pc, ransacRes.manifolds, 0.015);
-
-		
-		goto _LAUNCH;
+		//goto _LAUNCH;
 
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
@@ -530,12 +418,8 @@ int main(int argc, char *argv[])
 		}		
 		res_f << "FPS Duration=" << t.tick() << std::endl;
 
-		auto model_sdf = std::make_shared<lmu::ModelSDF>(merged_cluster_pc, prim_params.sdf_voxel_size, res_f);
-
-		//goto _LAUNCH;
-
 		// Extract primitives 
-		auto res = lmu::extractPrimitivesWithGA(ransacRes, merged_cluster_pc, model_sdf, prim_params, prim_ga_f);
+		auto res = lmu::extractPrimitivesWithGA(ransacRes, merged_cluster_pc, prim_params, prim_ga_f);
 		res_f << "PrimitiveGA Duration=" << t.tick() << std::endl;
 
 		// Filter primitives
@@ -549,9 +433,7 @@ int main(int argc, char *argv[])
 		primitives = primitives.without_duplicates();
 		res_f << "Duplicate Filter=" << t.tick() << std::endl;
 
-		t.tick();
 		primitives = od.remove_outliers(primitives, *res.ranker);
-		res_f << "Outlier Filter=" << t.tick() << std::endl;
 
 		t.tick();
 		primitives = sf.filter(primitives, *res.ranker);
@@ -625,6 +507,6 @@ int main(int argc, char *argv[])
 _LAUNCH:
 
 	viewer.data().point_size = 5.0;
-	viewer.core.background_color = Eigen::Vector4f(1.0, 1.0, 1.0, 1.0);
+	viewer.core.background_color = Eigen::Vector4f(0.5, 0.5, 0.5, 0.5);
 	viewer.launch();
 }
