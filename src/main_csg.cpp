@@ -232,6 +232,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().set_points(points_pc.leftCols(3), points_pc.rightCols(3));
 	*/
 	
+	
 	viewer.data().clear();
 
 	viewer.data().show_lines = true;
@@ -250,12 +251,16 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	if (!g_convex_clusters.empty())
 	{
-		for (const auto& p : g_convex_clusters[g_cluster_idx].planes)
-		{
+		//for (const auto& p : g_convex_clusters[g_cluster_idx].planes)
+		//{
 			//viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
-			viewer.data().add_points(p->pc.leftCols(3), p->pc.rightCols(3));
-		}
+			//viewer.data().add_points(p->pc.leftCols(3), p->pc.rightCols(3));
+		//
+		viewer.data().set_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+	
 	}
+
+	update(viewer);
 
 	return true;
 
@@ -295,12 +300,13 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 		std::cout << "CLUSTER: " << g_cluster_idx << ": " << "Planes: " << g_convex_clusters[g_cluster_idx].planes.size() << std::endl;
 		viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
 
-		auto c = g_convex_clusters[g_cluster_idx].compute_center(*msdf);
-		viewer.data().add_points(c.transpose(), Eigen::Vector3d(1, 0, 1).transpose());
+		//auto c = g_convex_clusters[g_cluster_idx].compute_center(*msdf);
+		//viewer.data().add_points(c.transpose(), Eigen::Vector3d(1, 0, 1).transpose());
 
 		auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
 		if (!mesh.empty())
 		{
+			std::cout << "DA" << std::endl;
 			viewer.data().set_mesh(mesh.vertices, mesh.indices);
 		}
 
@@ -309,12 +315,16 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	}
 
 	update(viewer);
+
 	
-	//return true;
+	
+	return true;
 
 	/*
 	if (!g_manifoldSet.empty())
 	{
+		std::cout << "TEST" << std::endl;
+
 		viewer.data().clear();
 
 		int cyl_n = 0;
@@ -416,8 +426,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 				viewer.data().add_points(g_manifoldSet[i]->pc.leftCols(3), cm);
 			}			
 		}
-	}
-	*/	
+	}*/
+	
 
 	/*
 	auto mesh = computeMeshFromPrimitives2(g_primitiveSet, g_prim_idx);
@@ -570,6 +580,7 @@ int main(int argc, char *argv[])
 		std::vector<lmu::Cluster> clusters;
 		if (use_clusters)
 		{
+			std::cout << "Read clusters from " << path << std::endl;
 			clusters = lmu::readClusterFromFile(path + "clusters.txt", 1.0);
 			
 			for (auto& c : clusters)
@@ -630,8 +641,10 @@ int main(int argc, char *argv[])
 		
 		res_f << "RANSAC Duration=" << t.tick() << std::endl;
 		res_f << "Number of Manifolds=" << ransacRes.manifolds.size() << std::endl;
-		
+
 		//goto _LAUNCH;
+
+		
 		
 		// =============================
 		// Get (weakly) convex clusters.
@@ -674,7 +687,9 @@ int main(int argc, char *argv[])
 		if (convex_clusters_from_file)
 		{
 			// Load convex clusters. 
-			convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", false);
+			std::cout << "Read convex clusters from " << (path + "convex_clusters.ply") << std::endl;
+			convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", true);
+			std::cout << "Done" << std::endl;
 
 			std::vector<lmu::PointCloud> convex_cluster_pcs;
 			std::transform(convex_clusters.begin(), convex_clusters.end(), std::back_inserter(convex_cluster_pcs), [](const auto& c) { return c.pc; });
@@ -702,7 +717,6 @@ int main(int argc, char *argv[])
 			//std::transform(ransacRes.manifolds.begin(), ransacRes.manifolds.end(), std::back_inserter(m_pcs), [](const auto& c) { return c->pc; });
 			//g_res_pc_2 = lmu::mergePointClouds(m_pcs);
 			
-
 			//std::vector<lmu::PointCloud> cluster_pcs;
 			//std::transform(convex_clusters.begin(), convex_clusters.end(), std::back_inserter(cluster_pcs), [](const auto& c) { return c.pc; });
 			//g_res_pc_2 = lmu::mergePointClouds(cluster_pcs);
@@ -782,13 +796,15 @@ int main(int argc, char *argv[])
 			convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_min_clusters, prim_params.am_max_clusters, res_f);
 		}
 
-		reassign_convex_cluster_pointclouds(convex_clusters, full_pc);
 
+
+		reassign_convex_cluster_pointclouds(convex_clusters, full_pc);
 		plane_graph.to_file("plane_graph.gv");
 
 		write_convex_clusters_to_ply("convex_clusters.ply", convex_clusters);
 
 		g_convex_clusters = convex_clusters;
+
 
 		std::cout << "Convex Clusters: " << convex_clusters.size() << std::endl;
 			
