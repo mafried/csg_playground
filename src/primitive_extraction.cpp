@@ -133,7 +133,7 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 	PrimitiveSetTournamentSelector selector(2);
 	PrimitiveSetIterationStopCriterion criterion(params.max_count, PrimitiveSetRank(0.00001), params.max_iterations);
 	PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, 
-		params.polytope_prob, params.min_polytope_planes, params.max_polytope_planes, Eigen::Vector3d(0,0,0), ManifoldSet());
+		params.polytope_prob, params.neighbor_prob, params.min_polytope_planes, params.max_polytope_planes, Eigen::Vector3d(0,0,0), ManifoldSet());
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(farthestPointSampling(plane_pointcloud, params.num_geo_score_samples),
 		params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf, 
@@ -175,7 +175,7 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
-	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, 
+	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob, double neighbor_prob, int min_polytope_planes,
 	int max_polytope_planes, const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes) :
 	plane_graph(plane_graph),
 	intraCrossProb(intraCrossProb),
@@ -186,6 +186,7 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, dou
 	angleEpsilon(angleEpsilon),
 	minDistanceBetweenParallelPlanes(minDistanceBetweenParallelPlanes),
 	polytope_prob(polytope_prob),
+	neighbor_prob(neighbor_prob),
 	min_polytope_planes(min_polytope_planes), 
 	max_polytope_planes(max_polytope_planes),
 	polytope_center(polytope_center),
@@ -548,8 +549,11 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		ManifoldSet planes;
 		ManifoldSet usable_cluster_planes = cluster_planes;
 		
+		std::bernoulli_distribution bdist(neighbor_prob);
+
+
 		int max_planes = du(rndEngine, parmu_t{ min_polytope_planes, max_polytope_planes });
-		int max_fixed_planes = du(rndEngine, parmu_t{ 0, 1}) == 1 ? du(rndEngine, parmu_t{ 1, (int)usable_cluster_planes.size() }) : (int)usable_cluster_planes.size();
+		int max_fixed_planes = bdist(rndEngine) ? du(rndEngine, parmu_t{ 1, (int)usable_cluster_planes.size() }) : (int)usable_cluster_planes.size();
 		int num_fixed_planes = 0;
 		ManifoldPtr cur_plane;
 		for( int i = 0; i < max_planes; ++i)
@@ -1510,7 +1514,7 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 
 	t.tick();
 	auto mesh = lmu::createFromPointCloud(pc);
-	s << "Poisson Reconstruction=" << t.tick() << std::endl;
+	//s << "Poisson Reconstruction=" << t.tick() << std::endl;
 
 	if (!mesh.empty())
 	{

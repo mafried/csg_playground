@@ -10,12 +10,18 @@
 
 using namespace lmu;
 
-std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double scaleFactor)
+std::vector<Cluster> lmu::readClusterFromFile(const std::string& file, double scaleFactor, bool with_header)
 {
 	std::vector<Cluster> res;
 
 	std::ifstream s(file);
-	
+
+	if (with_header)
+	{	
+		s.ignore(10000, '\n');
+		s.ignore(10000, '\n');
+	}
+
 	size_t numClusters;
 	s >> numClusters;
 

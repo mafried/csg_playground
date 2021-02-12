@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 import polyscope as ps
 import numpy as np
-from community import community_louvain
+#from community import community_louvain
 from math import sqrt
 from scipy import fftpack
 from sklearn.cluster import SpectralClustering
@@ -14,7 +14,7 @@ from numpy import linalg as LA
 import matplotlib.pyplot as plt
 
 import networkx as nx
-from pyvis.network import Network
+#from pyvis.network import Network
 
 
 from clustering import read_pointcloud, get_clusters, write_clusters, get_clusters_and_write_to_file, \
@@ -78,10 +78,11 @@ def read_sparse_af(file_path, n):
 
 if __name__ == '__main__':
 
+    '''
     path = Path('C:/') / 'Projekte' / 'csg_playground_build' / 'RelWithDebInfo'
     output_file = 'clusters.dat'
 
-    points, cluster_labels = read_clusters_from_ply('C:/Users/friedrich/Downloads/experiments (1)/experiments/fig4PolyFit/convex_clusters.ply')
+    points, cluster_labels = read_clusters_from_ply('C:/Users/friedrich/Downloads/convex_clusters (1).ply')
 
     ps.init()
 
@@ -89,7 +90,9 @@ if __name__ == '__main__':
     pc.add_scalar_quantity("cluster labels", cluster_labels, enabled=False)
 
     ps.show()
+    '''
 
+    path = Path('\\\\mobile_fs.mobile.ifi.lmu.de\\friedrich\\Dissertation\\primitive_extraction\\data_sets\\m12')
 
     input_pc = read_pointcloud(path / 'pc_af.dat', delimiter=' ', hasHeader=True)
 
@@ -104,7 +107,7 @@ if __name__ == '__main__':
     #plt.show()
 
     cluster_labels, num_clusters, cluster_score = \
-        get_clusters_grid_search(afm, ClusterTechnique.RW, EigenVectorClustering.KMEANS, [10])#[2,3,3,4,5,6,7,9,10,11,12,13,14,15])
+        get_clusters_grid_search(afm, ClusterTechnique.RW, EigenVectorClustering.KMEANS, [8,9,10,11,12])#[2,3,3,4,5,6,7,9,10,11,12,13,14,15])
 
 
     write_clusters_to_ply('test.ply', input_pc, cluster_labels)

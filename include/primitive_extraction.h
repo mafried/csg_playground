@@ -102,7 +102,7 @@ namespace lmu
 	{
 		PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
-			double minDistanceBetweenParallelPlanes, double polytope_prob, int min_polytope_planes, int max_polytope_planes,
+			double minDistanceBetweenParallelPlanes, double polytope_prob, double neighbor_prob, int min_polytope_planes, int max_polytope_planes,
 			const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
@@ -144,6 +144,7 @@ namespace lmu
 		int min_polytope_planes;
 		int max_polytope_planes;
 		double polytope_prob;
+		double neighbor_prob;
 
 		std::vector<double> mutationDistribution;
 
@@ -284,6 +285,8 @@ namespace lmu
 		double geo_weight;// = 0.0;
 		double per_prim_geo_weight;// = 1.0;//0.1;
 		double per_prim_coverage_weight;
+
+		double neighbor_prob;
 
 		int maxPrimitiveSetSize;// = 75;
 		double polytope_prob; // = 0.0;

@@ -25,7 +25,7 @@ namespace lmu
 	};
 
 
-	std::vector<Cluster> readClusterFromFile(const std::string& file, double scaleFactor);
+	std::vector<Cluster> readClusterFromFile(const std::string& file, double scaleFactor, bool with_header);
 
 	std::vector<lmu::PointCloud> readRawPointCloudClusterFromFile(const std::string& file, double scale_factor = 1.0);
 

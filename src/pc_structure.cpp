@@ -262,6 +262,8 @@ lmu::PlaneGraph lmu::create_plane_graph(const lmu::ManifoldSet& ms, lmu::PointCl
 {
 	Pwn_vector points = to_cgal_points(ms); //always the same number of points (tested).
 
+	std::cout << "POINTS: " << points.size() << std::endl;
+
 	if (epsilon == 0.0)
 	{
 		// factor 2.0 was found out empirically.

@@ -343,7 +343,7 @@ namespace lmu
 	struct IFSphere : public ImplicitFunction 
 	{
 		IFSphere(const Eigen::Affine3d& transform, double radius, const std::string& name, double displacement = 0.0) : 
-			ImplicitFunction(transform, Mesh(), name),
+			ImplicitFunction(transform, createSphere(transform, radius,200,200), name),
 			_radius(radius),
 			_displacement(displacement)
 		{
