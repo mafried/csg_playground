@@ -205,7 +205,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 	update(viewer);
-	return true;
+	//return true;
 
 
 	std::cout << "Manifold Idx: " << g_manifoldIdx << std::endl;
@@ -244,12 +244,13 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	viewer.data().show_lines = true;
 	viewer.data().add_edges(lmu::g_p1, lmu::g_p2, lmu::g_c);
 	
+	/*
 	if (g_show_sdf)
 	{
 		viewer.data().set_points(g_res_pc.leftCols(3), g_res_pc.rightCols(3));
 		viewer.data().add_points(g_res_pc_2.leftCols(3), g_res_pc_2.rightCols(3));
 	}
-
+	*/
 	//if (!g_manifoldSet.empty())
 	//{
 	//	viewer.data().add_points(g_manifoldSet[g_manifoldIdx]->pc.leftCols(3), Eigen::Vector3d(1.0,0.0,0.0));
@@ -257,18 +258,18 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 
 	if (!g_convex_clusters.empty())
 	{
-		//for (const auto& p : g_convex_clusters[g_cluster_idx].planes)
-		//{
-			//viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
-			//viewer.data().add_points(p->pc.leftCols(3), p->pc.rightCols(3));
-		//
+		for (const auto& p : g_convex_clusters[g_cluster_idx].planes)
+		{
+			viewer.data().add_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
+			viewer.data().add_points(p->pc.leftCols(3), p->pc.rightCols(3));
+		}
 		viewer.data().set_points(g_convex_clusters[g_cluster_idx].pc.leftCols(3), g_convex_clusters[g_cluster_idx].pc.rightCols(3));
 	
 	}
 
 	update(viewer);
 
-	//return true;
+	return true;
 
 	/*
 	if (!g_convex_clusters.empty())
@@ -514,6 +515,9 @@ int main(int argc, char *argv[])
 	ng_params.use_redundancy_removal = s.getBool("NodeGeneration", "UseRedundancyRemoval", false);
 
 	std::string path = s.getStr("Data", "InputFolder", "C:/Projekte/visigrapp2020/data/");
+
+	std::string convex_cluster_file = s.getStr("Data", "ConvexClusterFile", "");
+
 	std::string out_path = s.getStr("Data", "OutputFolder", "");
 	std::string source = s.getStr("Data", "Source", "pointcloud");
 	std::transform(source.begin(), source.end(), source.begin(), ::tolower);
@@ -525,7 +529,10 @@ int main(int argc, char *argv[])
 	bool convex_clusters_from_file = s.getBool("Data", "ConvexClustersFromFile", false);
 	int num_resampling_points = s.getInt("Data", "NumResamplingPoints", 3000);
 	bool create_only_affinity_matrix = s.getBool("Data", "CreateOnlyAffinityMatrix", false);
+	double affinity_epsilon = s.getDouble("Data", "AffinityMatrixEpsilon", 0.0001);
+	bool affinity_normal_check = s.getBool("Data", "AffinityMatrixNormalCheck", true);
 
+	double pc_structure_epsilon = s.getDouble("Data", "StructureEpsilon", 0.0);
 
 	lmu::PrimitiveGaParams prim_params;
 
@@ -745,13 +752,32 @@ int main(int argc, char *argv[])
 		{
 			manifolds = ransacRes.manifolds;
 
-			plane_graph = lmu::create_plane_graph(manifolds, g_res_pc, g_res_pc);
+			t.tick();
+
+			lmu::PointCloud dummy_pc;
+
+			lmu::ManifoldSet plane_manifolds;
+			std::copy_if(manifolds.begin(), manifolds.end(), std::back_inserter(plane_manifolds), [](const auto& m) {return  m->type == lmu::ManifoldType::Plane; });
+
+			plane_graph = lmu::create_plane_graph(plane_manifolds, g_res_pc, dummy_pc, pc_structure_epsilon);
+
+			res_f << "Plane Graph Creation=" << t.tick() << std::endl;
+
+			lmu::writePointCloudXYZ(out_path + "structured.xyz", g_res_pc);
+
+			t.tick();
 
 			lmu::resample_proportionally(plane_graph.planes(), num_resampling_points);
 
-			auto aff_mat = lmu::get_affinity_matrix_with_triangulation(plane_graph.plane_points(), plane_graph.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
+			res_f << "Proportional Resampling=" << t.tick() << std::endl;
+
+			t.tick();
+
+			auto aff_mat = lmu::get_affinity_matrix_with_triangulation(plane_graph.plane_points(), plane_graph.planes(), affinity_normal_check, affinity_epsilon);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
 			std::string afm_path = out_path + "af.dat";
 			std::string pcaf_path = out_path + "pc_af.dat";
+
+			res_f << "Affinity Matrix Computation=" << t.tick() << std::endl;
 
 			lmu::writePointCloud(pcaf_path, plane_graph.plane_points());
 			lmu::write_affinity_matrix(afm_path, aff_mat);
@@ -768,7 +794,7 @@ int main(int argc, char *argv[])
 		lmu::ManifoldSet plane_manifolds;
 		std::copy_if(manifolds.begin(), manifolds.end(), std::back_inserter(plane_manifolds), [](const auto& m) {return  m->type == lmu::ManifoldType::Plane; });
 
-		plane_graph = lmu::create_plane_graph(plane_manifolds, g_res_pc, full_pc);
+		plane_graph = lmu::create_plane_graph(plane_manifolds, g_res_pc, full_pc, pc_structure_epsilon);
 		std::cout << "Full: " << full_pc.rows() << std::endl;
 
 		res_f << "Plane Graph Creation=" << t.tick() << std::endl;
@@ -778,9 +804,11 @@ int main(int argc, char *argv[])
 
 			if (convex_clusters_from_file)
 			{
+				convex_cluster_file = convex_cluster_file == "" ? path + "convex_clusters.ply" : convex_cluster_file;
+
 				// Load convex clusters. 
-				std::cout << "Read convex clusters from " << (path + "convex_clusters.ply") << std::endl;
-				convex_clusters = lmu::get_convex_clusters_without_planes(path + "convex_clusters.ply", true);
+				std::cout << "Read convex clusters from " << convex_cluster_file << std::endl;
+				convex_clusters = lmu::get_convex_clusters_without_planes(convex_cluster_file, true);
 				std::cout << "Done" << std::endl;
 
 				std::vector<lmu::PointCloud> convex_cluster_pcs;
@@ -825,8 +853,8 @@ int main(int argc, char *argv[])
 					std::back_inserter(per_manifold_search), [](const auto& m) {return lmu::NearestNeighborSearch(m->pc); });
 
 				for (auto& cc : convex_clusters)
-				{
-				std:unordered_set<lmu::ManifoldPtr> per_cluster_manifolds;
+				{					
+					std:unordered_set<lmu::ManifoldPtr> per_cluster_manifolds;
 					for (int i = 0; i < cc.pc.rows(); ++i)
 					{
 						double closest_manifold_d = std::numeric_limits<double>::max();
@@ -888,12 +916,35 @@ int main(int argc, char *argv[])
 				convex_clusters = lmu::get_convex_clusters(plane_graph, prim_params.cluster_script_folder, prim_params.am_min_clusters, prim_params.am_max_clusters, res_f);
 			}
 
-
+		
+			t.tick();
 
 			reassign_convex_cluster_pointclouds(convex_clusters, full_pc);
+			
+			res_f << "Pointcloud Reassignment=" << t.tick() << std::endl;
+
 			plane_graph.to_file(out_path + "plane_graph.gv");
 
+			//Filter convex clusters 
+			std::vector<lmu::ConvexCluster> filtered_convex_clusters;
+			for (const auto& cc : convex_clusters)
+			{
+				lmu::Cluster cl(cc.pc, 0, { lmu::ManifoldType::Plane});
+				auto plane_clusters = { cl };
+				auto plane_ransac = lmu::extractManifoldsWithOrigRansac(plane_clusters, params, false, ransac_iterations, ransac_params);
+				if (plane_ransac.manifolds.size() <= 1)
+				{
+					std::cout << "cluster skipped. Detected planes " << plane_ransac.manifolds.size() << "." << std::endl;
+					continue;
+				}
+
+				filtered_convex_clusters.push_back(cc);
+			}
+			convex_clusters = filtered_convex_clusters;
+			std::cout << "Number of Convex Clusters after Filtering: " << convex_clusters.size() << std::endl;
+
 			write_convex_clusters_to_ply(out_path + "convex_clusters.ply", convex_clusters);
+
 		}
 		else //without convex clusters. 
 		{
@@ -905,6 +956,8 @@ int main(int argc, char *argv[])
 
 		g_convex_clusters = convex_clusters;
 
+
+		//goto _LAUNCH;
 
 		std::cout << "Convex Clusters: " << convex_clusters.size() << std::endl;
 		
@@ -977,6 +1030,17 @@ int main(int argc, char *argv[])
 		{
 			igl::writeOBJ(out_path + "res_mesh_" + std::to_string(i++) + ".obj", npp.imFunc->meshCRef().vertices, npp.imFunc->meshCRef().indices);
 		}
+
+		auto model_sdf = std::make_shared<lmu::ModelSDF>(full_pc, prim_params.sdf_voxel_size, res_f);
+
+		auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
+			lmu::farthestPointSampling(full_pc, prim_params.num_geo_score_samples),
+			prim_params.max_dist, prim_params.maxPrimitiveSetSize, prim_params.ranker_voxel_size, prim_params.allow_cube_cutout, model_sdf,
+			prim_params.geo_weight, prim_params.per_prim_geo_weight, prim_params.per_prim_coverage_weight, prim_params.size_weight);
+
+		auto rank = ranker->rank(polytopes);
+		res_f << "Ranking=" << rank << std::endl;
+		std::cout << "Ranking: " << rank << std::endl;
 		
 		/*
 

@@ -278,6 +278,8 @@ lmu::PointCloud lmu::readPointCloudXYZ(const std::string& file, double scaleFact
 {
   std::ifstream s(file);
 
+  std::cout << "IS OPEN: " << s.is_open() << std::endl;
+
   std::vector<std::vector<double>> pwn;
   while (!s.eof()) {
     std::vector<double> tmp(6);

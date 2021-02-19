@@ -411,7 +411,7 @@ bool is_close(const K::Point_3& p, TriangleTree& tree, double epsilon)
 }
 
 Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lmu::PointCloud & pc,	const lmu::ManifoldSet& ms, 
-	bool normal_check)
+	bool normal_check, double epsilon)
 {
 	auto planes = to_cgal_planes(ms);
 	auto tree = get_triangle_tree(ms, true);
@@ -428,12 +428,13 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 	}
 
 	std::cout << "num points: " << pc.rows() << std::endl;
+	std::cout << "epsilon: " << epsilon << std::endl;
 
 	std::vector<Eigen::Triplet<double>> triplets;
 	triplets.reserve(pc.rows()); //TODO: better estimation?
 	Eigen::SparseMatrix<double> am(pc.rows(), pc.rows());
 
-	double epsilon = 0.0001; // 0.000001;
+	//double epsilon = 0.0001; // 0.000001;
 	int c = 0;
 	int wrong_side_c = 0;
 	int point_vis_c = 0;
@@ -458,7 +459,7 @@ Eigen::SparseMatrix<double> lmu::get_affinity_matrix_with_triangulation(const lm
 			Eigen::Vector3d ep0(pc.row(i).leftCols(3));
 			Eigen::Vector3d ep1(pc.row(j).leftCols(3));
 
-			if (en0.normalized().dot((ep1 - ep0).normalized()) > epsilon || en1.normalized().dot((ep0 - ep1).normalized()) > epsilon)
+			if (normal_check && (en0.normalized().dot((ep1 - ep0).normalized()) > epsilon || en1.normalized().dot((ep0 - ep1).normalized()) > epsilon))
 			{
 				// not front-facing (thus not visible)
 				wrong_side_c++;				

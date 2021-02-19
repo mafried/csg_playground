@@ -1272,19 +1272,23 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-
-	if (db(rndEngine(), parmb_t{ 0.5 })) // Here is the problem! Maybe we need a better plane normal estimation.
-	{	
+	int plane_method = du(rndEngine(), parmu_t{ 0, 2});
+	//std::cout << "plane method: " << plane_method << std::endl;
+	switch (plane_method)
+	{
+	case 0:
+	{
 		for (const auto& plane : planes)
 		{
-			int point_idx = du(rndEngine(), parmu_t{ 0, (int)plane->pc.rows()-1 });
-						
+			int point_idx = du(rndEngine(), parmu_t{ 0, (int)plane->pc.rows() - 1 });
+
 			Eigen::Vector3d point_n(plane->pc.row(point_idx).rightCols(3));
 			n.push_back(point_n);
-			p.push_back(plane->p);			
+			p.push_back(plane->p);
 		}
 	}
-	else
+	break;
+	case 1:
 	{
 
 		// Get point that is guaranteed to be inside of the polytope. 
@@ -1305,6 +1309,29 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 			n.push_back(new_plane->n);
 			p.push_back(new_plane->p);
 		}
+	}
+	break;
+	case 2:
+	{
+		for (int i = 0; i < planes.size(); ++i)
+		{
+			auto new_plane = std::make_shared<Manifold>(*planes[i]);
+
+			// Find the normal to the plane by majority voting
+			Eigen::Vector3d nm = findNormalByMajority(planes[i]->pc);
+
+			// Flip plane normal if it disagrees with the point-cloud normal
+			double d = nm.dot(new_plane->n);
+			if (d < 0.0)
+			{
+				new_plane->n = -1.0 * new_plane->n;
+			}
+
+			n.push_back(new_plane->n);
+			p.push_back(new_plane->p);
+		}
+	}
+	break;
 	}
 	
 	auto polytope = std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), p, n, "");

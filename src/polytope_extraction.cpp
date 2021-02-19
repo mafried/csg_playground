@@ -169,7 +169,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters_without_planes(const st
 	return convex_clusters;
 }
 
-void lmu::write_convex_clusters_to_ply(const std::string & cluster_file, const std::vector<lmu::ConvexCluster>& convex_clusters, const std::string& comment)
+void lmu::write_convex_clusters_to_ply(const std::string& cluster_file, const std::vector<lmu::ConvexCluster>& convex_clusters, const std::string& comment)
 {
 	static std::vector<std::array<int, 4>> colors =
 	{
@@ -183,7 +183,11 @@ void lmu::write_convex_clusters_to_ply(const std::string & cluster_file, const s
 		{231, 255, 0, 255},
 		{255, 0, 0, 255},
 		{255, 0, 139, 255},
-		{255, 139, 0, 255}
+		{255, 139, 0, 255},
+		{100, 100, 0, 255},
+		{0, 100, 0, 255},
+		{0, 100, 100, 255},
+		{100, 100, 100, 255}
 	};
 
 	std::ofstream s(cluster_file);
@@ -241,7 +245,7 @@ std::vector<lmu::ConvexCluster> lmu::get_convex_clusters(lmu::PlaneGraph& pg, co
 	
 	t.tick();
 
-	auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
+	auto aff_mat = lmu::get_affinity_matrix_with_triangulation(pc, pg.planes(), true, 0.0001);//lmu::get_affinity_matrix(pc, pg.planes(), true, debug_pc);
 	//auto aff_mat = lmu::get_affinity_matrix_with_rays_2(pg.planes(), true);
 
 	info << "Affinity Matrix Creation=" << t.tick() << std::endl;
@@ -569,24 +573,29 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 
 	// Initialize polytope creator.
 	initializePolytopeCreator();
-
-	int cluster_idx = 0;
+	
+	//filtered convex clusters.
+	std::vector<ConvexCluster> filtered_convex_clusters;
 	for (const auto& cc : convex_clusters)
-	{		
+	{
+		std::cout << "Cluster Planes: " << cc.planes.size() << std::endl;
+
 		if (cc.planes.size() < 4 || cc.pc.rows() == 0)
 		{
 			std::cout << "cluster skipped. Planes: " << cc.planes.size() << " Points: " << cc.pc.rows() << std::endl;
-			cluster_idx++;
 			continue;
 		}
 
-		//if (cluster_idx == 1)
-		//{
-			auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
-			if (!polytopes.empty())
-				ps.insert(ps.end(), polytopes.begin(), polytopes.end());
-		//}
+		filtered_convex_clusters.push_back(cc);
+	}
 
+	int cluster_idx = 0;
+	for (const auto& cc : filtered_convex_clusters)
+	{		
+		auto polytopes = generate_cluster_polytopes(cc, cluster_idx, plane_graph, params, s);
+		if (!polytopes.empty())
+			ps.insert(ps.end(), polytopes.begin(), polytopes.end());
+		
 		cluster_idx++;
 	}
 
