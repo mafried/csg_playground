@@ -531,6 +531,8 @@ int main(int argc, char *argv[])
 	bool create_only_affinity_matrix = s.getBool("Data", "CreateOnlyAffinityMatrix", false);
 	double affinity_epsilon = s.getDouble("Data", "AffinityMatrixEpsilon", 0.0001);
 	bool affinity_normal_check = s.getBool("Data", "AffinityMatrixNormalCheck", true);
+	bool filter_convex_clusters = s.getBool("Data", "FilterConvexClusters", false);
+	int min_planes_per_convex_cluster = s.getInt("Data", "MinPlanesPerConvexCluster", 1);
 
 	double pc_structure_epsilon = s.getDouble("Data", "StructureEpsilon", 0.0);
 
@@ -543,6 +545,8 @@ int main(int argc, char *argv[])
 	prim_params.per_prim_geo_weight = s.getDouble("Primitives", "PerPrimGeoWeight", 1.0);// = 1.0;//0.1;
 	prim_params.per_prim_coverage_weight = s.getDouble("Primitives", "PerPrimCoverageWeight", 0.0);// = 1.0;//0.1;
 
+	prim_params.normal_orientation_method = s.getInt("Primitives", "NormalOrientationMethod", -1);
+	
 	prim_params.num_geo_score_samples = s.getInt("Primitives", "NumGeoScoreSamples", 100);
 
 	prim_params.maxPrimitiveSetSize = s.getInt("Primitives", "MaxPrimitiveSetSize", 75);// = 75;
@@ -926,22 +930,25 @@ int main(int argc, char *argv[])
 			plane_graph.to_file(out_path + "plane_graph.gv");
 
 			//Filter convex clusters 
-			std::vector<lmu::ConvexCluster> filtered_convex_clusters;
-			for (const auto& cc : convex_clusters)
+			if (filter_convex_clusters)
 			{
-				lmu::Cluster cl(cc.pc, 0, { lmu::ManifoldType::Plane});
-				auto plane_clusters = { cl };
-				auto plane_ransac = lmu::extractManifoldsWithOrigRansac(plane_clusters, params, false, ransac_iterations, ransac_params);
-				if (plane_ransac.manifolds.size() <= 1)
+				std::vector<lmu::ConvexCluster> filtered_convex_clusters;
+				for (const auto& cc : convex_clusters)
 				{
-					std::cout << "cluster skipped. Detected planes " << plane_ransac.manifolds.size() << "." << std::endl;
-					continue;
-				}
+					lmu::Cluster cl(cc.pc, 0, { lmu::ManifoldType::Plane });
+					auto plane_clusters = { cl };
+					auto plane_ransac = lmu::extractManifoldsWithOrigRansac(plane_clusters, params, false, ransac_iterations, ransac_params);
+					if (plane_ransac.manifolds.size() < min_planes_per_convex_cluster)
+					{
+						std::cout << "cluster skipped. Detected planes " << plane_ransac.manifolds.size() << "." << std::endl;
+						continue;
+					}
 
-				filtered_convex_clusters.push_back(cc);
+					filtered_convex_clusters.push_back(cc);
+				}
+				convex_clusters = filtered_convex_clusters;
+				std::cout << "Number of Convex Clusters after Filtering: " << convex_clusters.size() << std::endl;
 			}
-			convex_clusters = filtered_convex_clusters;
-			std::cout << "Number of Convex Clusters after Filtering: " << convex_clusters.size() << std::endl;
 
 			write_convex_clusters_to_ply(out_path + "convex_clusters.ply", convex_clusters);
 
@@ -951,6 +958,7 @@ int main(int argc, char *argv[])
 			lmu::ManifoldSet planes;
 			std::copy_if(ransacRes.manifolds.begin(), ransacRes.manifolds.end(), std::back_inserter(planes), [](const lmu::ManifoldPtr& m) { return m->type == lmu::ManifoldType::Plane; });
 			lmu::ConvexCluster cc(planes, full_pc, true);
+			lmu::writePointCloudXYZ("cc.xyz", full_pc);
 			convex_clusters = { cc };
 		}
 
@@ -1031,6 +1039,7 @@ int main(int argc, char *argv[])
 			igl::writeOBJ(out_path + "res_mesh_" + std::to_string(i++) + ".obj", npp.imFunc->meshCRef().vertices, npp.imFunc->meshCRef().indices);
 		}
 
+		
 		auto model_sdf = std::make_shared<lmu::ModelSDF>(full_pc, prim_params.sdf_voxel_size, res_f);
 
 		auto ranker = std::make_shared<lmu::PrimitiveSetRanker>(
@@ -1041,6 +1050,12 @@ int main(int argc, char *argv[])
 		auto rank = ranker->rank(polytopes);
 		res_f << "Ranking=" << rank << std::endl;
 		std::cout << "Ranking: " << rank << std::endl;
+
+		auto target_mesh = model_sdf->surface_mesh; 
+		
+		igl::writeOBJ(out_path + "target_mesh.obj", target_mesh.vertices, target_mesh.indices);
+		
+
 		
 		/*
 

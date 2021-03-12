@@ -433,7 +433,7 @@ lmu::PrimitiveSet generate_polytopes_with_ga(const lmu::ConvexCluster convex_clu
 	lmu::PrimitiveSetTournamentSelector selector(2);
 	lmu::PrimitiveSetIterationStopCriterion criterion(params.max_count, lmu::PrimitiveSetRank(0.00001), params.max_iterations);
 	lmu::PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, params.maxPrimitiveSetSize, angle_t, 0.001,
-		params.polytope_prob, params.neighbor_prob, params.min_polytope_planes, params.max_polytope_planes, polytope_center, convex_cluster.planes);
+		params.polytope_prob, params.neighbor_prob, params.min_polytope_planes, params.max_polytope_planes, polytope_center, convex_cluster.planes, params.normal_orientation_method);
 
 	std::cout << "Geo Weight: " << params.geo_weight << " Per Prim Weight: " << params.per_prim_geo_weight << " Size weight: " << params.size_weight << std::endl;
 	lmu::PrimitiveSetPopMan popMan(*ranker, params.maxPrimitiveSetSize, params.geo_weight, params.per_prim_geo_weight, params.per_prim_coverage_weight, params.size_weight,
@@ -580,7 +580,7 @@ lmu::PrimitiveSet lmu::generate_polytopes(const std::vector<ConvexCluster>& conv
 	{
 		std::cout << "Cluster Planes: " << cc.planes.size() << std::endl;
 
-		if (cc.planes.size() < 4 || cc.pc.rows() == 0)
+		if (cc.planes.size() < 3 || cc.pc.rows() == 0)
 		{
 			std::cout << "cluster skipped. Planes: " << cc.planes.size() << " Points: " << cc.pc.rows() << std::endl;
 			continue;

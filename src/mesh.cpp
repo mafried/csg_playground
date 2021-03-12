@@ -560,6 +560,8 @@ Mesh lmu::createFromPointCloud(const PointCloud & pc)
 		(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
 	std::cout << "Poisson surface average spacing: " << average_spacing << std::endl;
 
+	//average_spacing *= 10.0;
+
 	Point_3 inner_point = function.get_inner_point();
 	Sphere_3 bsphere = function.bounding_sphere();
 	FT radius = std::sqrt(bsphere.squared_radius());
@@ -584,8 +586,7 @@ Mesh lmu::createFromPointCloud(const PointCloud & pc)
 	C2t3 c2t3(tr);
 	CGAL::make_surface_mesh(c2t3,
 		surface,
-		criteria,
-		CGAL::Manifold_with_boundary_tag());
+		criteria, CGAL::Manifold_with_boundary_tag());
 
 	// Converts to polyhedron
 	Polyhedron_3 output_mesh;

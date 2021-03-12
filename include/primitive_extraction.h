@@ -103,7 +103,7 @@ namespace lmu
 		PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb, const std::vector<double>& mutationDistribution,
 			int maxMutationIterations, int maxCrossoverIterations, int maxPrimitiveSetSize, double angleEpsilon, 
 			double minDistanceBetweenParallelPlanes, double polytope_prob, double neighbor_prob, int min_polytope_planes, int max_polytope_planes,
-			const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes);
+			const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes, int normal_orientation_method);
 
 		int getRandomPrimitiveIdx(const PrimitiveSet & ps) const;
 
@@ -145,6 +145,8 @@ namespace lmu
 		int max_polytope_planes;
 		double polytope_prob;
 		double neighbor_prob;
+
+		int normal_orientation_method;
 
 		std::vector<double> mutationDistribution;
 
@@ -196,6 +198,8 @@ namespace lmu
 		~ModelSDF();
 
 		void recreate_from_mesh(const Mesh& m);
+
+		void recreate_from_points(const PointCloud& pc);
 
 		double distance(const Eigen::Vector3d& p) const;
 		SDFValue sdf_value(const Eigen::Vector3d& p) const;
@@ -281,6 +285,8 @@ namespace lmu
 
 	struct PrimitiveGaParams
 	{
+		int normal_orientation_method;
+
 		double size_weight;// = 0.1;
 		double geo_weight;// = 0.0;
 		double per_prim_geo_weight;// = 1.0;//0.1;
@@ -325,7 +331,7 @@ namespace lmu
 	GAResult extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph, const std::shared_ptr<ModelSDF>& model_sdf, const PrimitiveGaParams& params, std::ostream& stream);
 
 	Primitive createBoxPrimitive(const ManifoldSet& planes);
-	Primitive createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& polytope_center);
+	Primitive createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& polytope_center, int normal_orientation_method = -1);
 
 	lmu::Primitive createSpherePrimitive(const ManifoldPtr& m);
 	Primitive createCylinderPrimitive(const ManifoldPtr& m, ManifoldSet& planes);

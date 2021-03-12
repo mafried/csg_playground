@@ -60,6 +60,8 @@ namespace lmu
 
 	Mesh createFromPointCloud(const PointCloud& pc);
 
+	
+
 	double computeMeshArea(const Mesh& m);
 
 	void initializePolytopeCreator();

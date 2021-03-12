@@ -133,7 +133,7 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 	PrimitiveSetTournamentSelector selector(2);
 	PrimitiveSetIterationStopCriterion criterion(params.max_count, PrimitiveSetRank(0.00001), params.max_iterations);
 	PrimitiveSetCreator creator(plane_graph, 0.0, { 0.40, 0.15, 0.15, 0.15, 0.15 }, 1, 1, maxPrimitiveSetSize, angleT, 0.001, 
-		params.polytope_prob, params.neighbor_prob, params.min_polytope_planes, params.max_polytope_planes, Eigen::Vector3d(0,0,0), ManifoldSet());
+		params.polytope_prob, params.neighbor_prob, params.min_polytope_planes, params.max_polytope_planes, Eigen::Vector3d(0,0,0), ManifoldSet(), params.normal_orientation_method);
 	
 	auto ranker = std::make_shared<PrimitiveSetRanker>(farthestPointSampling(plane_pointcloud, params.num_geo_score_samples),
 		params.max_dist, maxPrimitiveSetSize, params.ranker_voxel_size, params.allow_cube_cutout, model_sdf, 
@@ -176,7 +176,7 @@ lmu::GAResult lmu::extractPolytopePrimitivesWithGA(const PlaneGraph& plane_graph
 lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, double intraCrossProb,
 	const std::vector<double>& mutationDistribution, int maxMutationIterations, int maxCrossoverIterations,
 	int maxPrimitiveSetSize, double angleEpsilon, double minDistanceBetweenParallelPlanes, double polytope_prob, double neighbor_prob, int min_polytope_planes,
-	int max_polytope_planes, const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes) :
+	int max_polytope_planes, const Eigen::Vector3d& polytope_center, const ManifoldSet& cluster_planes, int normal_orientation_method) :
 	plane_graph(plane_graph),
 	intraCrossProb(intraCrossProb),
 	mutationDistribution(mutationDistribution),
@@ -190,7 +190,8 @@ lmu::PrimitiveSetCreator::PrimitiveSetCreator(const PlaneGraph& plane_graph, dou
 	min_polytope_planes(min_polytope_planes), 
 	max_polytope_planes(max_polytope_planes),
 	polytope_center(polytope_center),
-	cluster_planes(cluster_planes)
+	cluster_planes(cluster_planes),
+	normal_orientation_method(normal_orientation_method)
 {
 	rndEngine.seed(rndDevice());
 }
@@ -575,7 +576,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::createPrimitive() const
 		}
 		//std::cout << "planes: " << planes.size() << " of " << max_planes << std::endl;
 		
-		primitive = createPolytopePrimitive(planes, polytope_center);		
+		primitive = createPolytopePrimitive(planes, polytope_center, normal_orientation_method);
 	}
 	break;
 
@@ -656,7 +657,7 @@ lmu::Primitive lmu::PrimitiveSetCreator::mutatePrimitive(const Primitive& p, dou
 			auto new_planes = ManifoldSet(p.ms);
 			new_planes[plane_idx] = new_plane;
 
-			primitive = createPolytopePrimitive(new_planes, polytope_center);
+			primitive = createPolytopePrimitive(new_planes, polytope_center, normal_orientation_method);
 		}
 
 		break;
@@ -1222,7 +1223,7 @@ Eigen::Vector3d findNormalByMajority(const lmu::PointCloud& pc)
 	}
 }
 
-lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& cluster_center)
+lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eigen::Vector3d& cluster_center, int normal_orientation_method)
 {
 	if (planes.size() < 4)
 	{
@@ -1272,7 +1273,7 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 	static std::uniform_int_distribution<> du{};
 	using parmu_t = decltype(du)::param_type;
 
-	int plane_method = du(rndEngine(), parmu_t{ 0, 2});
+	int plane_method = normal_orientation_method == -1 ? du(rndEngine(), parmu_t{ 0, 3}) : normal_orientation_method;
 	//std::cout << "plane method: " << plane_method << std::endl;
 	switch (plane_method)
 	{
@@ -1323,6 +1324,40 @@ lmu::Primitive lmu::createPolytopePrimitive(const ManifoldSet& planes, const Eig
 			// Flip plane normal if it disagrees with the point-cloud normal
 			double d = nm.dot(new_plane->n);
 			if (d < 0.0)
+			{
+				new_plane->n = -1.0 * new_plane->n;
+			}
+
+			n.push_back(new_plane->n);
+			p.push_back(new_plane->p);
+		}
+	}
+	break;
+	case 3:
+	{
+
+		// Get point that is guaranteed to be inside of the polytope. 
+		// The point is the center of all points stemming from pointclouds of the plane manifolds (but it is enough to just take a single point per plane point cloud).
+
+		Eigen::Vector3d inside_point;
+		double num_points = 0.0;
+		for (const auto& p : planes)
+		{
+			if (p->pc.rows() > 0)
+			{
+				inside_point += Eigen::Vector3d(p->pc.row(0).x(), p->pc.row(0).y(), p->pc.row(0).z());
+				num_points += 1.0;
+			}
+		}
+		inside_point /= num_points;
+
+		for (int i = 0; i < planes.size(); ++i)
+		{
+			auto new_plane = std::make_shared<Manifold>(*planes[i]);
+
+			// Flip plane normal if inside_point would be outside.
+			double d = (inside_point - new_plane->p).dot(new_plane->n);
+			if (d > 0.0)
 			{
 				new_plane->n = -1.0 * new_plane->n;
 			}
@@ -1540,6 +1575,8 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 	lmu::TimeTicker t;
 
 	t.tick();
+
+	
 	auto mesh = lmu::createFromPointCloud(pc);
 	//s << "Poisson Reconstruction=" << t.tick() << std::endl;
 
@@ -1552,6 +1589,8 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 	{
 		throw std::runtime_error("Unable to create ModelSDF. Poisson mesh is empty.");
 	}
+	
+	//recreate_from_points(pc);
 }
 
 lmu::ModelSDF::~ModelSDF()
@@ -1611,7 +1650,89 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 		data[j] = SDFValue(sd, n);
 	}
 
+
+	writePointCloudXYZ("sdf.xyz", to_pc());
+	auto mesh = to_mesh();
+	igl::writeOBJ("sdf_mesh.obj", mesh.vertices, mesh.indices);
+
 	std::cout << "Mesh re-creation done." << std::endl;
+}
+
+#include <CGAL/poisson_surface_reconstruction.h>
+#include <CGAL/Inverse_index.h>
+
+
+#include <CGAL/Surface_mesh_default_triangulation_3.h>
+#include <CGAL/Complex_2_in_triangulation_3.h>
+#include <CGAL/make_surface_mesh.h>
+#include <CGAL/Implicit_surface_3.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/IO/facets_in_complex_2_to_triangle_mesh.h>
+#include <CGAL/Poisson_reconstruction_function.h>
+
+
+void lmu::ModelSDF::recreate_from_points(const PointCloud& pc)
+{
+		typedef CGAL::Exact_predicates_inexact_constructions_kernel  K;
+		typedef CGAL::Polyhedron_3<K>                     Polyhedron_3;
+		typedef K::Point_3                                Point_3;
+		typedef K::Segment_3                              Segment_3;
+		typedef K::Triangle_3                             Triangle_3;
+		typedef K::Vector_3								  Vector_3;
+		typedef CGAL::cpp11::array<std::size_t, 3> Facet;
+
+		typedef std::pair<Point_3, Vector_3> Pwn;
+
+		typedef K::FT FT;
+		typedef CGAL::Poisson_reconstruction_function<K> Poisson_reconstruction_function;
+		typedef CGAL::Surface_mesh_default_triangulation_3 STr;
+		typedef CGAL::Surface_mesh_complex_2_in_triangulation_3<STr> C2t3;
+		typedef CGAL::Implicit_surface_3<K, Poisson_reconstruction_function> Surface_3;
+		typedef K::Sphere_3 Sphere_3;
+
+		std::vector<Pwn> points;
+		points.reserve(pc.rows());
+		for (int i = 0; i < pc.rows(); ++i) {
+			Eigen::RowVector3d p = pc.row(i).leftCols(3);
+			Eigen::RowVector3d n = pc.row(i).rightCols(3);
+			points.push_back(std::make_pair(Point_3(p.x(), p.y(), p.z()), Vector_3(n.x(), n.y(), n.z())));
+		}
+		std::cout << "Poisson num points: " << points.size() << std::endl;
+
+
+		Poisson_reconstruction_function
+			function(points.begin(), points.end(),
+				CGAL::First_of_pair_property_map<Pwn>(),
+				CGAL::Second_of_pair_property_map<Pwn>());
+		
+		//Poisson_reconstruction_function function(points.begin(), points.end(), Point_map(), Normal_map());
+
+		if (!function.compute_implicit_function()) {
+			std::cout << "Unable to create Poisson surface mesh." << std::endl;
+			return;
+		}
+
+		delete[] data;
+		data = new SDFValue[n];
+
+		int idx = 0;
+		for (int x = 0; x < grid_size.x(); ++x)
+		{
+			for (int y = 0; y < grid_size.y(); ++y)
+			{
+				for (int z = 0; z < grid_size.z(); ++z)
+				{
+					int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+
+					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin;
+					data[idx] = SDFValue(function(Point_3(p.x(), p.y(), p.z())), Eigen::Vector3f(0,0,0));					
+				}
+			}
+		}
+
+		writePointCloudXYZ("sdf.xyz", to_pc());
+		auto mesh = to_mesh();
+		igl::writeOBJ("sdf_mesh.obj", mesh.vertices, mesh.indices);
 }
 
 lmu::SDFValue lmu::ModelSDF::sdf_value(const Eigen::Vector3d& p) const
@@ -1679,7 +1800,7 @@ lmu::PointCloud lmu::ModelSDF::to_pc() const
 
 				auto v = sdf_value(p);
 
-				if ( v.d != -1.0/* && std::abs(v.d) < voxel_size*/)
+				if ( v.d != -1.0 && std::abs(v.d) < voxel_size * 2)
 				{
 					//std::cout << " " << v.v;
 					Eigen::Matrix<double, 1, 6> point;
