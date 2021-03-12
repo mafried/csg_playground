@@ -502,17 +502,24 @@ std::vector<CSGNodePtr> lmu::allGeometryNodePtrs(const CSGNode& node)
 	return res;
 }
 
-std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode & node)
-{	
+std::vector<ImplicitFunctionPtr> lmu::allDistinctFunctions(const CSGNode& node)
+{
 	std::set<ImplicitFunctionPtr> set;
+	std::vector<ImplicitFunctionPtr> vec;
 
-	visit(node, [&set](const CSGNode& n)
+	visit(node, [&set, &vec](const CSGNode& n)
 	{
 		if (n.type() == CSGNodeType::Geometry)
-			set.insert(n.function());
+		{
+			if (set.find(n.function()) == set.end())
+			{
+				set.insert(n.function());
+				vec.push_back(n.function());
+			}
+		}
 	});
-	
-	return std::vector<ImplicitFunctionPtr>(set.begin(), set.end());
+
+	return vec;
 }
 
 CSGNode lmu::filter_name_duplicates(const CSGNode& node)

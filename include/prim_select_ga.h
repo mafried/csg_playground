@@ -154,7 +154,8 @@ namespace lmu
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
 	};
 	
-	NodeGenerationResult generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params, std::ostream& stream);
+	NodeGenerationResult generate_csg_node(const std::vector<lmu::ImplicitFunctionPtr>& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params,
+		std::ostream& stream, const lmu::CSGNode& gt_node);
 
 	Mesh refine(const Mesh& m, const PrimitiveSet& ps);
 }

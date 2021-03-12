@@ -458,6 +458,24 @@ void lmu::recreateVertexLookup(lmu::Graph& graph)
 	}
 }
 
+std::vector<std::shared_ptr<lmu::ImplicitFunction>> lmu::get_pruned_primitives(const lmu::Graph& g, const lmu::Graph& pruned_g)
+{
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> res;
+
+	auto g_prims = lmu::getImplicitFunctions(g);
+	auto pruned_g_prims = lmu::getImplicitFunctions(pruned_g);
+
+	for (const auto& g_prim : g_prims)
+	{
+		if (std::find(pruned_g_prims.begin(), pruned_g_prims.end(), g_prim) == pruned_g_prims.end())
+		{
+			res.push_back(g_prim);
+		}
+	}
+
+	return res; 
+}
+
 //From https://stackoverflow.com/questions/26763193/return-a-list-of-connected-component-subgraphs-in-boost-graph
 std::vector<lmu::Graph> lmu::getConnectedComponents(lmu::Graph const & g)
 {
@@ -639,6 +657,38 @@ std::vector<lmu::Graph> lmu::getArticulationPointSeparatedConnectedComponents(co
 	}
 
 	return res;
+}
+
+std::vector<lmu::VertexDescriptor> lmu::get_articulation_points(const Graph& g)
+{
+	std::vector<VertexDescriptor> art_points;
+	boost::articulation_points(g.structure, std::back_inserter(art_points));
+
+	return art_points;
+}
+
+std::vector<lmu::VertexDescriptor> lmu::select_aps_with_aps_as_neighbors(const std::vector<lmu::VertexDescriptor>& aps, const Graph& g)
+{
+	std::vector<lmu::VertexDescriptor> res; 
+
+	for (const auto& ap : aps)
+	{
+		bool all_neighbors_are_aps = true;
+		typename boost::graph_traits <lmu::GraphStructure>::out_edge_iterator ei, ei_end;
+		for (boost::tie(ei, ei_end) = boost::out_edges(ap, g.structure); ei != ei_end; ++ei)
+		{
+			auto neighbor = boost::target(*ei, g.structure);
+			if (std::find(aps.begin(), aps.end(), neighbor) == aps.end())
+			{
+				all_neighbors_are_aps = false;
+				break;
+			}
+		}
+		if (all_neighbors_are_aps)
+			res.push_back(ap);
+	}
+
+	return res; 
 }
 
 bool shouldBePruned(const lmu::Graph& g, const lmu::EdgeDescriptor& ed)

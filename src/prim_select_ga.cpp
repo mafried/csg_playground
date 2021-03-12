@@ -266,13 +266,11 @@ struct SelectionCreator
 
 struct CSGNodeCreator
 {
-	CSGNodeCreator(const lmu::PrimitiveSelection& ps, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params) :
+	CSGNodeCreator(const lmu::PrimitiveSelection& ps, const CSGNodeGenerationParams& params) :
 		params(params)
 	{
 		for (const auto& p : *ps.prims)
 			primitives.push_back(p.imFunc);	
-
-		per_primitive_geo_scores = primitive_ranker->rank(*ps.prims).per_primitive_geo_scores;
 
 		_rndEngine.seed(_rndDevice());
 	}
@@ -333,11 +331,11 @@ struct CSGNodeCreator
 
 		std::swap(*subNode1, *subNode2);
 
-		std::cout << "MAX: " << params.max_tree_depth << std::endl;
-		std::cout << "Before: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
+		//std::cout << "MAX: " << params.max_tree_depth << std::endl;
+		//std::cout << "Before: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
 		shrink_large_nodes(newNode1, params.max_tree_depth);
 		shrink_large_nodes(newNode2, params.max_tree_depth);
-		std::cout << "After: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
+		//std::cout << "After: 1: " << depth(newNode1) << " 2: " << depth(newNode2) << std::endl;
 
 		return std::vector<PrimitiveSelection>
 		{
@@ -427,9 +425,7 @@ private:
 		static std::uniform_int_distribution<> du{};
 		using parmu_t = decltype(du)::param_type;
 
-		std::discrete_distribution<int> discrete_d(per_primitive_geo_scores.begin(), per_primitive_geo_scores.end());
-		
-		int funcIdx = params.use_prim_geo_scores_as_active_prob ? discrete_d(_rndEngine) : du(_rndEngine, parmu_t{ 0, static_cast<int>(primitives.size() - 1) });
+		int funcIdx =  du(_rndEngine, parmu_t{ 0, static_cast<int>(primitives.size() - 1) });
 		return geometry(primitives[funcIdx]);
 	}
 
@@ -465,8 +461,6 @@ private:
 	CSGNodeGenerationParams params;
 	std::vector<ImplicitFunctionPtr> primitives;
 
-	std::vector<double> per_primitive_geo_scores;
-
 	mutable std::default_random_engine _rndEngine;
 	mutable std::random_device _rndDevice;
 };
@@ -475,25 +469,79 @@ private:
 
 struct SelectionRanker
 {
-	SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf, const CSGNode& start_node, CreatorStrategy creator_strategy) :
-		model_sdf(model_sdf),
-		start_node(start_node),
-		creator_strategy(creator_strategy)
+	SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf) :
+		model_sdf(model_sdf)		
 	{
 	}
 
 	SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const
 	{
-		//static int counter = 0;
-		//std::cout << "counter: " << counter << std::endl;
-		//counter++;
+		if (lmu::numNodes(s.node) == 0)
+		{
+			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
+		}
 
-		auto n = creator_strategy == CreatorStrategy::SELECTION ? integrate_node(start_node, s) : integrate_node(start_node, s.node);
+		auto min = model_sdf->origin; 
+		Eigen::Vector3d grid_size = model_sdf->grid_size.cast<double>();
+		auto max = model_sdf->origin + grid_size * model_sdf->voxel_size;
+
+		int size = 16; 
+
+		Eigen::Vector3d cell_size = (max - min) / (double)size;
+
+		
+		//std::cout << "min " << min.transpose() << " max: " << max.transpose() << " cell_size: " << cell_size.transpose() << std::endl;
+
+		double mean_abs_d = 0.0;
+		double counter = 0.0;
+		for (int x = 0; x < size; ++x)
+		{
+			for (int y = 0; y < size; ++y)
+			{
+				for (int z = 0; z < size; ++z)
+				{
+					Eigen::Vector3d p(min.x() + (double)x * cell_size.x(), min.y() + (double)y * cell_size.y(), min.z() + (double)z * cell_size.z());
+
+					auto sd_gr = s.node.signedDistanceAndGradient(p);
+
+					auto d = (double)model_sdf->sdf_value(p).d;
+
+					if (sd_gr.x() == std::numeric_limits<double>::max())
+					{
+						continue;
+					}
+					//std::cout << d << " " << sd_gr.x() << "|";
+
+					double abs_dist = std::abs(sd_gr.x() - d);
+
+					mean_abs_d += abs_dist;
+					counter += 1.0;
+				}
+			}
+		}
+
+		mean_abs_d /= counter;
+
+		if(!std::isfinite(mean_abs_d))
+			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
+		
+		std::cout << "MEAN: " << mean_abs_d << std::endl;
+
+		auto node_size = (double)numNodes(s.node);
+
+		auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
+
+		sr.capture_unnormalized();
+
+		return sr;
+	}
+
+	/*
+	SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const
+	{
+
+		auto n = s.node;
 		auto d = 0.0;
-
-		//Invalid node?
-		//if(numNodes(n) == 0 || n.operationType() == CSGNodeOperationType::Noop)
-		//	return SelectionRank(-std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
 
 		auto grid_size = model_sdf->grid_size;
 		auto voxel_size = model_sdf->voxel_size;
@@ -516,7 +564,7 @@ struct SelectionRanker
 					auto sd_gr = n.signedDistanceAndGradient(p);
 					Eigen::Vector3f gr = sd_gr.bottomRows(3).cast<float>();
 
-					Eigen::Matrix<double, 1, 6> point;
+					//Eigen::Matrix<double, 1, 6> point;
 
 					if (v.d > voxel_size && sd_gr.x() > voxel_size)
 						continue;
@@ -536,11 +584,11 @@ struct SelectionRanker
 					}
 					else
 					{
-						point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
+						//point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
 					}
 					
-					if(debug)
-						points.push_back(point);
+					//if(debug)
+					//	points.push_back(point);
 
 				}
 			}
@@ -548,17 +596,18 @@ struct SelectionRanker
 
 		//std::cout << s << " D: " << d << std::endl;
 
-		auto size = creator_strategy == CreatorStrategy::SELECTION ? (double)s.get_num_active() :(double) numNodes(s.node);
+		auto size = (double) numNodes(s.node);
 		
 		auto sr = SelectionRank(d, size, 0.0);
 
-		sr.points = points;
+		//sr.points = points;
 
 		sr.capture_unnormalized();
 		
 		
 		return sr;
 	}
+	*/
 
 	std::string info() const
 	{
@@ -567,9 +616,7 @@ struct SelectionRanker
 
 private:
 
-	std::shared_ptr<ModelSDF> model_sdf;
-	CSGNode start_node;
-	CreatorStrategy creator_strategy;
+	std::shared_ptr<ModelSDF> model_sdf;	
 };
 
 
@@ -590,11 +637,14 @@ struct SelectionPopMan
 	void manipulateAfterRanking(std::vector<RankedCreature<PrimitiveSelection, SelectionRank>>& population) const
 	{
 		// Re-normalize scores and compute combined score. 
-		SelectionRank max_r(-std::numeric_limits<double>::max()), min_r(std::numeric_limits<double>::max());
+		SelectionRank max_r(std::numeric_limits<double>::max()), min_r(std::numeric_limits<double>::max());
 				
 		for (auto& s : population)
 		{
-			max_r.size = std::max(max_r.size, s.rank.size);
+			if (s.rank.geo == std::numeric_limits<double>::max() || s.rank.size == std::numeric_limits<double>::max())
+				continue;
+
+			max_r.size = std::max(max_r.size, s.rank.size) ;
 			min_r.size = std::min(min_r.size, s.rank.size);
 			max_r.geo = std::max(max_r.geo, s.rank.geo);
 			min_r.geo = std::min(min_r.geo, s.rank.geo);
@@ -610,10 +660,11 @@ struct SelectionPopMan
 			ps.rank.geo = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
 			ps.rank.size = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-			ps.rank.combined = ps.rank.geo * geo_weight - ps.rank.size * size_weight;
+			ps.rank.combined = -ps.rank.geo * geo_weight -ps.rank.size * size_weight;
 			
 			//std::cout << "Size: " << size_weight << " " << (ps.rank.size * size_weight) << std::endl;
 			std::cout << "Rank: " << ps.rank << std::endl;
+			//std::cout << "diff: " << diff_r << std::endl;
 		}
 		//std::cout << "========================" << std::endl;
 	}
@@ -887,8 +938,8 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 	}
 }
 
-lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& decomposition, const std::shared_ptr<PrimitiveSetRanker>& primitive_ranker, const CSGNodeGenerationParams& params,
-	std::ostream& stream)
+lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::ImplicitFunctionPtr>& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params,
+	std::ostream& stream, const lmu::CSGNode& gt_node)
 {
 	int tournament_k = 2;
 	int population_size = 150;
@@ -897,48 +948,43 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const PrimitiveDecomposition& d
 	double geo_weight = params.geo_weight;
 	double size_weight = params.size_weight;
 
+	lmu::PrimitiveSet primitive_set;
+	for (const auto& p : primitives)
+	{
+		switch (p->type())
+		{
+		case ImplicitFunctionType::Cylinder:
+			primitive_set.push_back(Primitive(p, ManifoldSet(), PrimitiveType::Cylinder));
+			break;
+		case ImplicitFunctionType::Sphere:
+			primitive_set.push_back(Primitive(p, ManifoldSet(), PrimitiveType::Sphere));
+			break;
+		case ImplicitFunctionType::Box:
+			primitive_set.push_back(Primitive(p, ManifoldSet(), PrimitiveType::Box));
+			break;
+		case ImplicitFunctionType::Polytope:
+			primitive_set.push_back(Primitive(p, ManifoldSet(), PrimitiveType::Polytope));
+			break;
+		}
+	}
+
+	SelectionRanker ranker(model_sdf);
+
+	std::cout << "GroundTruth Rank: " << ranker.rank(PrimitiveSelection(gt_node)) << std::endl;
+
 	SelectionTournamentSelector selector(2);
 	SelectionIterationStopCriterion criterion(params.max_count, 0.000001, params.max_iterations);
 
-	auto primitives = decomposition.get_primitives(params.use_all_prims_for_ga);
-	auto dh_types = decomposition.get_dh_types(params.use_all_prims_for_ga);
-	auto start_node = params.use_all_prims_for_ga ? opNo() : decomposition.node;
-	
-	SelectionRanker ranker(primitive_ranker->model_sdf, start_node, params.creator_strategy);
 	SelectionPopMan pop_man(geo_weight, size_weight);
-
-	if (params.use_mesh_refinement)
-	{
-		auto refined_mesh = refine(primitive_ranker->model_sdf->surface_mesh, primitives);
-		primitive_ranker->model_sdf->recreate_from_mesh(refined_mesh);
-		igl::writeOBJ("mesh_out_refined.obj", primitive_ranker->model_sdf->surface_mesh.vertices, primitive_ranker->model_sdf->surface_mesh.indices);
-	}
 
 	NodeGenerationResult gen_res(opNo());
 
-	switch (params.creator_strategy)
-	{
-	case CreatorStrategy::SELECTION:
-		{
-			SelectionCreator selection_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
-			SelectionGA ga;
-			SelectionGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, true, Schedule(), Schedule(), true);
-			auto res = ga.run(ga_params, selector, selection_creator, ranker, criterion, pop_man);
-			res.statistics.save(stream, &res.population[0].creature);
-			gen_res.node = integrate_node(start_node, res.population[0].creature);			
-			break;
-		}
-	case CreatorStrategy::NODE:
-		{
-			CSGNodeCreator node_creator(PrimitiveSelection(&primitives, dh_types), primitive_ranker, params);
-			NodeGA ga;
-			NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
-			auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
-			gen_res.node = integrate_node(start_node, res.population[0].creature.node);
-			res.statistics.save(stream, &res.population[0].creature);
-			break;
-		}
-	}
+	CSGNodeCreator node_creator(lmu::PrimitiveSelection(&primitive_set), params);
+	NodeGA ga;
+	NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
+	auto res = ga.run(ga_params, selector, node_creator, ranker, criterion, pop_man);
+	gen_res.node = res.population[0].creature.node;
+	res.statistics.save(stream, &res.population[0].creature);
 	
 	return gen_res;
 }

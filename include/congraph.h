@@ -119,6 +119,11 @@ namespace lmu
 
 	std::vector<lmu::Graph> getArticulationPointSeparatedConnectedComponents(const Graph& g);
 
+	std::vector<lmu::VertexDescriptor> get_articulation_points(const Graph& g);
+
+	std::vector<lmu::VertexDescriptor> select_aps_with_aps_as_neighbors(const std::vector<lmu::VertexDescriptor>& aps, const Graph& g);
+
+
 	lmu::Graph pruneGraph(const lmu::Graph& g);
 
 	using NeighborMap = std::unordered_map<VertexDescriptor, std::unordered_set<VertexDescriptor>>;
@@ -143,6 +148,8 @@ namespace lmu
 	lmu::Graph filterGraph(const lmu::Graph& g, const VertexFilterPredicate& vp, const EdgeFilterPredicate& ep);
 
 	void recreateVertexLookup(Graph& graph);
+
+	std::vector<std::shared_ptr<lmu::ImplicitFunction>> get_pruned_primitives(const lmu::Graph& g, const lmu::Graph& pruned_g);
 }
 
 #endif
