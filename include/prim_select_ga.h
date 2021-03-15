@@ -42,9 +42,14 @@ namespace lmu
 		{
 			return std::string();
 		}
+
+		bool is_selection() const;
 		
 		// Needed for node-based creator.
 		CSGNode node;
+
+	private:
+
 	};
 
 	std::ostream& operator<<(std::ostream& out, const PrimitiveSelection& r);

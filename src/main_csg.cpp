@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	auto input_pc_file = s.getStr("Data", "InputPointCloudFile", "");
 
 	auto out_path = s.getStr("Data", "OutputFolder", "\\");
-	auto num_cells = s.getInt("ConnectionGraph", "NumCells", 50);
+	auto num_cells = s.getInt("ConnectionGraph", "NumCells", 100);
 
 	lmu::CSGNodeGenerationParams ng_params;
 	ng_params.create_new_prob = s.getDouble("NodeGeneration", "CreateNewProbability", 0.5);
@@ -210,10 +210,12 @@ int main(int argc, char *argv[])
 					continue;
 				}
 
-				// Get optimal node with ga 
+				// Get optimal node with ga. 
 				auto sub_node = lmu::generate_csg_node(lmu::getImplicitFunctions(rem_art_c), model_sdf, ng_params, res_f, node).node;
-
-				sub_nodes.push_back(sub_node);
+				if (sub_node.operationType() != lmu::CSGNodeOperationType::Noop)
+				{
+					sub_nodes.push_back(sub_node);
+				}
 			}
 			
 			lmu::writeConnectionGraph(out_path + "pruned_initial_component_" + std::to_string(i++) + ".gv", c_pruned);
