@@ -253,11 +253,29 @@ namespace lmu
 		}
 	};
 
+	template<typename RankedCreature>
+	struct EmptySynchronizationPoint
+	{
+		void synchronize(const std::string& id, std::vector<RankedCreature>& population) const 
+		{
+		}
+
+		void mark_as_done(const std::string& id) const
+		{
+		}
+
+		std::string info() const
+		{
+			return "Empty Synchronization Point";
+		}
+	};
+
 	template<
 		typename Creature, typename CreatureCreator, typename CreatureRanker, typename Rank = double,
 		typename ParentSelector = TournamentSelector<RankedCreature<Creature, Rank>>,
 		typename StopCriterion = IterationStopCriterion<RankedCreature<Creature, Rank>>,
-		typename PopulationManipulator = EmptyPopulationManipulator<RankedCreature<Creature, Rank>>
+		typename PopulationManipulator = EmptyPopulationManipulator<RankedCreature<Creature, Rank>>,
+		typename SynchronizationPoint = EmptySynchronizationPoint<RankedCreature<Creature, Rank>>
 	>		
 	class GeneticAlgorithm
 	{
@@ -414,7 +432,8 @@ namespace lmu
 			Statistics statistics;
 		};
 
-		GeneticAlgorithm()
+		GeneticAlgorithm(const std::string& id = "") : 
+			_id(id)
 		{
 			_rndEngine.seed(_rndDevice());
 		}
@@ -426,11 +445,11 @@ namespace lmu
 		}
 
 		std::future<Result> runAsync(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
-			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan)
+			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan, const SynchronizationPoint& sync_point)
 		{
 			return std::async(std::launch::async, [&]() 
 			{ 
-				return run(params, parentSelector, creator, ranker, stopCriterion, popMan);
+				return run(params, parentSelector, creator, ranker, stopCriterion, popMan, sync_point);
 			});
 		}
 
@@ -450,7 +469,8 @@ namespace lmu
 		}
 
 		Result run(const Parameters& params, const ParentSelector& parentSelector, const CreatureCreator& creator, 
-			const CreatureRanker& ranker, StopCriterion& stopCriterion, const PopulationManipulator& popMan = PopulationManipulator()) const
+			const CreatureRanker& ranker, StopCriterion& stopCriterion, 
+			const PopulationManipulator& popMan = PopulationManipulator(), const SynchronizationPoint& sync_point = SynchronizationPoint()) const
 		{
 			Statistics stats(assembleInfoString(params, parentSelector, creator, ranker, stopCriterion, popMan));
 	
@@ -507,6 +527,9 @@ namespace lmu
 				stats.scmDurations.push_back(stats.iterationDuration.tick());
 				
 				population = newPopulation; 
+
+				sync_point.synchronize(_id, population);
+
 				stats.update();
 				stats.print();
 				iterationCount++;
@@ -516,6 +539,8 @@ namespace lmu
 				crossoverRate = params.crossoverRate * params.crossoverSchedule.getFactor(iterationCount);
 				mutationRate = params.mutationRate * params.mutationSchedule.getFactor(iterationCount);
 			}
+
+			sync_point.mark_as_done(_id);
 
 			//std::cout << "End." << std::endl;
 
@@ -699,6 +724,8 @@ namespace lmu
 		mutable std::random_device _rndDevice;
 		mutable std::atomic<bool> _stopRequested;
 		mutable std::mutex _mutex;
+
+		std::string _id;
 	};
 
 	struct ImplicitFunction;

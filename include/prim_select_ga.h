@@ -108,18 +108,15 @@ namespace lmu
 	{
 		CSGNodeGenerationParams();
 
-		CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob, double dh_type_prob, 
-			bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy);
+		double node_ratio;
+		int max_budget;
 
 		double create_new_prob;
-		double active_prob;
 		double dh_type_prob;
-		bool evolve_dh_type;
-		bool use_prim_geo_scores_as_active_prob;
-		bool use_all_prims_for_ga;
 		int max_tree_depth;
 		double subtree_prob;
-		CreatorStrategy creator_strategy;
+
+		double node_creator_prob;
 
 		double geo_weight; // = 1.0;
 		double size_weight;// = 0.01;
@@ -127,10 +124,6 @@ namespace lmu
 		int max_iterations; //100
 		int max_count; //10
 
-		double cap_plane_adjustment_max_dist;
-		bool use_mesh_refinement;
-
-		bool use_redundancy_removal; 
 	};
 
 	struct PrimitiveDecomposition
@@ -160,7 +153,7 @@ namespace lmu
 	};
 	
 	NodeGenerationResult generate_csg_node(const std::vector<lmu::ImplicitFunctionPtr>& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params,
-		std::ostream& stream, const lmu::CSGNode& gt_node);
+		std::ostream& s1, std::ostream& s2, const lmu::CSGNode& gt_node);
 
 	Mesh refine(const Mesh& m, const PrimitiveSet& ps);
 }

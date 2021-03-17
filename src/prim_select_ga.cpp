@@ -98,7 +98,7 @@ lmu::CSGNode lmu::PrimitiveSelection::to_node() const
 	}
 	else
 	{
-		return lmu::to_binary_tree(opDiff({ opUnion(union_prims), opUnion(diff_prims) }));
+		return lmu::to_binary_tree(opDiff({ union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0], diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0] }));
 	}
 }
 
@@ -454,6 +454,7 @@ private:
 struct CombinedCreator
 {
 	CombinedCreator(const lmu::PrimitiveSelection& ps, const CSGNodeGenerationParams& params) :
+		params(params),
 		node_creator(ps, params),
 		selection_creator(ps, params)
 	{
@@ -485,6 +486,7 @@ struct CombinedCreator
 		else
 		{
 			
+			/*
 			if (s1.is_selection())
 			{
 				PrimitiveSelection s1_converted(s1.to_node());
@@ -496,7 +498,7 @@ struct CombinedCreator
 				PrimitiveSelection s2_converted(s2.to_node());
 				return node_creator.crossover(s1, s2_converted);
 			}
-			
+			*/
 
 			return { s1,s2 };
 		}
@@ -507,7 +509,7 @@ struct CombinedCreator
 		static std::bernoulli_distribution db{};
 		using parmb_t = decltype(db)::param_type;
 
-		if (db(_rndEngine, parmb_t{ 0.5 }))
+		if (db(_rndEngine, parmb_t{ params.node_creator_prob }))
 		{
 			return node_creator.create();
 		}
@@ -526,6 +528,7 @@ private:
 
 	mutable std::default_random_engine _rndEngine;
 	mutable std::random_device _rndDevice;
+	CSGNodeGenerationParams params;
 
 	CSGNodeCreator node_creator;
 	SelectionCreator selection_creator;
@@ -598,7 +601,7 @@ struct SelectionRanker
 		if(!std::isfinite(mean_abs_d))
 			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
 		
-		std::cout << "MEAN: " << mean_abs_d << " " << counter << std::endl;
+		//std::cout << "MEAN: " << mean_abs_d << " " << counter << std::endl;
 
 		auto node_size = (double)numNodes(node);
 
@@ -621,11 +624,11 @@ struct SelectionRanker
 
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
 		
-		for (int x = 0; x < grid_size.x(); x+=2)
+		for (int x = 0; x < grid_size.x(); x+=1)
 		{
-			for (int y = 0; y < grid_size.y(); y+=2)
+			for (int y = 0; y < grid_size.y(); y+=1)
 			{
-				for (int z = 0; z < grid_size.z(); z+=2)
+				for (int z = 0; z < grid_size.z(); z+=1)
 				{
 					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin; //+ Eigen::Vector3d(voxel_size * 0.5, voxel_size * 0.5, voxel_size * 0.5);
 
@@ -691,6 +694,103 @@ private:
 	std::shared_ptr<ModelSDF> model_sdf;	
 };
 
+
+//////////////////////////// SYNC POINT ////////////////////////////
+
+struct SelectionSyncPoint
+{
+	SelectionSyncPoint(int max_budget, double node_ratio) :
+		max_budget(max_budget),
+		node_ratio(node_ratio),
+		node_iter_budget(1),
+		node_done(false),
+		selection_done(false)
+	{
+	}
+
+	void synchronize(const std::string& id, std::vector<RankedCreature<PrimitiveSelection, SelectionRank>>& population) const 
+	{
+		if (node_ratio == 1.0)
+			return;
+
+		std::cout << "============================== SYNC POINT ID " << id << " " << (int)this << "Ratio: " << node_ratio << std::endl;
+
+
+		if (id == "selection")
+		{
+			std::unique_lock<std::mutex> l(mutex);
+			
+			cv.wait(l, [this]{ return selection_iter_budget > 0 || node_done; });
+			
+			sorted_pop = population;
+			std::cout << "Sorted Pop: " << sorted_pop.size() << std::endl;
+
+			selection_iter_budget--;
+			node_iter_budget = max_budget;
+
+			l.unlock();
+			cv.notify_one();
+
+		}
+		else
+		{
+			std::unique_lock<std::mutex> l(mutex);
+
+			cv.wait(l, [this] { return node_iter_budget > 0 || selection_done; });
+
+			if (!sorted_pop.empty())
+			{
+				// replace last n trees of the population.
+				int n = node_ratio * population.size();
+				for (int i = n; i < population.size(); ++i)
+				{
+					population[i] = sorted_pop[i - n];
+					population[i].creature = PrimitiveSelection(population[i].creature/*.to_node()*/);
+				}
+
+				//re-sort by rank.
+				std::sort(population.begin(), population.end(),
+					[](const auto& a, const auto& b)
+				{
+					return a.rank > b.rank;
+				});
+
+				sorted_pop.clear();
+			}		
+
+			node_iter_budget--;
+			selection_iter_budget = max_budget;
+
+			l.unlock();
+			cv.notify_one();
+		}
+	}
+
+	void mark_as_done(const std::string& id) const 
+	{
+		if (id == "selection")
+			selection_done = true;
+		else
+			node_done = true;
+	}		
+
+	std::string info() const
+	{
+		return std::string();
+	}
+
+	mutable bool selection_done;
+	mutable bool node_done; 
+
+	mutable std::vector<RankedCreature<PrimitiveSelection, SelectionRank>> sorted_pop; 
+	mutable std::mutex mutex;
+	mutable std::condition_variable cv;
+	mutable int selection_iter_budget;
+	mutable int node_iter_budget;
+
+	int max_budget;
+	double node_ratio = 0.5;
+};
 
 //////////////////////////// POP MAN ////////////////////////////
 
@@ -764,13 +864,15 @@ struct SelectionPopMan
 
 			// Normalized
 			
+			//std::cout << "GEO: " << min_r.geo << " " << max_r.geo << " " << diff_r.geo << std::endl;
+
 			ps.rank.geo = ps.rank.geo < 0.0 || diff_r.geo == 0.0 ? 0.0 : (ps.rank.geo - min_r.geo) / diff_r.geo;
 			ps.rank.size = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
-			ps.rank.combined = -ps.rank.geo * geo_weight -ps.rank.size * size_weight;
+			ps.rank.combined = -ps.rank.geo * geo_weight - ps.rank.size * size_weight;
 			
 			//std::cout << "Size: " << size_weight << " " << (ps.rank.size * size_weight) << std::endl;
-			std::cout << "Rank: " << ps.rank << std::endl;
+			//std::cout << "Rank: " << ps.rank << std::endl;
 			//std::cout << "diff: " << diff_r << std::endl;
 		}
 		//std::cout << "========================" << std::endl;
@@ -851,7 +953,7 @@ using SelectionTournamentSelector = TournamentSelector<RankedCreature<PrimitiveS
 using SelectionGA = GeneticAlgorithm<PrimitiveSelection, SelectionCreator, SelectionRanker, SelectionRank,
 	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
 using NodeGA = GeneticAlgorithm<PrimitiveSelection, CombinedCreator, SelectionRanker, SelectionRank,
-	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
+	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan, SelectionSyncPoint>;
 
 
 std::ostream& lmu::operator<<(std::ostream& out, const SelectionRank& r)
@@ -1050,7 +1152,7 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 }
 
 lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::ImplicitFunctionPtr>& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params,
-	std::ostream& stream, const lmu::CSGNode& gt_node)
+	std::ostream& s1, std::ostream& s2, const lmu::CSGNode& gt_node)
 {	
 	if (primitives.empty())
 	{
@@ -1095,24 +1197,57 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::Implicit
 		}
 	}
 
-	std::cout << "GroundTruth Rank: " << ranker.rank(PrimitiveSelection(gt_node)) << std::endl;
+	std::cout << "Groundtruth rank: " << ranker.rank(PrimitiveSelection(gt_node)) << std::endl;
 
-	SelectionTournamentSelector selector(2);
-	SelectionIterationStopCriterion criterion(params.max_count, 0.000001, params.max_iterations);
+	SelectionTournamentSelector selector_selection(2);
+	SelectionTournamentSelector selector_node(2);
 
-	SelectionPopMan pop_man(geo_weight, size_weight);
+	SelectionIterationStopCriterion criterion_selection(params.max_count, 0.000001, params.max_iterations);
+	SelectionIterationStopCriterion criterion_node(params.max_count, 0.000001, params.max_iterations);
+
+	SelectionPopMan pop_man_selection(geo_weight, size_weight);
+	SelectionPopMan pop_man_node(geo_weight, size_weight);
+
+	SelectionSyncPoint sync_point(params.max_budget, params.node_ratio);
 
 	NodeGenerationResult gen_res(opNo());
 
-	//CSGNodeCreator creator(lmu::PrimitiveSelection(&primitive_set), params);
-	CombinedCreator creator(lmu::PrimitiveSelection(&primitive_set), params);
+	auto creator_params_selection = params;
+	creator_params_selection.node_creator_prob = 0.0;
+	CombinedCreator creator_selection(lmu::PrimitiveSelection(&primitive_set), creator_params_selection);
 
-	NodeGA ga;
-	NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, false, Schedule(), Schedule(), true);
-	auto res = ga.run(ga_params, selector, creator, ranker, criterion, pop_man);
-	gen_res.node = res.population[0].creature.is_selection() ? res.population[0].creature.to_node() : res.population[0].creature.node;
-	res.statistics.save(stream, &res.population[0].creature);
-	
+	auto creator_params_node = params;
+	creator_params_node.node_creator_prob = 1.0;
+	CombinedCreator creator_node(lmu::PrimitiveSelection(&primitive_set), creator_params_node);
+
+	NodeGA ga_selection("selection");
+	NodeGA ga_node("node"); 
+
+	NodeGA::Parameters ga_params(population_size, tournament_k, mut_prob, cross_prob, true, Schedule(), Schedule(), true);
+
+	//We only use the selection ga if it is required in the config.
+	NodeGA::Result res_node;
+	if (params.node_ratio < 1.0)
+	{
+		auto res_selection_future = ga_selection.runAsync(ga_params, selector_selection, creator_selection, ranker, criterion_selection, pop_man_selection, sync_point);
+
+		res_node = ga_node.run(ga_params, selector_node, creator_node, ranker, criterion_node, pop_man_node, sync_point);
+
+		//ga_selection.stop();
+		res_selection_future.wait();
+		auto res_selection = res_selection_future.get();
+
+		res_selection.statistics.save(s1, &res_selection.population[0].creature);
+	}
+	else
+	{
+		res_node = ga_node.run(ga_params, selector_node, creator_node, ranker, criterion_node, pop_man_node, sync_point);
+	}
+
+
+	gen_res.node = res_node.population[0].creature.is_selection() ? res_node.population[0].creature.to_node() : res_node.population[0].creature.node;
+	res_node.statistics.save(s2, &res_node.population[0].creature);
+
 	return gen_res;
 }
 
@@ -1165,20 +1300,6 @@ void lmu::SelectionRank::capture_unnormalized()
 }
 
 lmu::CSGNodeGenerationParams::CSGNodeGenerationParams()
-{
-}
-
-lmu::CSGNodeGenerationParams::CSGNodeGenerationParams(double create_new_prob, double active_prob, bool use_prim_geo_scores_as_active_prob,
-	double dh_type_prob, bool evolve_dh_type, bool use_all_prims_for_ga, int max_tree_depth, double subtree_prob, CreatorStrategy creator_strategy) :
-	create_new_prob(create_new_prob),
-	active_prob(active_prob),
-	use_prim_geo_scores_as_active_prob(use_prim_geo_scores_as_active_prob),
-	dh_type_prob(dh_type_prob),
-	evolve_dh_type(evolve_dh_type),
-	use_all_prims_for_ga(use_all_prims_for_ga),
-	max_tree_depth(max_tree_depth),
-	subtree_prob(subtree_prob),
-	creator_strategy(creator_strategy)
 {
 }
 

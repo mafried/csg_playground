@@ -195,7 +195,11 @@ namespace lmu
 	{
 		ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& s);
 
+		ModelSDF(const ModelSDF& model_sdf);
+
 		~ModelSDF();
+
+		std::shared_ptr<lmu::ModelSDF> create_with_union(std::vector<ImplicitFunctionPtr>& outside_dhs) const;
 
 		void recreate_from_mesh(const Mesh& m);
 

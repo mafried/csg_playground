@@ -61,6 +61,10 @@ namespace lmu
 	using EdgeDescriptor = boost::graph_traits<GraphStructure>::edge_descriptor;
 	using VertexDescriptor = boost::graph_traits<GraphStructure>::vertex_descriptor;
 
+	struct Graph;
+
+	void recreateVertexLookup(Graph& graph);
+
 	struct Graph 
 	{
 		GraphStructure structure;
@@ -70,8 +74,8 @@ namespace lmu
 		{
 			if (this != &other)
 			{
-				vertexLookup = other.vertexLookup; 
 				boost::copy_graph(other.structure, structure);
+				recreateVertexLookup(*this);
 			}
 			return *this;
 		}
@@ -80,10 +84,10 @@ namespace lmu
 		{
 		}
 
-		Graph(const Graph& other) : 
-			vertexLookup(other.vertexLookup)
+		Graph(const Graph& other)
 		{	
 				boost::copy_graph(other.structure, structure);
+				recreateVertexLookup(*this);
 		}
 	};
 			
@@ -147,7 +151,6 @@ namespace lmu
 	lmu::Graph filterGraph(const lmu::Graph& g, const EdgeFilterPredicate& predicate);
 	lmu::Graph filterGraph(const lmu::Graph& g, const VertexFilterPredicate& vp, const EdgeFilterPredicate& ep);
 
-	void recreateVertexLookup(Graph& graph);
 
 	std::vector<std::shared_ptr<lmu::ImplicitFunction>> get_pruned_primitives(const lmu::Graph& g, const lmu::Graph& pruned_g);
 }

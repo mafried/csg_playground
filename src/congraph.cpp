@@ -231,11 +231,11 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 			if (f1 == f2 || areConnected(g, f1, f2))
 				continue;
 
-			std::cout << "Testing " << f1->name() << " and " << f2->name() << std::endl;
+			//std::cout << "Testing " << f1->name() << " and " << f2->name() << std::endl;
 
 			if(f1->aabb().overlapsWith(f2->aabb()))
 			{
-				std::cout << "Potential overlap: " << f1->name() << " and " << f2->name() << std::endl;
+				//std::cout << "Potential overlap: " << f1->name() << " and " << f2->name() << std::endl;
 
 				auto inter = f1->aabb().intersection(f2->aabb());
 
@@ -321,16 +321,16 @@ template <class Name>
 class VertexWriter 
 {
 public:
-	VertexWriter(Name _name) : name(_name) {}
+	VertexWriter(const Name& _name) : name(_name) {}
 	template <class VertexOrEdge>
 	void operator()(std::ostream& out, const VertexOrEdge& v) const 
 	{
-		auto wasPruned = lmu::wasPruned(name, name.structure[v]);
+		//auto wasPruned = lmu::wasPruned(name, name.structure[v]);
 		
-		out << "[label=\"" << name.structure[v]->name() << (wasPruned ? "_PRUNED" : "") << "\"]";
+		out << "[label=\"" << name.structure[v]->name() << /*(wasPruned ? "_PRUNED" : "") <<*/ "\"]";
 	}
 private:
-	Name name;
+	const Name& name;
 };
 
 void lmu::writeConnectionGraph(const std::string& file, const lmu::Graph & graph)

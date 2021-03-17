@@ -1593,6 +1593,75 @@ lmu::ModelSDF::ModelSDF(const PointCloud& pc, double voxel_size, std::ofstream& 
 	//recreate_from_points(pc);
 }
 
+/*
+	Eigen::Vector3i grid_size;
+		Eigen::Vector3d origin;
+		double voxel_size;
+		Mesh surface_mesh;
+		SDFValue* data;
+
+
+		Eigen::Vector3d size;
+
+		int n;
+
+		igl::AABB<Eigen::MatrixXd, 3> tree;
+		Eigen::MatrixXd fn, vn, en; //note that _vn is the same as mesh's _normals. TODO
+		Eigen::MatrixXi e;
+		Eigen::VectorXi emap;
+*/
+
+lmu::ModelSDF::ModelSDF(const ModelSDF& model_sdf) : 
+	grid_size(model_sdf.grid_size),
+	origin(model_sdf.origin),
+	voxel_size(model_sdf.voxel_size),
+	surface_mesh(model_sdf.surface_mesh),
+	size(model_sdf.size),
+	n(model_sdf.n),
+	tree(model_sdf.tree),
+	fn(model_sdf.fn),
+	vn(model_sdf.vn),
+	en(model_sdf.en),
+	e(model_sdf.e),
+	emap(model_sdf.emap)
+{
+	data = new SDFValue[n];
+	for (int i = 0; i < n; i++)
+		data[i] = model_sdf.data[i];
+}
+
+std::shared_ptr<lmu::ModelSDF> lmu::ModelSDF::create_with_union(std::vector<ImplicitFunctionPtr>& outside_dhs) const
+{
+	auto result = std::make_shared<ModelSDF>(*this);
+	const double h = 0.00001;
+
+	for (int x = 0; x < grid_size.x(); ++x)
+	{
+		for (int y = 0; y < grid_size.y(); ++y)
+		{
+			for (int z = 0; z < grid_size.z(); ++z)
+			{
+				int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+
+				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin;
+
+				Eigen::Vector4d res(0, 0, 0, 0);
+				res[0] = std::numeric_limits<double>::max();
+				for (const auto& dhs : outside_dhs)
+				{
+					auto dh_res = dhs->signedDistanceAndGradient(p, h);
+					res = dh_res[0] < res[0] ? dh_res : res;
+				}
+				auto v = data[idx];
+				result->data[idx].d = res[0] < v.d ? res[0] : v.d;
+				result->data[idx].n = res[0] < v.d ? Eigen::Vector3f(res[1], res[2], res[3]) : v.n;
+			}
+		}
+	}
+
+	return result;
+}
+
 lmu::ModelSDF::~ModelSDF()
 {
 	delete[] data;

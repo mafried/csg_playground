@@ -41,6 +41,48 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int mods)
 	return true;
 }
 
+
+struct Timings
+{
+	Timings() :
+		model_sdf(0),
+		ga(0),
+		articulation_points(0),
+		connection_graph(0),
+		connected_components(0),
+		decomposition(0),
+		model_sdf_adaptations(0)
+	{
+	}
+
+	std::string to_string() const
+	{
+		std::stringstream ss;
+		ss << "{ ";
+		ss << "'model_sdf': " << model_sdf << ", ";
+		ss << "'ga': " << ga << ", ";
+		ss << "'articulation_points': " << articulation_points << ", ";
+		ss << "'connection_graph': " << connection_graph << ", ";
+		ss << "'connected_components': " << connected_components << ", ";
+		ss << "'decomposition': " << decomposition << ", ";
+		ss << "'model_sdf_adaptations': " << model_sdf_adaptations;
+		ss << " }";
+
+		return ss.str();
+	}
+
+	int model_sdf;
+	int model_sdf_adaptations;
+	int ga;
+	int articulation_points;
+	int connection_graph;
+	int connected_components;
+	int decomposition;
+};
+
+lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_ptr<lmu::ModelSDF>& model_sdf,
+	const lmu::CSGNodeGenerationParams& ng_params, const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, int rec_level = 0);
+
 bool is_inside_dh(const lmu::ImplicitFunctionPtr& prim, const lmu::ModelSDF& model_sdf)
 {
 	Eigen::Vector3d center_point(0, 0, 0);
@@ -72,19 +114,26 @@ int main(int argc, char *argv[])
 	
 	auto input_node_file = s.getStr("Data", "InputNodeFile", "input.json");
 	auto input_pc_file = s.getStr("Data", "InputPointCloudFile", "");
+	auto sample_cell_size = s.getDouble("Data", "SampleCellSize", 0.1);
 
 	auto out_path = s.getStr("Data", "OutputFolder", "\\");
 	auto num_cells = s.getInt("ConnectionGraph", "NumCells", 100);
 
 	lmu::CSGNodeGenerationParams ng_params;
+
 	ng_params.create_new_prob = s.getDouble("NodeGeneration", "CreateNewProbability", 0.5);
 	ng_params.max_tree_depth = s.getInt("NodeGeneration", "MaxTreeDepth", 25);
 	ng_params.subtree_prob = s.getDouble("NodeGeneration", "SubtreeProbability", 0.5);
-
 	ng_params.size_weight = s.getDouble("NodeGeneration", "SizeWeight", 0.01);
 	ng_params.geo_weight = s.getDouble("NodeGeneration", "GeoWeight", 1.0);
+
 	ng_params.max_iterations = s.getInt("NodeGeneration", "MaxIterations", 100);
 	ng_params.max_count = s.getInt("NodeGeneration", "MaxCount", 50);
+	ng_params.dh_type_prob = s.getDouble("NodeGeneration", "DHTypeProbability", 0.5);
+	ng_params.node_creator_prob = s.getDouble("NodeGeneration", "NodeCreatorProbability", 0.5);
+	ng_params.max_budget = s.getInt("NodeGeneration", "MaxBudget", 10);
+	
+	ng_params.node_ratio = s.getDouble("NodeGeneration", "NodeRatio", 0.7);
 
 	s.print();
 	std::cout << "--------------------------------------------------------------" << std::endl;
@@ -94,13 +143,15 @@ int main(int argc, char *argv[])
 
 	ofstream res_f;
 	res_f.open(out_path + "result.txt");
-	
-	try
+		
+	//try
 	{
 		// Load input node for primitive parameters. 
 
 		std::cout << "load node from " << input_node_file << std::endl;
 		auto node = lmu::fromJSONFile(input_node_file);
+		lmu::writeNode(node, out_path + "input_node.gv");
+
 		res_f << "GraphNodes= " << lmu::numNodes(node) << std::endl;
 
 		auto aabb = lmu::aabb_from_node(node);
@@ -122,7 +173,7 @@ int main(int argc, char *argv[])
 		{
 			std::cout << "pc file is not available. Try to sample node." << std::endl;
 
-			lmu::CSGNodeSamplingParams sampling_params(cell_size * 2.0, 0.0, 0.0, cell_size, min, max);
+			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 2.0, 0.0, 0.0, sample_cell_size,  min, max);
 			pc = computePointCloud(node, sampling_params);
 		}
 		res_f << "Points= " << pc.rows() << std::endl;
@@ -131,33 +182,51 @@ int main(int argc, char *argv[])
 		//pc = lmu::farthestPointSampling(pc, 32000);
 		//res_f << "PointsAfterSampling: " << pc.rows() << std::endl;
 
+		Timings timings;
+		lmu::TimeTicker t;
+
 		// Create discrete model sdf. 
 
 		std::cout << "create discrete model sdf. " << std::endl;
+		t.tick();
 		auto model_sdf = std::make_shared<lmu::ModelSDF>(pc, cell_size, res_f);
+		timings.model_sdf += t.tick();
 		igl::writeOBJ(out_path + "sdf_model.obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 		// Create connection graph.
 
 		auto prims = lmu::allDistinctFunctions(node);
 
+		t.tick();
 		auto graph = lmu::createConnectionGraph(prims, cell_size);
+		timings.connection_graph += t.tick(); 
 
+		t.tick(); 
 		auto initial_components = lmu::getConnectedComponents(graph);
+		timings.connected_components += t.tick();
+		
 		res_f << "InitialComponents= " << initial_components.size() << std::endl;
 
+		lmu::writeConnectionGraph(out_path + "input_graph.gv", graph);
+
+		t.tick();
+		auto result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings);
+		timings.decomposition += t.tick();
+
+		/*
 		std::vector<lmu::ImplicitFunctionPtr> dh_in; 
 		std::vector<lmu::ImplicitFunctionPtr> dh_out;
 		std::vector<lmu::CSGNode> sub_nodes; 
 
 		int i = 0;
 		int num_pruned_primitives = 0;
+		int ga_counter = 0;
 
 		// Find partitions. 
 
 		for (const auto& c : initial_components)
 		{
-			// If component contains only a single element, it must be a dominant halfspace fully inside.
+			// If component contains only a single element, it must be a dominant halfspace fully inside the volume.
 			if (lmu::numVertices(c) == 1)
 			{
 				dh_in.push_back(getImplicitFunctions(c)[0]);
@@ -191,11 +260,14 @@ int main(int argc, char *argv[])
 			res_f << "NumArticulationPointsWithAPNeighbors= " << aps_with_neighbors.size() << std::endl;
 
 			// Remove selected articulation points from pruned graph and add them to the list of in-dhs.
-			lmu::Graph c_rem_art(c_pruned);
+			auto c_rem_art = c_pruned;
 			for (const auto& ap : aps_with_neighbors)
 			{	
-				dh_in.push_back(c_rem_art.structure[ap]);
-				boost::remove_vertex(ap, c_rem_art.structure);
+				auto prim = c.structure[ap];
+
+				dh_in.push_back(prim);
+				
+				boost::remove_vertex(c_rem_art.vertexLookup[prim], c_rem_art.structure);
 			}
 			lmu::recreateVertexLookup(c_rem_art);
 			
@@ -211,15 +283,24 @@ int main(int argc, char *argv[])
 				}
 
 				// Get optimal node with ga. 
-				auto sub_node = lmu::generate_csg_node(lmu::getImplicitFunctions(rem_art_c), model_sdf, ng_params, res_f, node).node;
+				ofstream res_ga_1, res_ga_2;
+				res_ga_1.open(out_path + "result_ga_" + std::to_string(ga_counter) + "_1.txt");
+				res_ga_2.open(out_path + "result_ga_" + std::to_string(ga_counter) + "_2.txt");
+				ga_counter++;
+
+				auto sub_node = lmu::generate_csg_node(lmu::getImplicitFunctions(rem_art_c), model_sdf, ng_params, res_ga_1, res_ga_2, node).node;
 				if (sub_node.operationType() != lmu::CSGNodeOperationType::Noop)
 				{
 					sub_nodes.push_back(sub_node);
 				}
+
+				res_ga_1.close(); 
+				res_ga_2.close(); 
 			}
 			
-			lmu::writeConnectionGraph(out_path + "pruned_initial_component_" + std::to_string(i++) + ".gv", c_pruned);
-			lmu::writeConnectionGraph(out_path + "rem_art_components_" + std::to_string(i++) + ".gv", c_rem_art);
+			lmu::writeConnectionGraph(out_path + "pruned_initial_component_" + std::to_string(i) + ".gv", c_pruned);
+			lmu::writeConnectionGraph(out_path + "rem_art_components_" + std::to_string(i) + ".gv", c_rem_art);
+			i++;
 		}
 
 		res_f << "NumPrunedPrimitives= " << num_pruned_primitives << std::endl;
@@ -233,23 +314,199 @@ int main(int argc, char *argv[])
 		for (const auto& dh : dh_out)
 			result_node = lmu::opDiff({ result_node, lmu::geometry(dh) });
 
+		if (result_node.childsCRef().size() == 1)
+			result_node = result_node.childsCRef()[0];
+		*/
+
 		lmu::writeNode(result_node, out_path + "result_node.gv");
 		lmu::toJSONFile(result_node, out_path + "result_node.json");
-			
-		lmu::Mesh result_mesh = lmu::computeMesh(result_node, Eigen::Vector3i(num_cells, num_cells, num_cells), min, max);
+		
+		lmu::Mesh result_mesh = lmu::computeMesh(result_node, Eigen::Vector3i((max.x() - min.x()) / sample_cell_size, (max.y() - min.y()) / sample_cell_size, (max.z() - min.z()) / sample_cell_size), min, max);
 		igl::writeOBJ(out_path + "result_node.obj", result_mesh.vertices, result_mesh.indices);
 
-		lmu::writeConnectionGraph(out_path + "input_graph.gv", graph);
+		res_f << "Timings= " << timings.to_string() << std::endl;
 		
 		std::cout << "Close file" << std::endl;
 		res_f.close();
 	}
-	catch (const std::exception& ex)
-	{
-		std::cout << "ERROR: " << ex.what() << std::endl;
-	}
+	//catch (const std::exception& ex)
+	//{
+	//	std::cout << "ERROR: " << ex.what() << std::endl;
+	//}
 
 _LAUNCH:
 
 	return 0;
+}
+
+std::string to_list_str(const std::vector<lmu::ImplicitFunctionPtr>& funcs)
+{
+	std::stringstream str;
+	for (const auto& p : funcs)
+		str << p->name() << " ";
+	return str.str();
+}
+
+std::string to_list_str(const std::vector<size_t>& vertices, const lmu::Graph& g)
+{
+	std::stringstream str;
+	for (const auto& v : vertices)
+		str << g.structure[v]->name() << " ";
+	return str.str();
+}
+
+lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_ptr<lmu::ModelSDF>& model_sdf, const lmu::CSGNodeGenerationParams& ng_params, 
+	const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, int rec_level)
+{	
+	static int ga_counter = 0;
+	lmu::TimeTicker t;
+
+	auto node = lmu::opUnion();
+
+	int iter = 0;
+	for (const auto& g : graphs)
+	{
+		iter++;
+
+		std::vector<lmu::ImplicitFunctionPtr> dh_in;
+		std::vector<lmu::ImplicitFunctionPtr> dh_out;
+		auto per_graph_node = lmu::opUnion();
+
+		// If component contains only a single element, it must be a dominant halfspace fully inside the volume.
+		if (lmu::numVertices(g) == 1)
+		{
+			dh_in.push_back(getImplicitFunctions(g)[0]);
+		}
+		else
+		{
+			// Prune component.
+			auto g_pruned = lmu::pruneGraph(g);
+
+			// Check if pruned primitives are in- or out-dhs.
+			auto pruned_primitives = lmu::get_pruned_primitives(g, g_pruned);
+			for (const auto& pp : pruned_primitives)
+			{
+				if (is_inside_dh(pp, *model_sdf))
+				{
+					dh_in.push_back(pp);
+				}
+				else
+				{
+					dh_out.push_back(pp);
+				}
+			}
+			bool something_was_pruned = !pruned_primitives.empty();
+
+			if (something_was_pruned)
+			{
+				std::cout << "Level " << rec_level << " Primitives were pruned: " << to_list_str(pruned_primitives) << std::endl;
+				
+				lmu::writeConnectionGraph(output_path + "pruned_graph_" + std::to_string(iter - 1) + "_" + std::to_string(rec_level) + ".gv", g_pruned);
+			}
+
+			// Remove outside DHs from model sdf. 
+			t.tick();
+			auto model_sdf_wo_out_dhs = something_was_pruned ? model_sdf->create_with_union(dh_out) : model_sdf;
+			timings.model_sdf_adaptations += t.tick();
+
+			// Get articulation points.
+			t.tick();
+			auto aps = lmu::get_articulation_points(g);
+			timings.articulation_points += t.tick();
+
+			std::cout << "APS: " << to_list_str(aps, g) << std::endl;
+
+			// Select articulation points surrounded only by other articulation points.
+			auto aps_with_neighbors = lmu::select_aps_with_aps_as_neighbors(aps, g);
+			std::cout << "APS with Neighbors:" << to_list_str(aps_with_neighbors, g) << std::endl;
+			
+			// Remove selected articulation points from pruned graph and add them to the list of in-dhs.
+			auto g_rem_art = g_pruned;
+			for (const auto& ap : aps_with_neighbors)
+			{
+				auto prim = g.structure[ap];
+
+				dh_in.push_back(prim);
+
+				boost::clear_vertex(g_rem_art.vertexLookup[prim], g_rem_art.structure);
+				boost::remove_vertex(g_rem_art.vertexLookup[prim], g_rem_art.structure);
+			}
+			lmu::recreateVertexLookup(g_rem_art);
+			lmu::writeConnectionGraph(output_path + "pruned_graph_rem_art_" + std::to_string(iter - 1) + "_" + std::to_string(rec_level) + ".gv", g_rem_art);
+
+			std::cout << (iter - 1) << " " << rec_level << " Inside DHs: " << to_list_str(dh_in) << std::endl;
+			std::cout << (iter - 1) << " " << rec_level << " Outside DHs: " << to_list_str(dh_out) << std::endl;
+			
+			// Get connected components. 
+			t.tick();
+			auto rem_art_components = lmu::getConnectedComponents(g_rem_art);
+			timings.connected_components += t.tick();
+
+			auto sub_node = lmu::opNo();
+			if (rem_art_components.size() == 1 && !something_was_pruned)
+			{
+				std::ofstream res_ga_1, res_ga_2;
+				res_ga_1.open(output_path + "result_ga_" + std::to_string(ga_counter) + "_1.txt");
+				res_ga_2.open(output_path + "result_ga_" + std::to_string(ga_counter) + "_2.txt");
+				ga_counter++;
+
+				auto primitives = lmu::getImplicitFunctions(rem_art_components[0]);
+				std::cout << "Generate node for primitives " << to_list_str(primitives) << std::endl;
+
+				auto sdf_mesh = model_sdf_wo_out_dhs->to_mesh();
+				auto sdf_pc = model_sdf_wo_out_dhs->to_pc();
+				igl::writeOBJ(output_path + "sdf_mesh_" + std::to_string(ga_counter - 1) + ".obj", sdf_mesh.vertices, sdf_mesh.indices);
+				lmu::writePointCloudXYZ(output_path + "sdf_pc_" + std::to_string(ga_counter - 1) + ".xyz", sdf_pc);
+
+				t.tick(); 
+				sub_node = lmu::generate_csg_node(primitives, model_sdf_wo_out_dhs, ng_params, res_ga_1, res_ga_2, gt_node).node;
+				timings.ga += t.tick();
+
+				res_ga_1.close();
+				res_ga_2.close();
+			}
+			else
+			{
+				sub_node = decompose(rem_art_components, model_sdf_wo_out_dhs, ng_params, gt_node, output_path, timings, rec_level + 1);
+			}
+
+			if (sub_node.type() == lmu::CSGNodeType::Geometry || sub_node.operationType() != lmu::CSGNodeOperationType::Noop)
+			{
+				per_graph_node.addChild(sub_node);
+			}
+		}
+
+		for (const auto& dh : dh_in)
+		{
+			per_graph_node.addChild(lmu::geometry(dh));
+		}
+
+		// Avoid single child operations.
+		if (per_graph_node.childsCRef().size() == 1)
+		{
+			per_graph_node = per_graph_node.childsCRef()[0];
+		}
+
+		for (const auto& dh : dh_out)
+		{
+			//per_graph_node.addChild(lmu::opComp({ lmu::geometry(dh) }));
+			per_graph_node = lmu::opDiff({ per_graph_node, lmu::geometry(dh) });
+		}
+		
+		// Avoid single child operations.
+		if (per_graph_node.childsCRef().size() == 1)
+		{
+			per_graph_node = per_graph_node.childsCRef()[0];
+		}
+
+		node.addChild(per_graph_node);
+	}
+
+	lmu::writeNode(node, output_path + "node_" + std::to_string(rec_level) + ".json");
+	
+	// Avoid single child operations.
+	if (node.childsCRef().size() == 1)
+		node = node.childsCRef()[0];
+
+	return node;
 }
