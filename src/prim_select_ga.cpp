@@ -484,9 +484,8 @@ struct CombinedCreator
 			return node_creator.crossover(s1, s2);
 		}
 		else
-		{
+		{		
 			
-			/*
 			if (s1.is_selection())
 			{
 				PrimitiveSelection s1_converted(s1.to_node());
@@ -498,8 +497,7 @@ struct CombinedCreator
 				PrimitiveSelection s2_converted(s2.to_node());
 				return node_creator.crossover(s1, s2_converted);
 			}
-			*/
-
+			
 			return { s1,s2 };
 		}
 	}
@@ -558,7 +556,7 @@ struct SelectionRanker
 		Eigen::Vector3d grid_size = model_sdf->grid_size.cast<double>();
 		auto max = model_sdf->origin + grid_size * model_sdf->voxel_size;
 
-		int size = 16; 
+		int size = 32; 
 
 		Eigen::Vector3d cell_size = (max - min) / (double)size;
 
@@ -623,12 +621,14 @@ struct SelectionRanker
 		auto origin = model_sdf->origin;
 
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		
-		for (int x = 0; x < grid_size.x(); x+=1)
+		int step = 1;
+
+
+		for (int x = 0; x < grid_size.x(); x+= step)
 		{
-			for (int y = 0; y < grid_size.y(); y+=1)
+			for (int y = 0; y < grid_size.y(); y+= step)
 			{
-				for (int z = 0; z < grid_size.z(); z+=1)
+				for (int z = 0; z < grid_size.z(); z+= step)
 				{
 					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin; //+ Eigen::Vector3d(voxel_size * 0.5, voxel_size * 0.5, voxel_size * 0.5);
 
@@ -704,7 +704,8 @@ struct SelectionSyncPoint
 		node_ratio(node_ratio),
 		node_iter_budget(1),
 		node_done(false),
-		selection_done(false)
+		selection_done(false),
+		transfer_counter(0)
 	{
 	}
 
@@ -738,14 +739,20 @@ struct SelectionSyncPoint
 
 			cv.wait(l, [this] { return node_iter_budget > 0 || selection_done; });
 
-			if (!sorted_pop.empty())
+			TournamentSelector<RankedCreature<PrimitiveSelection, SelectionRank>> selector(2);
+
+			if (!sorted_pop.empty() && transfer_counter >= max_budget)
 			{
+				transfer_counter = 0;
+
+				std::cout << "TRANSFER" << std::endl;
+
 				// replace last n trees of the population.
 				int n = node_ratio * population.size();
 				for (int i = n; i < population.size(); ++i)
 				{
-					population[i] = sorted_pop[i - n];
-					population[i].creature = PrimitiveSelection(population[i].creature/*.to_node()*/);
+					population[i] = selector.selectFrom(sorted_pop);
+					//population[i].creature = PrimitiveSelection(population[i].creature/*.to_node()*/);
 				}
 
 				//re-sort by rank.
@@ -756,7 +763,11 @@ struct SelectionSyncPoint
 				});
 
 				sorted_pop.clear();
-			}		
+			}
+			else
+			{
+				transfer_counter++;
+			}
 
 			node_iter_budget--;
 			selection_iter_budget = max_budget;
@@ -787,6 +798,7 @@ struct SelectionSyncPoint
 	mutable std::condition_variable cv;
 	mutable int selection_iter_budget;
 	mutable int node_iter_budget;
+	mutable int transfer_counter;
 
 	int max_budget;
 	double node_ratio = 0.5;
@@ -842,7 +854,8 @@ struct SelectionPopMan
 				c++;
 		}
 		std::cout << "SELECTION: " << c << " of " << population.size() << std::endl;
-
+		double node_ratio = (double)c / (double)population.size(); 
+		
 		// Re-normalize scores and compute combined score. 
 		SelectionRank max_r(-std::numeric_limits<double>::max()), min_r(std::numeric_limits<double>::max());
 				
@@ -860,7 +873,7 @@ struct SelectionPopMan
 
 		for (auto& ps : population)
 		{
-			//ps.rank.combined = - ps.rank.geo * geo_weight - ps.rank.size * size_weight;
+			ps.rank.combined_unnormalized = -ps.rank.geo * geo_weight - ps.rank.size * size_weight;
 
 			// Normalized
 			
@@ -870,6 +883,8 @@ struct SelectionPopMan
 			ps.rank.size = ps.rank.size < 0.0 || diff_r.size == 0.0 ? 0.0 : (ps.rank.size - min_r.size) / diff_r.size;
 
 			ps.rank.combined = -ps.rank.geo * geo_weight - ps.rank.size * size_weight;
+
+			ps.rank.node_ratio = node_ratio;
 			
 			//std::cout << "Size: " << size_weight << " " << (ps.rank.size * size_weight) << std::endl;
 			//std::cout << "Rank: " << ps.rank << std::endl;
@@ -958,8 +973,8 @@ using NodeGA = GeneticAlgorithm<PrimitiveSelection, CombinedCreator, SelectionRa
 
 std::ostream& lmu::operator<<(std::ostream& out, const SelectionRank& r)
 {
-	out << "{ \"combined\": \"" << r.combined << "\", \"geo\": \"" << r.geo << "\", \"size\": \"" << r.size << "\", \"geo_unnormalized\": \"" << 
-		r.geo_unnormalized << "\", \"size_unnormalized\": \"" << r.size_unnormalized << "\"}";
+	out << "{ 'combined': " << r.combined << ", 'geo': " << r.geo << ", 'size': " << r.size << ", 'geo_unnormalized': " << 
+		r.geo_unnormalized << ", 'size_unnormalized': " << r.size_unnormalized << ", 'combined_unnormalized': " << r.combined_unnormalized <<", 'node_ratio': " << r.node_ratio << "}";
 	return out;
 }
 
@@ -1297,6 +1312,7 @@ void lmu::SelectionRank::capture_unnormalized()
 {
 	geo_unnormalized = geo;
 	size_unnormalized = size;
+	combined_unnormalized = combined;
 }
 
 lmu::CSGNodeGenerationParams::CSGNodeGenerationParams()

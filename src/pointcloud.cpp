@@ -281,10 +281,12 @@ lmu::PointCloud lmu::readPointCloudXYZ(const std::string& file, double scaleFact
   std::cout << "IS OPEN: " << s.is_open() << std::endl;
 
   std::vector<std::vector<double>> pwn;
+
   while (!s.eof()) {
     std::vector<double> tmp(6);
     s >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3] >> tmp[4] >> tmp[5];
     pwn.push_back(tmp);
+	
   }
 
   size_t numRows = pwn.size(); 

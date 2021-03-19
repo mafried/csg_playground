@@ -215,6 +215,36 @@ lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::Imp
 	return graph;
 }
 
+lmu::Graph lmu::createConnectionGraph(std::ifstream& f, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& prims)
+{
+	lmu::Graph g;
+
+	std::unordered_map<std::string, lmu::ImplicitFunctionPtr> lookup;
+	for (const auto& p : prims)
+	{
+		lookup[p->name()] = p;
+		addVertex(g, p);
+
+	}
+
+	while (!f.eof())
+	{
+		std::string p1, p2;
+		bool col; 
+
+		f >> p1 >> p2 >> col; 
+
+		
+		if (col && lookup.find(p1) != lookup.end() && lookup.find(p2) != lookup.end())
+		{
+			std::cout << lookup[p1]->name() << " " << lookup[p2]->name() << " " << col << std::endl;
+			addEdge(g, g.vertexLookup[lookup[p1]], g.vertexLookup[lookup[p2]]);
+		}
+	}
+
+	return g;
+}
+
 lmu::Graph lmu::createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, double minCellSize)
 {
 	lmu::Graph g; 

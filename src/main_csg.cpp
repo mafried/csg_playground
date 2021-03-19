@@ -80,8 +80,46 @@ struct Timings
 	int decomposition;
 };
 
+struct Stats
+{
+	Stats() : 
+		num_ga_calls(0),
+		num_inside_dhs(0),
+		num_outside_dhs(0),
+		num_aps(0),
+		num_neighbor_aps(0),
+		num_initial_components(0),
+		num_pruned(0)
+	{
+	}
+
+	std::string to_string() const
+	{
+		std::stringstream ss;
+		ss << "{ ";
+		ss << "'num_ga_calls': " << num_ga_calls << ", ";
+		ss << "'num_inside_dhs': " << num_inside_dhs << ", ";
+		ss << "'num_outside_dhs': " << num_outside_dhs << ", ";
+		ss << "'num_aps': " << num_aps << ", ";
+		ss << "'num_neighbor_aps': " << num_neighbor_aps << ", ";
+		ss << "'num_pruned': " << num_pruned << ", ";
+		ss << "'num_initial_components': " << num_initial_components;
+		ss << " }";
+
+		return ss.str();
+	}
+
+	int num_ga_calls; 
+	int num_inside_dhs; 
+	int num_outside_dhs;
+	int num_aps;
+	int num_neighbor_aps;
+	int num_initial_components;
+	int num_pruned;
+};
+
 lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_ptr<lmu::ModelSDF>& model_sdf,
-	const lmu::CSGNodeGenerationParams& ng_params, const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, int rec_level = 0);
+	const lmu::CSGNodeGenerationParams& ng_params, const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, Stats& stats, int rec_level = 0);
 
 bool is_inside_dh(const lmu::ImplicitFunctionPtr& prim, const lmu::ModelSDF& model_sdf)
 {
@@ -167,13 +205,13 @@ int main(int argc, char *argv[])
 		if (!input_pc_file.empty())
 		{
 			std::cout << "load pc from " << input_pc_file << std::endl;
-			pc = lmu::readPointCloudXYZ(input_node_file);
+			pc = lmu::readPointCloudXYZ(input_pc_file);
 		}
 		else
 		{
 			std::cout << "pc file is not available. Try to sample node." << std::endl;
 
-			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 2.0, 0.0, 0.0, sample_cell_size,  min, max);
+			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 0.5, 0.0, 0.0, sample_cell_size,  min, max);
 			pc = computePointCloud(node, sampling_params);
 		}
 		res_f << "Points= " << pc.rows() << std::endl;
@@ -183,34 +221,51 @@ int main(int argc, char *argv[])
 		//res_f << "PointsAfterSampling: " << pc.rows() << std::endl;
 
 		Timings timings;
+		Stats stats;
 		lmu::TimeTicker t;
-
-		// Create discrete model sdf. 
-
-		std::cout << "create discrete model sdf. " << std::endl;
-		t.tick();
-		auto model_sdf = std::make_shared<lmu::ModelSDF>(pc, cell_size, res_f);
-		timings.model_sdf += t.tick();
-		igl::writeOBJ(out_path + "sdf_model.obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
 
 		// Create connection graph.
 
 		auto prims = lmu::allDistinctFunctions(node);
 
 		t.tick();
-		auto graph = lmu::createConnectionGraph(prims, cell_size);
-		timings.connection_graph += t.tick(); 
+		lmu::Graph graph;
+		std::ifstream gs(input_node_file + ".col");
+		if (gs.is_open())
+		{
+			std::cout << "Read graph from file from " << (input_node_file + ".col") << std::endl;
+
+			graph = lmu::createConnectionGraph(gs, prims);
+		}
+		else
+		{
+			std::cout << "Could not find connection graph file. Create graph via sampling." << std::endl;
+			graph = lmu::createConnectionGraph(prims, cell_size);
+		}
+		timings.connection_graph += t.tick();
+		lmu::writeConnectionGraph(out_path + "input_graph.gv", graph);
+
+		// Create discrete model sdf. 
+
+		std::cout << "create discrete model sdf. " << std::endl;
+		t.tick();
+		auto model_sdf = std::make_shared<lmu::ModelSDF>(pc, sample_cell_size, res_f);
+		timings.model_sdf += t.tick();
+		igl::writeOBJ(out_path + "sdf_model.obj", model_sdf->surface_mesh.vertices, model_sdf->surface_mesh.indices);
+
+		auto mesh_grid = model_sdf->to_mesh();
+		igl::writeOBJ(out_path + "sdf_model_grid.obj", mesh_grid.vertices, mesh_grid.indices);
+
+
 
 		t.tick(); 
 		auto initial_components = lmu::getConnectedComponents(graph);
 		timings.connected_components += t.tick();
 		
-		res_f << "InitialComponents= " << initial_components.size() << std::endl;
-
-		lmu::writeConnectionGraph(out_path + "input_graph.gv", graph);
+		stats.num_initial_components = initial_components.size();
 
 		t.tick();
-		auto result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings);
+		auto result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings, stats);
 		timings.decomposition += t.tick();
 
 		/*
@@ -325,7 +380,8 @@ int main(int argc, char *argv[])
 		igl::writeOBJ(out_path + "result_node.obj", result_mesh.vertices, result_mesh.indices);
 
 		res_f << "Timings= " << timings.to_string() << std::endl;
-		
+		res_f << "Stats= " << stats.to_string() << std::endl;
+
 		std::cout << "Close file" << std::endl;
 		res_f.close();
 	}
@@ -356,9 +412,9 @@ std::string to_list_str(const std::vector<size_t>& vertices, const lmu::Graph& g
 }
 
 lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_ptr<lmu::ModelSDF>& model_sdf, const lmu::CSGNodeGenerationParams& ng_params, 
-	const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, int rec_level)
+	const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, Stats& stats, int rec_level)
 {	
-	static int ga_counter = 0;
+	
 	lmu::TimeTicker t;
 
 	auto node = lmu::opUnion();
@@ -402,6 +458,7 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 				std::cout << "Level " << rec_level << " Primitives were pruned: " << to_list_str(pruned_primitives) << std::endl;
 				
 				lmu::writeConnectionGraph(output_path + "pruned_graph_" + std::to_string(iter - 1) + "_" + std::to_string(rec_level) + ".gv", g_pruned);
+				stats.num_pruned += pruned_primitives.size();
 			}
 
 			// Remove outside DHs from model sdf. 
@@ -413,11 +470,12 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 			t.tick();
 			auto aps = lmu::get_articulation_points(g);
 			timings.articulation_points += t.tick();
-
+			stats.num_aps += aps.size();
 			std::cout << "APS: " << to_list_str(aps, g) << std::endl;
 
 			// Select articulation points surrounded only by other articulation points.
 			auto aps_with_neighbors = lmu::select_aps_with_aps_as_neighbors(aps, g);
+			stats.num_neighbor_aps += aps_with_neighbors.size();
 			std::cout << "APS with Neighbors:" << to_list_str(aps_with_neighbors, g) << std::endl;
 			
 			// Remove selected articulation points from pruned graph and add them to the list of in-dhs.
@@ -446,17 +504,17 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 			if (rem_art_components.size() == 1 && !something_was_pruned)
 			{
 				std::ofstream res_ga_1, res_ga_2;
-				res_ga_1.open(output_path + "result_ga_" + std::to_string(ga_counter) + "_1.txt");
-				res_ga_2.open(output_path + "result_ga_" + std::to_string(ga_counter) + "_2.txt");
-				ga_counter++;
+				res_ga_1.open(output_path + "result_ga_" + std::to_string(stats.num_ga_calls) + "_1.txt");
+				res_ga_2.open(output_path + "result_ga_" + std::to_string(stats.num_ga_calls) + "_2.txt");
+				stats.num_ga_calls++;
 
 				auto primitives = lmu::getImplicitFunctions(rem_art_components[0]);
 				std::cout << "Generate node for primitives " << to_list_str(primitives) << std::endl;
 
 				auto sdf_mesh = model_sdf_wo_out_dhs->to_mesh();
 				auto sdf_pc = model_sdf_wo_out_dhs->to_pc();
-				igl::writeOBJ(output_path + "sdf_mesh_" + std::to_string(ga_counter - 1) + ".obj", sdf_mesh.vertices, sdf_mesh.indices);
-				lmu::writePointCloudXYZ(output_path + "sdf_pc_" + std::to_string(ga_counter - 1) + ".xyz", sdf_pc);
+				igl::writeOBJ(output_path + "sdf_mesh_" + std::to_string(stats.num_ga_calls - 1) + ".obj", sdf_mesh.vertices, sdf_mesh.indices);
+				lmu::writePointCloudXYZ(output_path + "sdf_pc_" + std::to_string(stats.num_ga_calls - 1) + ".xyz", sdf_pc);
 
 				t.tick(); 
 				sub_node = lmu::generate_csg_node(primitives, model_sdf_wo_out_dhs, ng_params, res_ga_1, res_ga_2, gt_node).node;
@@ -467,7 +525,7 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 			}
 			else
 			{
-				sub_node = decompose(rem_art_components, model_sdf_wo_out_dhs, ng_params, gt_node, output_path, timings, rec_level + 1);
+				sub_node = decompose(rem_art_components, model_sdf_wo_out_dhs, ng_params, gt_node, output_path, timings, stats, rec_level + 1);
 			}
 
 			if (sub_node.type() == lmu::CSGNodeType::Geometry || sub_node.operationType() != lmu::CSGNodeOperationType::Noop)
@@ -475,6 +533,9 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 				per_graph_node.addChild(sub_node);
 			}
 		}
+
+		stats.num_outside_dhs += dh_out.size();
+		stats.num_inside_dhs += dh_in.size();
 
 		for (const auto& dh : dh_in)
 		{
