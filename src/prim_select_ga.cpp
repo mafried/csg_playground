@@ -39,18 +39,24 @@ lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives) :
 
 	if (primitives)
 	{
+		int i = 0;
 		for (const auto& p : *primitives)
 		{
-			bool active = d(rnd_engine, parm_t{ 0.5 });
 			DHType dh_type = d(rnd_engine, parm_t{ 0.5 }) ? DHType::INSIDE : DHType::OUTSIDE;
 
-			selection.push_back(SelectionValue(dh_type, active));
+			selection.push_back(SelectionValue(dh_type, true));
+
+			ordering.push_back(i);
+			i++;
 		}
 	}
+
+	std::shuffle(ordering.begin(), ordering.end(), rnd_engine);
 }
 
-lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types) :
+lmu::PrimitiveSelection::PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types, const std::vector<int>& ordering) :
 	prims(primitives),
+	ordering(ordering),
 	node(opNo())
 {
 	if (primitives)
@@ -70,36 +76,35 @@ lmu::PrimitiveSelection::PrimitiveSelection(const CSGNode& node) :
 
 lmu::CSGNode lmu::PrimitiveSelection::to_node() const
 {
-	std::vector<CSGNode> diff_prims;
-	std::vector<CSGNode> union_prims;
+	
+	auto node = lmu::opUnion();
 
 	for (int i = 0; i < selection.size(); ++i)
 	{
-		if (selection[i].active)
+		int idx = ordering[i];
+		
+		if (selection[idx].dh_type == DHType::OUTSIDE)
 		{
-			if (selection[i].dh_type == DHType::OUTSIDE)
-				diff_prims.push_back(geometry(prims->at(i).imFunc));
-			else
-				union_prims.push_back(geometry(prims->at(i).imFunc));
+
+			node = lmu::opDiff({ node, lmu::geometry(prims->at(idx).imFunc) });
+
+		}
+		else
+		{
+			node.addChild(lmu::geometry(prims->at(idx).imFunc));
 		}
 	}
-	
-	if (union_prims.empty() && diff_prims.empty())
+
+	// Replace operations with a single operand with the operand.
+	lmu::visit(node, [](lmu::CSGNode& n)
 	{
-		return opNo();
-	}
-	else if (!union_prims.empty() && diff_prims.empty())
-	{
-		return lmu::to_binary_tree(union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0]);
-	}
-	else if (union_prims.empty() && !diff_prims.empty())
-	{
-		return lmu::to_binary_tree(opDiff({ opNo(),  diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0]}));
-	}
-	else
-	{
-		return lmu::to_binary_tree(opDiff({ union_prims.size() > 1 ? opUnion(union_prims) : union_prims[0], diff_prims.size() > 1 ? opUnion(diff_prims) : diff_prims[0] }));
-	}
+		if (n.childsCRef().size() == 1)
+		{
+			n = n.childsCRef()[0];
+		}
+	});
+		
+	return node;
 }
 
 int lmu::PrimitiveSelection::get_num_active() const
@@ -119,10 +124,13 @@ size_t lmu::PrimitiveSelection::hash(size_t seed) const
 {	
 	if (node.operationType() == CSGNodeOperationType::Noop)
 	{
+		int i = 0;
 		for (const auto& s : selection)
 		{
 			boost::hash_combine(seed, s.dh_type);
 			boost::hash_combine(seed, s.active);
+			boost::hash_combine(seed, ordering[i]);
+			i++;
 		}
 	}
 	else
@@ -183,6 +191,28 @@ struct SelectionCreator
 					new_s.selection[s_idx].dh_type = s.selection[s_idx].dh_type == DHType::INSIDE ? DHType::OUTSIDE : DHType::INSIDE; 
 				}
 			}
+
+			// Shuffle indices sequence.
+			if (d(_rndEngine, parm_t{ 0.5 }))
+			{				
+				int x1 = uniform_d(_rndEngine, p_ud{ 0, num_selections});
+				int x2 = x1;
+				while (x2 == x1)
+					x2 = uniform_d(_rndEngine, p_ud{ 0, num_selections });
+
+				int start = std::min(x1, x2);
+				int stop = std::max(x1, x2);
+
+				for (const auto& v : new_s.ordering)
+					std::cout << (int)v << " ";
+				std::cout << std::endl;
+				std::shuffle(new_s.ordering.begin() + start, new_s.ordering.begin() + stop, _rndEngine);
+			
+				for (const auto& v : new_s.ordering)
+					std::cout << (int)v << " ";
+				std::cout << std::endl;
+				std::cout << "----------------- " << start << " " << stop << std::endl;
+			}
 			
 			return new_s;
 		}
@@ -198,19 +228,67 @@ struct SelectionCreator
 		static std::uniform_int_distribution<> uniform_d{};
 		using p_ud = decltype(uniform_d)::param_type;
 			
-		int x1 = uniform_d(_rndEngine, p_ud{ 0, num_selections - 1 });
-		int x2 = uniform_d(_rndEngine, p_ud{ 0, num_selections - 1 });
+		int x1 = uniform_d(_rndEngine, p_ud{ 0, num_selections });
+		int x2 = x1;
+		while (x2 == x1)
+			x2 = uniform_d(_rndEngine, p_ud{ 0, num_selections });
 
 		int start = std::min(x1, x2);
 		int stop = std::max(x1, x2);
 
-		for (int i = start; i <= stop; ++i)
+		//Swap selection. 
+
+		/*
+		std::cout << "--------------------------" << std::endl;
+		std::cout << "Crossover: Exchange dh type sequence. start: " << start << " end: " << stop << std::endl;
+
+		for (const auto& v : new_s1.selection)
+			std::cout << (int)v.dh_type << " ";
+		std::cout << std::endl;
+		for (const auto& v : new_s2.selection)
+			std::cout << (int)v.dh_type << " ";
+		std::cout << std::endl;
+		*/
+		
+		std::swap_ranges(new_s1.selection.begin() + start, new_s1.selection.begin() + stop, new_s2.selection.begin() + start);
+
+		/*
+		for (const auto& v : new_s1.selection)
+			std::cout << (int)v.dh_type << " ";
+		std::cout << std::endl;
+		for (const auto& v : new_s2.selection)
+			std::cout << (int)v.dh_type << " ";
+		std::cout << std::endl;
+		
+
+		std::cout << "--------------------------" << std::endl;
+		*/
+		
+		/*		
+		// Also exchange ordering sequnece if it contains the same indices. 
+		if (std::is_permutation(new_s1.ordering.begin() + start, new_s1.ordering.begin() + stop, new_s2.ordering.begin() + start, new_s2.ordering.begin() + stop))
 		{
-			auto tmp_s = new_s1;
+			std::cout << "Crossover: Exchange ordering sequence. start: " << start << " end: " << stop << std::endl;
+			for (const auto& v : new_s1.ordering)
+				std::cout << v << " ";
+			std::cout << std::endl;
+			for (const auto& v : new_s2.ordering)
+				std::cout << v << " ";
+			std::cout << std::endl;
+		*/
+		
+		std::swap_ranges(new_s1.ordering.begin() + start, new_s1.ordering.begin() + stop, new_s2.ordering.begin() + start);
+		
+		/*
+			for (const auto& v : new_s1.ordering)
+				std::cout << v << " ";
+			std::cout << std::endl;
+			for (const auto& v : new_s2.ordering)
+				std::cout << v << " ";
+			std::cout << std::endl;
 			
-			new_s1.selection[i].dh_type = new_s2.selection[i].dh_type;
-			new_s2.selection[i].dh_type = tmp_s.selection[i].dh_type;
 		}
+		*/
 
 		return std::vector<lmu::PrimitiveSelection>
 		{
@@ -230,10 +308,12 @@ struct SelectionCreator
 			new_ps.selection[i].active = true;
 			
 			new_ps.selection[i].dh_type = d(_rndEngine, parm_t{ params.dh_type_prob }) ? DHType::INSIDE : DHType::OUTSIDE;
+
+			new_ps.ordering[i] = i;
 		}
 
-		//std::cout << "CREATED: " << new_ps << std::endl;
-
+		std::shuffle(new_ps.ordering.begin(), new_ps.ordering.end(), _rndEngine);
+		
 		return new_ps;
 	}
 
@@ -542,8 +622,40 @@ struct SelectionRanker
 	{
 	}
 
-	
+	SelectionRanker(const std::vector<Eigen::Vector3d>& points, const std::vector<double>& distances) :
+		points(points),
+		distances(distances),
+		model_sdf(nullptr)
+	{
+
+	}
+
 	SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const
+	{
+		auto node = s.is_selection() ? s.to_node() : s.node;
+
+		double mean_abs_d = 0;
+
+		for (int i = 0; i < points.size(); ++i)
+		{
+			auto d = node.signedDistance(points[i]);
+
+			mean_abs_d += std::abs(distances[i] - d);
+		}
+
+		mean_abs_d /= (double)points.size();
+
+		auto node_size = (double)numNodes(node);
+
+		auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
+
+		sr.capture_unnormalized();
+		
+		return sr;
+	}
+
+	
+	SelectionRank rank2(const PrimitiveSelection& s, bool debug = false) const
 	{
 		auto node = s.is_selection() ? s.to_node() : s.node;
 
@@ -610,7 +722,7 @@ struct SelectionRanker
 		return sr;
 	}
 		
-	SelectionRank rank2(const PrimitiveSelection& s, bool debug = false) const
+	SelectionRank rank3(const PrimitiveSelection& s, bool debug = false) const
 	{
 
 		auto node = s.is_selection() ? s.to_node() : s.node;
@@ -692,6 +804,9 @@ struct SelectionRanker
 private:
 
 	std::shared_ptr<ModelSDF> model_sdf;	
+
+	std::vector<Eigen::Vector3d> points;
+	std::vector<double> distances;
 };
 
 
@@ -751,8 +866,22 @@ struct SelectionSyncPoint
 				int n = node_ratio * population.size();
 				for (int i = n; i < population.size(); ++i)
 				{
-					population[i] = selector.selectFrom(sorted_pop);
-					//population[i].creature = PrimitiveSelection(population[i].creature/*.to_node()*/);
+					auto selected = selector.selectFrom(sorted_pop);
+					bool already_there = false;
+					for (const auto& p : population)
+					{
+						if (p.creature.to_node().hash(0) == selected.creature.to_node().hash(0))
+						{
+							already_there = true;
+							break;
+						}
+					}
+					if (!already_there)
+					{
+						population[i] = selector.selectFrom(sorted_pop);
+						std::cout << "TRANSFER DONE" << std::endl;
+						//population[i].creature = PrimitiveSelection(population[i].creature/*.to_node()*/);
+					}
 				}
 
 				//re-sort by rank.
@@ -1166,6 +1295,8 @@ CSGNode lmu::integrate_node(const CSGNode& into, const CSGNode& node)
 	}
 }
 
+#include "cit.h"
+
 lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::ImplicitFunctionPtr>& primitives, const std::shared_ptr<ModelSDF>& model_sdf, const CSGNodeGenerationParams& params,
 	std::ostream& s1, std::ostream& s2, const lmu::CSGNode& gt_node)
 {	
@@ -1178,7 +1309,20 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::Implicit
 		return lmu::geometry(primitives[0]);
 	}
 
-	SelectionRanker ranker(model_sdf);
+	NodeGenerationResult gen_res(opNo());
+
+	auto cits = generate_cits(*model_sdf, primitives, model_sdf->voxel_size, gt_node);
+
+	lmu::PointCloud pc(std::get<0>(cits).size(), 6);
+	for (int i = 0; i < pc.rows(); ++i)
+	{
+		pc.row(i) << std::get<0>(cits)[i].transpose(), 0.0, 0.0, 0.0;
+	}
+	lmu::writePointCloudXYZ("cit_points.xyz", pc);
+	
+	SelectionRanker ranker(std::get<0>(cits), std::get<1>(cits));
+
+	//SelectionRanker ranker(model_sdf);
 
 	if(primitives.size() == 2)
 	{
@@ -1225,7 +1369,6 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::Implicit
 
 	SelectionSyncPoint sync_point(params.max_budget, params.node_ratio);
 
-	NodeGenerationResult gen_res(opNo());
 
 	auto creator_params_selection = params;
 	creator_params_selection.node_creator_prob = 0.0;

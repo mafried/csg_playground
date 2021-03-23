@@ -887,7 +887,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 	if (cancellable)
 	{
 
-		auto task = ga.runAsync(params, s, c, r, gsc, popMan);
+		//auto task = ga.runAsync(params, s, c, r, gsc, popMan);
 
 		int i;
 		std::cout << "Press a Key and Enter to break." << std::endl;
@@ -895,7 +895,7 @@ lmu::CSGNode lmu::createCSGNodeWithGA(const std::vector<std::shared_ptr<Implicit
 
 		ga.stop();
 
-		auto res = task.get();
+		//auto res = task.get();
 
 		//res.statistics.save(std::to_string(partitionId) + "_" + statsFile, &res.population[0].creature);
 

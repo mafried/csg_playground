@@ -155,7 +155,7 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 				std::cout << j << " REDU" << std::endl;
 				break;
 			}
-			j++;
+			j++;Mo
 		}
 		if (!is_redundant)
 		{
@@ -174,6 +174,89 @@ lmu::CITS lmu::generate_cits(const lmu::CSGNode& n, double sgs, CITSGenerationOp
 	//lmu::writeNode(lmu::DNFtoCSGNode(cits.dnf), "dnf2.gv");
 
 	return cits;
+}
+
+#include "primitive_extraction.h"
+
+template <typename Container> // we can make this generic for any container [1]
+struct container_hash {
+	std::size_t operator()(Container const& c) const {
+		return boost::hash_range(c.begin(), c.end());
+	}
+};
+
+#include <algorithm>
+
+std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> lmu::generate_cits(const lmu::ModelSDF& m, const std::vector<lmu::ImplicitFunctionPtr>& primitives, double sampling_grid_size, const lmu::CSGNode& gt_node)
+{	
+
+	// Get distances.
+	std::unordered_map<std::vector<int>, std::vector<std::tuple<Eigen::Vector3d, double>>, container_hash<std::vector<int>>> clauses;
+	std::vector<Eigen::Vector3d> points;
+
+	for (int x = 0; x < m.grid_size.x(); ++x)
+	{
+		for (int y = 0; y < m.grid_size.y(); ++y)
+		{
+			for (int z = 0; z < m.grid_size.z(); ++z)
+			{
+				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * m.voxel_size + m.origin;
+				points.push_back(p);
+			}
+		}
+	}
+	std::vector<double> distances = m.get_signed_distances_from_mesh(points);
+
+	// Debug
+	/*
+	for (int i = 0; i < points.size(); ++i)
+	{
+		distances[i] = gt_node.signedDistance(points[i]);
+	}
+	*/
+
+	// Create clauses.
+	for(int i = 0; i < distances.size(); ++i)
+	{
+		double nd = distances[i];
+		const auto& p = points[i];
+
+		auto vec = std::vector<int>(primitives.size(), 0);
+		for (int j = 0; j < primitives.size(); ++j)
+		{
+			vec[j] = primitives[j]->signedDistance(p) <= 0.0 ? 1 : 0;
+		}
+
+		//if (clauses.find(vec) == clauses.end() || clauses[vec].d > nd)
+		//{
+		auto pd = std::make_tuple(p, nd);
+		clauses[vec].push_back(pd); 
+		//}
+	}
+
+	size_t num_samples = 100;
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	// Prepare output.
+	std::vector<Eigen::Vector3d> p_vec; 
+	std::vector<double> d_vec;
+	for (auto& pd : clauses)
+	{
+		lmu::PointCloud cit_pc(pd.second.size(), 6);
+		for (int i = 0; i < cit_pc.rows(); ++i)
+			cit_pc.row(i) << std::get<0>(pd.second[i]).transpose(), std::get<1>(pd.second[i]), 0.0, 0.0;
+	
+		auto new_cit_pc = lmu::farthestPointSampling(cit_pc, num_samples);
+
+		for(int i = 0; i < new_cit_pc.rows(); ++i)
+		{
+			p_vec.push_back(Eigen::Vector3d(new_cit_pc.row(i).x(), new_cit_pc.row(i).y(), new_cit_pc.row(i).z()));
+			d_vec.push_back(new_cit_pc.row(i).w());
+		}
+	}
+
+	return std::make_tuple(p_vec, d_vec);
 }
 
 bool is_outside(const lmu::Clause& c, const lmu::CITS& cits, double sampling_grid_size,

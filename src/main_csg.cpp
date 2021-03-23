@@ -517,8 +517,11 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 				lmu::writePointCloudXYZ(output_path + "sdf_pc_" + std::to_string(stats.num_ga_calls - 1) + ".xyz", sdf_pc);
 
 				t.tick(); 
-				sub_node = lmu::generate_csg_node(primitives, model_sdf_wo_out_dhs, ng_params, res_ga_1, res_ga_2, gt_node).node;
+				auto res = lmu::generate_csg_node(primitives, model_sdf_wo_out_dhs, ng_params, res_ga_1, res_ga_2, gt_node);
+				sub_node = res.node;
 				timings.ga += t.tick();
+
+				lmu::writePointCloudXYZ(output_path + "insice_cit_pc_" + std::to_string(stats.num_ga_calls - 1) + ".xyz", lmu::pointCloudFromVector(res.points));
 
 				res_ga_1.close();
 				res_ga_2.close();

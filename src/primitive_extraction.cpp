@@ -1726,6 +1726,34 @@ void lmu::ModelSDF::recreate_from_mesh(const Mesh& m)
 
 	std::cout << "Mesh re-creation done." << std::endl;
 }
+std::vector<double> lmu::ModelSDF::get_signed_distances_from_mesh(const std::vector<Eigen::Vector3d>& points) const
+{
+	int n = points.size();
+	std::vector<double> distances(n, 0.0);
+	Eigen::MatrixXd p_mat(n, 3);
+
+	for (int i = 0; i < n; ++i)
+	{
+		p_mat.row(i) << points[i].transpose();
+	}
+
+	Eigen::VectorXd d;
+	Eigen::VectorXi i;
+	Eigen::MatrixXd norm, c;
+
+	igl::signed_distance_pseudonormal(p_mat, surface_mesh.vertices, surface_mesh.indices, tree, fn, vn, en, emap, d, i, c, norm);
+
+	for (int i = 0; i < n; ++i)
+	{
+		double sd = distance(points[i]); // d.coeff(i, 0);
+		//Eigen::Vector3f n = norm.row(j).transpose().cast<float>();
+
+		distances[i] = sd;
+	}
+
+	return distances;
+}
+
 
 #include <CGAL/poisson_surface_reconstruction.h>
 #include <CGAL/Inverse_index.h>
