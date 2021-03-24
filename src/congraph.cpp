@@ -744,9 +744,9 @@ lmu::Graph lmu::pruneGraph(const Graph& g)
 		//pruned[*ei] = shouldBePruned(res, *ei);
 	//}
 
-	auto g1 = lmu::filterGraph(g, [](const VertexDescriptor& v) {return true; }, [&g](const EdgeDescriptor& e) { return !shouldBePruned(g, e); });
+	//auto g1 = lmu::filterGraph(g, [](const VertexDescriptor& v) {return true; }, [&g](const EdgeDescriptor& e) { return !shouldBePruned(g, e); });
 
-	auto g2 = lmu::filterGraph(g1, [&g1](const VertexDescriptor& v) {return boost::in_degree(v, g1.structure) > 0;  }, [](const EdgeDescriptor& e) { return true; });
+	auto g2 = lmu::filterGraph(g, [&g](const VertexDescriptor& v) {return boost::in_degree(v, g.structure) > 1;  }, [](const EdgeDescriptor& e) { return true; });
 	
 	return g2;
 }
