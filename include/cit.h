@@ -32,6 +32,9 @@ namespace lmu
 	CITS generate_cits(const lmu::CSGNode& n, double sampling_grid_size, CITSGenerationOptions options, 
 		const std::vector<ImplicitFunctionPtr>& primitives = {});
 
+	struct ModelSDF;
+	std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> generate_cits(const ModelSDF& m, const std::vector<ImplicitFunctionPtr>& primitives, double sampling_grid_size, const lmu::CSGNode& gt_node);
+
 	DNF extract_prime_implicants(const CITS& cits, const lmu::PointCloud& outside_points, double sampling_grid_size);
 
 	std::vector<std::unordered_set<int>> convert_pis_to_cit_indices(const DNF& prime_implicants, const CITS& cits);

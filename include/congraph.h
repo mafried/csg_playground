@@ -107,6 +107,7 @@ namespace lmu
 	
 	lmu::Graph createConnectionGraph(const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs, double minCellSize);
 
+	lmu::Graph createConnectionGraph(std::ifstream& f, const std::vector<std::shared_ptr<lmu::ImplicitFunction>>& impFuncs);
 
 	lmu::Graph createRandomConnectionGraph(int numVertices, double edgePropability);
 

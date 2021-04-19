@@ -700,21 +700,49 @@ std::vector<lmu::VertexDescriptor> lmu::get_articulation_points(const Graph& g)
 std::vector<lmu::VertexDescriptor> lmu::select_aps_with_aps_as_neighbors(const std::vector<lmu::VertexDescriptor>& aps, const Graph& g)
 {
 	std::vector<lmu::VertexDescriptor> res; 
+	auto cliques = getCliques(g);
 
 	for (const auto& ap : aps)
-	{
-		bool all_neighbors_are_aps = true;
+	{	
 		typename boost::graph_traits <lmu::GraphStructure>::out_edge_iterator ei, ei_end;
+		std::vector<lmu::VertexDescriptor> neighbors; 
 		for (boost::tie(ei, ei_end) = boost::out_edges(ap, g.structure); ei != ei_end; ++ei)
 		{
-			auto neighbor = boost::target(*ei, g.structure);
+			neighbors.push_back(boost::target(*ei, g.structure));
+		}
+
+		bool all_valid_neighbors = true;
+
+		for(const auto& neighbor : neighbors)
+		{
+			// Check if neighbor is an ap.
 			if (std::find(aps.begin(), aps.end(), neighbor) == aps.end())
 			{
-				all_neighbors_are_aps = false;
-				break;
+				all_valid_neighbors = false;
+				goto _invalid_neighbor;
+			}
+			else // neighbor is an ap. Now check if neighbor ap is in a more-than-2 clique with the current ap together with other neighbors. 
+			{				
+				for (const auto& c : cliques)
+				{
+					if (c.functions.size() > 2) // mor-than-2-clique
+					{
+						for (const auto& f : c.functions)
+						{
+							auto vd = g.vertexLookup.at(f);
+
+							if (vd != ap && vd != neighbor && std::find(neighbors.begin(), neighbors.end(), vd) != neighbors.end())
+							{
+								all_valid_neighbors = false;
+								goto _invalid_neighbor;
+							}
+						}						
+					}
+				}
 			}
 		}
-		if (all_neighbors_are_aps)
+		_invalid_neighbor:
+		if (all_valid_neighbors)
 			res.push_back(ap);
 	}
 

@@ -201,6 +201,8 @@ namespace lmu
 
 		std::shared_ptr<lmu::ModelSDF> create_with_union(std::vector<ImplicitFunctionPtr>& outside_dhs) const;
 
+		std::vector<double> get_signed_distances_from_mesh(const std::vector<Eigen::Vector3d>& points) const;
+
 		void recreate_from_mesh(const Mesh& m);
 
 		void recreate_from_points(const PointCloud& pc);

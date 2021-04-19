@@ -26,11 +26,12 @@ namespace lmu
 	struct PrimitiveSelection
 	{
 		explicit PrimitiveSelection(const PrimitiveSet* primitives);
-		PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types);
+		PrimitiveSelection(const PrimitiveSet* primitives, const std::vector<DHType>& dh_types, const std::vector<int>& ordering);
 		explicit PrimitiveSelection(const CSGNode& node);
 
 		const PrimitiveSet* prims;
 		std::vector<SelectionValue> selection;
+		std::vector<int> ordering;
 
 		CSGNode to_node() const;
 
@@ -67,6 +68,9 @@ namespace lmu
 
 		double geo_unnormalized;
 		double size_unnormalized;
+		double combined_unnormalized;
+
+		double node_ratio;
 
 		std::vector<Eigen::Matrix<double, 1, 6>> points;
 

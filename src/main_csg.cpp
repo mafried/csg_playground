@@ -479,17 +479,24 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 			std::cout << "APS with Neighbors:" << to_list_str(aps_with_neighbors, g) << std::endl;
 			
 			// Remove selected articulation points from pruned graph and add them to the list of in-dhs.
-			auto g_rem_art = g_pruned;
-			for (const auto& ap : aps_with_neighbors)
+			
+			auto g_rem_art = lmu::filterGraph(g_pruned, [&g, &g_pruned, &aps_with_neighbors, &dh_in](const auto& v)
 			{
-				auto prim = g.structure[ap];
+				for (const auto& ap : aps_with_neighbors)
+				{					
+					if (g.structure[ap] == g_pruned.structure[v])
+					{
+						std::cout << "Remove primitive " << g_pruned.structure[v]->name() << std::endl;
 
-				dh_in.push_back(prim);
+						dh_in.push_back(g_pruned.structure[v]);
 
-				boost::clear_vertex(g_rem_art.vertexLookup[prim], g_rem_art.structure);
-				boost::remove_vertex(g_rem_art.vertexLookup[prim], g_rem_art.structure);
+						return false;
+					}
+				}
+				return true;
 			}
-			lmu::recreateVertexLookup(g_rem_art);
+			, [](const auto& e) { return true; });
+
 			lmu::writeConnectionGraph(output_path + "pruned_graph_rem_art_" + std::to_string(iter - 1) + "_" + std::to_string(rec_level) + ".gv", g_rem_art);
 
 			std::cout << (iter - 1) << " " << rec_level << " Inside DHs: " << to_list_str(dh_in) << std::endl;
@@ -521,7 +528,7 @@ lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_
 				sub_node = res.node;
 				timings.ga += t.tick();
 
-				lmu::writePointCloudXYZ(output_path + "insice_cit_pc_" + std::to_string(stats.num_ga_calls - 1) + ".xyz", lmu::pointCloudFromVector(res.points));
+				lmu::writePointCloudXYZ(output_path + "inside_cit_pc_" + std::to_string(stats.num_ga_calls - 1) + ".xyz", lmu::pointCloudFromVector(res.points));
 
 				res_ga_1.close();
 				res_ga_2.close();
