@@ -332,6 +332,8 @@ namespace lmu
 				bestScore(0.0),
 				worstScore(std::numeric_limits<double>::max())
 			{
+				whole_iter_dur.tick();
+				iteration_times.push_back(0);
 			}
 
 			std::string info;
@@ -354,12 +356,20 @@ namespace lmu
 
 			std::vector<long long> scmDurations;
 		
-			TimeTicker totalDuration, iterationDuration;
+			TimeTicker totalDuration, iterationDuration, whole_iter_dur;
+
+			std::vector<long long> iteration_times;
 
 			void update()
 			{
 				bestScore = bestCandidateScores.empty() ? Rank(0.0) : bestCandidateScores.back();
 				worstScore = worstCandidateScores.empty() ? Rank(0.0) : worstCandidateScores.back();
+
+				auto delta = whole_iter_dur.tick();
+
+				iteration_times.push_back(iteration_times.back() + delta);
+
+				//std::cout << "CURRENT: " << delta << std::endl;
 			}
 
 			void print()
@@ -398,7 +408,7 @@ namespace lmu
 				
 				for (int i = 0; i < bestCandidateScores.size(); ++i)
 				{
-					stream << i << " | " << bestCandidateScores[i] << " | " << worstCandidateScores[i] << " | " << optDurations[i] << " | " << rankingDurations[i] << " | "  << sortingDurations[i] << " | " << scmDurations[i] << std::endl;
+					stream << i << " | " << bestCandidateScores[i] << " | " << worstCandidateScores[i] << " | " << optDurations[i] << " | " << rankingDurations[i] << " | "  << sortingDurations[i] << " | " << scmDurations[i] << " | " << iteration_times[i] <<  std::endl;
 				}
 			}
 

@@ -187,7 +187,7 @@ struct container_hash {
 
 #include <algorithm>
 
-std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> lmu::generate_cits(const lmu::ModelSDF& m, const std::vector<lmu::ImplicitFunctionPtr>& primitives, double sampling_grid_size, const lmu::CSGNode& gt_node)
+std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> lmu::generate_cits(const lmu::ModelSDF& m, const std::vector<lmu::ImplicitFunctionPtr>& primitives, double sampling_grid_size, bool select_all)
 {	
 
 	// Get distances.
@@ -247,7 +247,7 @@ std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> lmu::generate_cits
 		for (int i = 0; i < cit_pc.rows(); ++i)
 			cit_pc.row(i) << std::get<0>(pd.second[i]).transpose(), std::get<1>(pd.second[i]), 0.0, 0.0;
 	
-		auto new_cit_pc = lmu::farthestPointSampling(cit_pc, num_samples);
+		auto new_cit_pc = select_all ? cit_pc : lmu::farthestPointSampling(cit_pc, num_samples);
 
 		for(int i = 0; i < new_cit_pc.rows(); ++i)
 		{

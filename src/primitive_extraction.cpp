@@ -760,7 +760,7 @@ std::tuple<double, std::vector<double>> lmu::PrimitiveSetRanker::get_geo_score(c
 	return std::make_tuple((double)validPoints / (double)checkedPoints, per_polytope_coverage_score);
 }
 
-void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std::function<void(const Eigen::Vector3d&)> f)
+void lmu::iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std::function<void(const Eigen::Vector3d&)> f)
 {
 	static const std::array<std::array<int, 3>, 35> indices =
 	{

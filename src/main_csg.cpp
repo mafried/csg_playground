@@ -23,6 +23,7 @@
 #include "pc_structure.h"
 #include "point_vis.h"
 #include "polytope_extraction.h"
+#include "cit.h"
 
 
 void update(igl::opengl::glfw::Viewer& viewer)
@@ -118,20 +119,33 @@ struct Stats
 	int num_pruned;
 };
 
+std::string to_list_str(const std::vector<lmu::ImplicitFunctionPtr>& funcs);
+
 lmu::CSGNode decompose(const std::vector<lmu::Graph>& graphs, const std::shared_ptr<lmu::ModelSDF>& model_sdf,
 	const lmu::CSGNodeGenerationParams& ng_params, const lmu::CSGNode& gt_node, const std::string& output_path, Timings& timings, Stats& stats, int rec_level = 0);
 
 bool is_inside_dh(const lmu::ImplicitFunctionPtr& prim, const lmu::ModelSDF& model_sdf)
 {
-	Eigen::Vector3d center_point(0, 0, 0);
-	for (int i = 0; i < prim->meshCRef().vertices.rows(); ++i)
-	{
-		center_point += prim->meshCRef().vertices.row(i).transpose();
-	}
+	int inside_points = 0;
+	int points = 0;
 
-	center_point = center_point / (double)prim->meshCRef().vertices.rows();
+	lmu::iterate_over_prim_volume(lmu::Primitive(prim, lmu::ManifoldSet(), lmu::PrimitiveType::None), model_sdf.voxel_size,
+		[&inside_points, &points, &model_sdf, &prim ](const auto& p) 
+		{
+			if (prim->signedDistance(p) <= 0.0)
+			{
+				if (model_sdf.distance(p) <= 0.0)
+					inside_points++;
 
-	return model_sdf.distance(center_point) <= 0.0;
+				points++;
+			}
+		});
+
+	double inside_ratio = (double)(inside_points) / (double)(points);
+
+	std::cout << "INSIDE " << prim->name() << ": " << inside_ratio << " points: " << points << std::endl;
+
+	return inside_ratio > 0.5;
 }
 
 int main(int argc, char *argv[])
@@ -153,8 +167,9 @@ int main(int argc, char *argv[])
 	auto input_node_file = s.getStr("Data", "InputNodeFile", "input.json");
 	auto input_pc_file = s.getStr("Data", "InputPointCloudFile", "");
 	auto sample_cell_size = s.getDouble("Data", "SampleCellSize", 0.1);
-
+	auto do_decomposition = s.getBool("NodeGeneration", "UseDecomposition", true);
 	auto out_path = s.getStr("Data", "OutputFolder", "\\");
+
 	auto num_cells = s.getInt("ConnectionGraph", "NumCells", 100);
 
 	lmu::CSGNodeGenerationParams ng_params;
@@ -211,7 +226,7 @@ int main(int argc, char *argv[])
 		{
 			std::cout << "pc file is not available. Try to sample node." << std::endl;
 
-			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 0.5, 0.0, 0.0, sample_cell_size,  min, max);
+			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 0.3, 0.0, sample_cell_size * 0.5, sample_cell_size,  min, max);
 			pc = computePointCloud(node, sampling_params);
 		}
 		res_f << "Points= " << pc.rows() << std::endl;
@@ -265,113 +280,42 @@ int main(int argc, char *argv[])
 		stats.num_initial_components = initial_components.size();
 
 		t.tick();
-		auto result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings, stats);
-		timings.decomposition += t.tick();
-
-		/*
-		std::vector<lmu::ImplicitFunctionPtr> dh_in; 
-		std::vector<lmu::ImplicitFunctionPtr> dh_out;
-		std::vector<lmu::CSGNode> sub_nodes; 
-
-		int i = 0;
-		int num_pruned_primitives = 0;
-		int ga_counter = 0;
-
-		// Find partitions. 
-
-		for (const auto& c : initial_components)
+		auto result_node = lmu::opNo();
+		
+		if (do_decomposition)
 		{
-			// If component contains only a single element, it must be a dominant halfspace fully inside the volume.
-			if (lmu::numVertices(c) == 1)
-			{
-				dh_in.push_back(getImplicitFunctions(c)[0]);
-				continue; 
-			}
+			result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings, stats);
+		}
+		else
+		{
+			std::ofstream res_ga_1, res_ga_2;
+			res_ga_1.open(out_path + "result_ga_" + std::to_string(stats.num_ga_calls) + "_1.txt");
+			res_ga_2.open(out_path + "result_ga_" + std::to_string(stats.num_ga_calls) + "_2.txt");
 
-			// Prune component.
-			auto c_pruned = lmu::pruneGraph(c);
+			auto primitives = lmu::allDistinctFunctions(node);
+			std::cout << "Generate node for primitives " << to_list_str(primitives) << std::endl;
 
-			// Check if pruned primitives are in- or out-dhs.
-			auto pruned_primitives = lmu::get_pruned_primitives(c, c_pruned); 
-			num_pruned_primitives += pruned_primitives.size();
-			for (const auto& pp : pruned_primitives)
-			{
-				if (is_inside_dh(pp, *model_sdf))
-				{
-					dh_in.push_back(pp);
-				}
-				else
-				{
-					dh_out.push_back(pp);
-				}
-			}
+			t.tick();
+			auto res = lmu::generate_csg_node(primitives, model_sdf, ng_params, res_ga_1, res_ga_2, node);
+			result_node = res.node;
+			timings.ga += t.tick();
 
-			// Find articulation points.
-			auto aps = get_articulation_points(c);
-			res_f << "NumArticulationPoints= " << aps.size() << std::endl;
+			res_ga_1.close(); 
+			res_ga_2.close();
 
-			// Select articulation points surrounded only by other articulation points.
-			auto aps_with_neighbors = lmu::select_aps_with_aps_as_neighbors(aps, c);
-			res_f << "NumArticulationPointsWithAPNeighbors= " << aps_with_neighbors.size() << std::endl;
-
-			// Remove selected articulation points from pruned graph and add them to the list of in-dhs.
-			auto c_rem_art = c_pruned;
-			for (const auto& ap : aps_with_neighbors)
-			{	
-				auto prim = c.structure[ap];
-
-				dh_in.push_back(prim);
-				
-				boost::remove_vertex(c_rem_art.vertexLookup[prim], c_rem_art.structure);
-			}
-			lmu::recreateVertexLookup(c_rem_art);
-			
-			// Get connected components. 
-			auto rem_art_components = lmu::getConnectedComponents(c_rem_art);
-
-			for (const auto& rem_art_c : rem_art_components)
-			{
-				if (lmu::numVertices(c) == 1)
-				{
-					std::cout << "This should not happen. Right?" << std::endl;
-					continue;
-				}
-
-				// Get optimal node with ga. 
-				ofstream res_ga_1, res_ga_2;
-				res_ga_1.open(out_path + "result_ga_" + std::to_string(ga_counter) + "_1.txt");
-				res_ga_2.open(out_path + "result_ga_" + std::to_string(ga_counter) + "_2.txt");
-				ga_counter++;
-
-				auto sub_node = lmu::generate_csg_node(lmu::getImplicitFunctions(rem_art_c), model_sdf, ng_params, res_ga_1, res_ga_2, node).node;
-				if (sub_node.operationType() != lmu::CSGNodeOperationType::Noop)
-				{
-					sub_nodes.push_back(sub_node);
-				}
-
-				res_ga_1.close(); 
-				res_ga_2.close(); 
-			}
-			
-			lmu::writeConnectionGraph(out_path + "pruned_initial_component_" + std::to_string(i) + ".gv", c_pruned);
-			lmu::writeConnectionGraph(out_path + "rem_art_components_" + std::to_string(i) + ".gv", c_rem_art);
-			i++;
 		}
 
-		res_f << "NumPrunedPrimitives= " << num_pruned_primitives << std::endl;
+		timings.decomposition += t.tick();
 
-		// Assemble result node.
-		auto result_node = lmu::opUnion(); 
-		for (const auto& sn : sub_nodes)
-			result_node.addChild(sn);
-		for (const auto& dh : dh_in)
-			result_node.addChild(lmu::geometry(dh));
-		for (const auto& dh : dh_out)
-			result_node = lmu::opDiff({ result_node, lmu::geometry(dh) });
+		auto cits = lmu::generate_cits(*model_sdf, lmu::allDistinctFunctions(node), model_sdf->voxel_size, true);
+		lmu::SelectionRanker ranker(std::get<0>(cits), std::get<1>(cits));
 
-		if (result_node.childsCRef().size() == 1)
-			result_node = result_node.childsCRef()[0];
-		*/
+		auto final_rank = ranker.rank(lmu::PrimitiveSelection(result_node));
+
+		res_f << "FinalRank= " << final_rank << std::endl;
+		res_f << "InputNodes= " << lmu::numNodes(node) << std::endl;
+		res_f << "OutputNodes= " << lmu::numNodes(result_node) << std::endl;
+
 
 		lmu::writeNode(result_node, out_path + "result_node.gv");
 		lmu::toJSONFile(result_node, out_path + "result_node.json");
@@ -381,6 +325,8 @@ int main(int argc, char *argv[])
 
 		res_f << "Timings= " << timings.to_string() << std::endl;
 		res_f << "Stats= " << stats.to_string() << std::endl;
+		res_f << "NumPrims= " << lmu::allDistinctFunctions(node).size() << std::endl;
+
 
 		std::cout << "Close file" << std::endl;
 		res_f.close();

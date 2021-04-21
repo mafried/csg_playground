@@ -392,6 +392,9 @@ namespace lmu
 	private: 
 		double cap_plane_adjustment_max_dist;
 	};
+
+	void iterate_over_prim_volume(const lmu::Primitive& prim, double cell_size, std::function<void(const Eigen::Vector3d&)> f);
+
 }
 
 #endif 

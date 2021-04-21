@@ -1436,6 +1436,8 @@ void lmu::convertToTreeWithMaxNChilds(CSGNode& node, int n)
 
 lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplingParams& params)
 {
+	std::default_random_engine gen;
+	std::normal_distribution<double> dist(0, params.errorSigma);
 
 	Eigen::Vector3d min, max;
 
@@ -1478,8 +1480,12 @@ lmu::PointCloud lmu::computePointCloud(const CSGNode& node, const CSGNodeSamplin
 				
 				if (abs(samplingValue(0)) < params.maxDistance)
 				{
+					double dx = dist(gen);
+					double dy = dist(gen);
+					double dz = dist(gen);
+
 					Eigen::Matrix<double, 1, 6> sp; 
-					sp.row(0) << samplingPoint(0), samplingPoint(1), samplingPoint(2), samplingValue(1), samplingValue(2), samplingValue(3);
+					sp.row(0) << samplingPoint(0) + dx, samplingPoint(1) + dy, samplingPoint(2) + dz, samplingValue(1), samplingValue(2), samplingValue(3);
 
 					validSamplingPoints.push_back(sp);
 				}

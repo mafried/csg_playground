@@ -8,7 +8,6 @@
 
 using namespace lmu;
 
-struct SelectionRanker; 
 
 lmu::CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const SelectionRanker& ranker);
 
@@ -615,199 +614,190 @@ private:
 
 //////////////////////////// RANKER ////////////////////////////
 
-struct SelectionRanker
+
+lmu::SelectionRanker::SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf) :
+	model_sdf(model_sdf)
 {
-	SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf) :
-		model_sdf(model_sdf)		
+}
+
+lmu::SelectionRanker::SelectionRanker(const std::vector<Eigen::Vector3d>& points, const std::vector<double>& distances) :
+	points(points),
+	distances(distances),
+	model_sdf(nullptr)
+{
+
+}
+
+lmu::SelectionRank lmu::SelectionRanker::rank(const PrimitiveSelection& s, bool debug) const
+{
+	auto node = s.is_selection() ? s.to_node() : s.node;
+
+	double mean_abs_d = 0;
+
+	for (int i = 0; i < points.size(); ++i)
 	{
+		auto d = node.signedDistance(points[i]);
+
+		mean_abs_d += std::abs(distances[i] - d);
 	}
 
-	SelectionRanker(const std::vector<Eigen::Vector3d>& points, const std::vector<double>& distances) :
-		points(points),
-		distances(distances),
-		model_sdf(nullptr)
-	{
+	mean_abs_d /= (double)points.size();
 
+	auto node_size = (double)numNodes(node);
+
+	auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
+
+	sr.capture_unnormalized();
+
+	return sr;
+}
+
+
+lmu::SelectionRank lmu::SelectionRanker::rank2(const PrimitiveSelection& s, bool debug) const
+{
+	auto node = s.is_selection() ? s.to_node() : s.node;
+
+	if (lmu::numNodes(node) == 0)
+	{
+		return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
 	}
 
-	SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const
+	auto min = model_sdf->origin;
+	Eigen::Vector3d grid_size = model_sdf->grid_size.cast<double>();
+	auto max = model_sdf->origin + grid_size * model_sdf->voxel_size;
+
+	int size = 32;
+
+	Eigen::Vector3d cell_size = (max - min) / (double)size;
+
+
+	//std::cout << "min " << min.transpose() << " max: " << max.transpose() << " cell_size: " << cell_size.transpose() << std::endl;
+
+	double mean_abs_d = 0.0;
+	double max_abs_d = 0.0;
+	double counter = 0.0;
+	for (int x = 0; x < size; ++x)
 	{
-		auto node = s.is_selection() ? s.to_node() : s.node;
-
-		double mean_abs_d = 0;
-
-		for (int i = 0; i < points.size(); ++i)
+		for (int y = 0; y < size; ++y)
 		{
-			auto d = node.signedDistance(points[i]);
-
-			mean_abs_d += std::abs(distances[i] - d);
-		}
-
-		mean_abs_d /= (double)points.size();
-
-		auto node_size = (double)numNodes(node);
-
-		auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
-
-		sr.capture_unnormalized();
-		
-		return sr;
-	}
-
-	
-	SelectionRank rank2(const PrimitiveSelection& s, bool debug = false) const
-	{
-		auto node = s.is_selection() ? s.to_node() : s.node;
-
-		if (lmu::numNodes(node) == 0)
-		{
-			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
-		}
-
-		auto min = model_sdf->origin; 
-		Eigen::Vector3d grid_size = model_sdf->grid_size.cast<double>();
-		auto max = model_sdf->origin + grid_size * model_sdf->voxel_size;
-
-		int size = 32; 
-
-		Eigen::Vector3d cell_size = (max - min) / (double)size;
-
-		
-		//std::cout << "min " << min.transpose() << " max: " << max.transpose() << " cell_size: " << cell_size.transpose() << std::endl;
-
-		double mean_abs_d = 0.0;
-		double max_abs_d = 0.0;
-		double counter = 0.0;
-		for (int x = 0; x < size; ++x)
-		{
-			for (int y = 0; y < size; ++y)
+			for (int z = 0; z < size; ++z)
 			{
-				for (int z = 0; z < size; ++z)
+				Eigen::Vector3d p(min.x() + (double)x * cell_size.x(), min.y() + (double)y * cell_size.y(), min.z() + (double)z * cell_size.z());
+
+				auto sd_gr = node.signedDistanceAndGradient(p);
+
+				auto d = (double)model_sdf->sdf_value(p).d;
+
+				if (sd_gr.x() == std::numeric_limits<double>::max())
 				{
-					Eigen::Vector3d p(min.x() + (double)x * cell_size.x(), min.y() + (double)y * cell_size.y(), min.z() + (double)z * cell_size.z());
-
-					auto sd_gr = node.signedDistanceAndGradient(p);
-
-					auto d = (double)model_sdf->sdf_value(p).d;
-
-					if (sd_gr.x() == std::numeric_limits<double>::max())
-					{
-						continue;
-					}
-					//std::cout << d << " " << sd_gr.x() << "|";
-
-					double abs_dist = std::abs(sd_gr.x() - d);
-
-					max_abs_d = std::max(max_abs_d, mean_abs_d);
-
-					mean_abs_d += abs_dist;
-					counter += 1.0;
+					continue;
 				}
+				//std::cout << d << " " << sd_gr.x() << "|";
+
+				double abs_dist = std::abs(sd_gr.x() - d);
+
+				max_abs_d = std::max(max_abs_d, mean_abs_d);
+
+				mean_abs_d += abs_dist;
+				counter += 1.0;
 			}
 		}
-
-		mean_abs_d /= counter;
-
-		if(!std::isfinite(mean_abs_d))
-			return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
-		
-		//std::cout << "MEAN: " << mean_abs_d << " " << counter << std::endl;
-
-		auto node_size = (double)numNodes(node);
-
-		auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
-
-		sr.capture_unnormalized();
-
-		return sr;
 	}
-		
-	SelectionRank rank3(const PrimitiveSelection& s, bool debug = false) const
+
+	mean_abs_d /= counter;
+
+	if (!std::isfinite(mean_abs_d))
+		return SelectionRank(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 0.0);
+
+	//std::cout << "MEAN: " << mean_abs_d << " " << counter << std::endl;
+
+	auto node_size = (double)numNodes(node);
+
+	auto sr = SelectionRank(mean_abs_d, node_size, 0.0);
+
+	sr.capture_unnormalized();
+
+	return sr;
+}
+
+lmu::SelectionRank lmu::SelectionRanker::rank3(const PrimitiveSelection& s, bool debug) const
+{
+
+	auto node = s.is_selection() ? s.to_node() : s.node;
+	auto d = 0.0;
+
+	auto grid_size = model_sdf->grid_size;
+	auto voxel_size = model_sdf->voxel_size;
+	auto origin = model_sdf->origin;
+
+	std::vector<Eigen::Matrix<double, 1, 6>> points;
+	int step = 1;
+
+
+	for (int x = 0; x < grid_size.x(); x += step)
 	{
-
-		auto node = s.is_selection() ? s.to_node() : s.node;
-		auto d = 0.0;
-
-		auto grid_size = model_sdf->grid_size;
-		auto voxel_size = model_sdf->voxel_size;
-		auto origin = model_sdf->origin;
-
-		std::vector<Eigen::Matrix<double, 1, 6>> points;
-		int step = 1;
-
-
-		for (int x = 0; x < grid_size.x(); x+= step)
+		for (int y = 0; y < grid_size.y(); y += step)
 		{
-			for (int y = 0; y < grid_size.y(); y+= step)
+			for (int z = 0; z < grid_size.z(); z += step)
 			{
-				for (int z = 0; z < grid_size.z(); z+= step)
+				Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin; //+ Eigen::Vector3d(voxel_size * 0.5, voxel_size * 0.5, voxel_size * 0.5);
+
+				int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
+
+				auto v = model_sdf->data[idx];
+
+				auto sd_gr = node.signedDistanceAndGradient(p);
+				Eigen::Vector3f gr = sd_gr.bottomRows(3).cast<float>();
+
+				//Eigen::Matrix<double, 1, 6> point;
+
+				if (v.d > voxel_size && sd_gr.x() > voxel_size)
+					continue;
+
+				Eigen::Vector3d p1 = p - (double)v.d * v.n.normalized().cast<double>();
+				Eigen::Vector3d p2 = p - sd_gr.x() * sd_gr.bottomRows(3).normalized();
+
+				double abs_dist = (p2 - p1).norm();
+
+				//d += std::abs(v.v - sd);
+				if (abs_dist < voxel_size && gr.dot(v.n) >= 0.0)
 				{
-					Eigen::Vector3d p = Eigen::Vector3d(x, y, z) * voxel_size + origin; //+ Eigen::Vector3d(voxel_size * 0.5, voxel_size * 0.5, voxel_size * 0.5);
+					d += 1.0;
 
-					int idx = x + grid_size.x() * y + grid_size.x() * grid_size.y() * z;
-					
-					auto v = model_sdf->data[idx];
-
-					auto sd_gr = node.signedDistanceAndGradient(p);
-					Eigen::Vector3f gr = sd_gr.bottomRows(3).cast<float>();
-
-					//Eigen::Matrix<double, 1, 6> point;
-
-					if (v.d > voxel_size && sd_gr.x() > voxel_size)
-						continue;
-					
-					Eigen::Vector3d p1 = p - (double)v.d * v.n.normalized().cast<double>();
-					Eigen::Vector3d p2 = p - sd_gr.x() * sd_gr.bottomRows(3).normalized();
-					
-					double abs_dist = (p2 - p1).norm();
-
-					//d += std::abs(v.v - sd);
-					if (abs_dist < voxel_size && gr.dot(v.n) >= 0.0)
-					{
-						d += 1.0;
-
-						//point << p.transpose(), 0.0, 1.0, 0.0;
-
-					}
-					else
-					{
-						//point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
-					}
-					
-					//if(debug)
-					//	points.push_back(point);
+					//point << p.transpose(), 0.0, 1.0, 0.0;
 
 				}
+				else
+				{
+					//point << p.transpose(),1.0, 0.0, gr.dot(v.n) >= 0.0 ? 0.0 : 1.0;
+				}
+
+				//if(debug)
+				//	points.push_back(point);
+
 			}
 		}
-
-		//std::cout << s << " D: " << d << std::endl;
-
-		auto size = (double) numNodes(node);
-		
-		auto sr = SelectionRank(d, size, 0.0);
-
-		//sr.points = points;
-
-		sr.capture_unnormalized();
-		
-		
-		return sr;
-	}
-	
-
-	std::string info() const
-	{
-		return std::string();
 	}
 
-private:
+	//std::cout << s << " D: " << d << std::endl;
 
-	std::shared_ptr<ModelSDF> model_sdf;	
+	auto size = (double)numNodes(node);
 
-	std::vector<Eigen::Vector3d> points;
-	std::vector<double> distances;
-};
+	auto sr = SelectionRank(d, size, 0.0);
+
+	//sr.points = points;
+
+	sr.capture_unnormalized();
+
+
+	return sr;
+}
+
+
+std::string lmu::SelectionRanker::info() const
+{
+	return std::string();
+}
 
 
 //////////////////////////// SYNC POINT ////////////////////////////
@@ -1094,9 +1084,9 @@ private:
 };
 
 using SelectionTournamentSelector = TournamentSelector<RankedCreature<PrimitiveSelection, SelectionRank>>;
-using SelectionGA = GeneticAlgorithm<PrimitiveSelection, SelectionCreator, SelectionRanker, SelectionRank,
+using SelectionGA = GeneticAlgorithm<PrimitiveSelection, SelectionCreator, lmu::SelectionRanker, SelectionRank,
 	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan>;
-using NodeGA = GeneticAlgorithm<PrimitiveSelection, CombinedCreator, SelectionRanker, SelectionRank,
+using NodeGA = GeneticAlgorithm<PrimitiveSelection, CombinedCreator, lmu::SelectionRanker, SelectionRank,
 	SelectionTournamentSelector, SelectionIterationStopCriterion, SelectionPopMan, SelectionSyncPoint>;
 
 
@@ -1311,7 +1301,7 @@ lmu::NodeGenerationResult lmu::generate_csg_node(const std::vector<lmu::Implicit
 
 	NodeGenerationResult gen_res(opNo());
 
-	auto cits = generate_cits(*model_sdf, primitives, model_sdf->voxel_size, gt_node);
+	auto cits = generate_cits(*model_sdf, primitives, model_sdf->voxel_size, false);
 
 	lmu::PointCloud pc(std::get<0>(cits).size(), 6);
 	for (int i = 0; i < pc.rows(); ++i)
@@ -1508,7 +1498,7 @@ lmu::NodeGenerationResult::NodeGenerationResult(const CSGNode & node, const std:
 {
 }
 
-CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const SelectionRanker& ranker)
+CSGNode computeForTwoFunctions(const std::vector<ImplicitFunctionPtr>& functions, const lmu::SelectionRanker& ranker)
 {
 	std::vector<CSGNode> candidates;
 

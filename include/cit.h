@@ -33,7 +33,7 @@ namespace lmu
 		const std::vector<ImplicitFunctionPtr>& primitives = {});
 
 	struct ModelSDF;
-	std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> generate_cits(const ModelSDF& m, const std::vector<ImplicitFunctionPtr>& primitives, double sampling_grid_size, const lmu::CSGNode& gt_node);
+	std::tuple<std::vector<Eigen::Vector3d>, std::vector<double>> generate_cits(const ModelSDF& m, const std::vector<ImplicitFunctionPtr>& primitives, double sampling_grid_size, bool select_all);
 
 	DNF extract_prime_implicants(const CITS& cits, const lmu::PointCloud& outside_points, double sampling_grid_size);
 

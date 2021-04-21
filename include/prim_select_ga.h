@@ -160,6 +160,28 @@ namespace lmu
 		std::ostream& s1, std::ostream& s2, const lmu::CSGNode& gt_node);
 
 	Mesh refine(const Mesh& m, const PrimitiveSet& ps);
+
+	struct SelectionRanker
+	{
+		SelectionRanker(const std::shared_ptr<ModelSDF>& model_sdf);
+
+		SelectionRanker(const std::vector<Eigen::Vector3d>& points, const std::vector<double>& distances);
+
+		SelectionRank rank(const PrimitiveSelection& s, bool debug = false) const;
+
+		SelectionRank rank2(const PrimitiveSelection& s, bool debug = false) const;
+
+		SelectionRank rank3(const PrimitiveSelection& s, bool debug = false) const;
+
+		std::string info() const;
+
+	private:
+
+		std::shared_ptr<ModelSDF> model_sdf;
+
+		std::vector<Eigen::Vector3d> points;
+		std::vector<double> distances;
+	};
 }
 
 #endif
