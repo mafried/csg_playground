@@ -161,6 +161,24 @@ lmu::json lmu::toJSON(const lmu::CSGNode& node)
 			json["params"]["radius"].push_back(dynamic_cast<IFBox*>(node.function().get())->size().y() / 2.0);
 			json["params"]["radius"].push_back(dynamic_cast<IFBox*>(node.function().get())->size().z() / 2.0);
 			break;
+		case ImplicitFunctionType::Polytope:
+		{
+			json["geo"] = "polytope";
+			json["params"]["normals"] = json::array();
+			json["params"]["points"] = json::array();
+
+			auto poly = dynamic_cast<IFPolytope*>(node.function().get());
+
+			for (int i = 0; i < poly->n().size(); ++i)
+			{
+				auto n = poly->n()[i];
+				auto p = poly->p()[i];
+
+				json["params"]["normals"].push_back(json::array({ n.x(), n.y(), n.z() }));
+				json["params"]["points"].push_back(json::array({ p.x(), p.y(), p.z() }));
+			}
+		}
+
 		}
 		
 		//std::cout << "NAME: " << node.function()->name() << std::endl;

@@ -234,6 +234,23 @@ lmu::PointCloud lmu::to_canonical_frame(const PointCloud& pc, const Eigen::Vecto
 	return centered_pc;
 }
 
+lmu::PointCloud lmu::to_frame(const PointCloud& pc, const Eigen::Vector3d& min, const Eigen::Vector3d& max)
+{
+
+	Eigen::Vector3d pc_min = pc.leftCols(3).colwise().minCoeff();
+	Eigen::Vector3d pc_max = pc.leftCols(3).colwise().maxCoeff();
+
+	Eigen::Vector3d s((max.x() - min.x()) / (pc_max.x() - pc_min.x()), (max.y() - min.y()) / (pc_max.y() - pc_min.y()), (max.z() - min.z()) / (pc_max.z() - pc_min.z()));
+	std::cout << "S: " << s.transpose() << std::endl;
+
+	lmu::PointCloud centered_pc = pc;
+
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).array().rowwise() * Eigen::Array<double, 1, 3>(s.x(), s.y(), s.z());
+	centered_pc.leftCols(3) = centered_pc.leftCols(3).rowwise() - (Eigen::Vector3d(pc_min.x() * s.x(), pc_min.y() * s.y(), pc_min.z() * s.z()) - min).transpose();
+
+	return centered_pc;
+}
+
 
 lmu::PointCloud lmu::readPointCloud(std::istream& s, double scaleFactor)
 {

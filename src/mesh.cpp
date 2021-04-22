@@ -372,6 +372,93 @@ void lmu::initializePolytopeCreator()
 	dd_set_global_constants();  /* First, this must be called to use cddlib. */
 }
 
+lmu::ImplicitFunctionPtr lmu::createPolytope(const Mesh& mesh, const std::string& name)
+{
+	dd_PolyhedraPtr poly;
+	dd_MatrixPtr A, G;
+	dd_ErrorType err;
+
+	// Get convex hull points.
+	std::vector<Point_3> ch_points;
+	for (int i = 0; i < mesh.vertices.rows(); ++i)
+	{
+		Eigen::Vector3d p(mesh.vertices.row(i).x(), mesh.vertices.row(i).y(), mesh.vertices.row(i).z());
+		ch_points.push_back(Point_3(p.x(), p.y(), p.z()));
+		std::cout << " P: " << p.transpose() << std::endl;
+
+	}
+	
+	/*
+	CGAL::Object obj;
+	CGAL::convex_hull_3(ch_points.begin(), ch_points.end(), obj);
+	const Polyhedron_3* ph = CGAL::object_cast<Polyhedron_3>(&obj);
+	if (!ph)
+	{
+		std::cout << "Error: Polyhedron object is null." << std::endl;
+		return nullptr;
+	}
+	Eigen::MatrixXd verts(ph->size_of_vertices(), 3);
+	auto np = CGAL::parameters::all_default();
+	auto vpm = choose_param(get_param(np, CGAL::internal_np::vertex_point),
+		CGAL::get_const_property_map(CGAL::vertex_point, *ph));
+	size_t vertexIdx = 0;
+	ch_points.clear();
+	for (auto vi : vertices(*ph)) {
+		double x = CGAL::to_double(get(vpm, vi).x());
+		double y = CGAL::to_double(get(vpm, vi).y());
+		double z = CGAL::to_double(get(vpm, vi).z());
+		ch_points.push_back(Point_3(x, y, z
+		std::cout << x << " " << y << " " << z << std::endl;
+	}
+	std::cout << "=====" << std::endl;
+	*/
+
+	A = dd_CreateMatrix(mesh.vertices.rows(), 4);
+	A->representation = dd_Generator;
+	for (int i = 0; i < ch_points.size(); ++i)
+	{
+		auto p = ch_points[i];
+		dd_set_d(A->matrix[i][0], 1);  dd_set_d(A->matrix[i][1], p.x());  dd_set_d(A->matrix[i][2], p.y());  dd_set_d(A->matrix[i][3], p.z());
+	}
+
+	poly = dd_DDMatrix2Poly(A, &err);  
+	if (err != dd_NoError)
+	{
+		std::cerr << "ERROR: " << err << std::endl;
+		return nullptr; 
+	}
+
+	G = dd_CopyInequalities(poly);
+	if (G->rowsize == 0)
+	{
+		std::cerr << "ERROR: Row size is 0" << std::endl;
+		return nullptr;
+	}
+
+	std::vector<Eigen::Vector3d> points; 
+	std::vector<Eigen::Vector3d> normals;
+
+	std::cout << "Col: " << G->colsize << " Row: " << G->rowsize << std::endl;
+
+	for (int i = 0; i < G->rowsize; i++)
+	{
+		
+		Eigen::Vector3d n(-dd_get_d(G->matrix[i][1]), -dd_get_d(G->matrix[i][2]), -dd_get_d(G->matrix[i][3]));
+		double d = dd_get_d(G->matrix[i][0]) / n.norm();
+
+		Eigen::Vector3d p = n.normalized() * d;
+		normals.push_back(n.normalized());
+		points.push_back(p);
+
+		std::cout << "D: " << d << " P: " << p.transpose() << " N: " << n.transpose() << std::endl;
+	}
+
+	dd_FreeMatrix(A);
+	dd_FreeMatrix(G);
+		
+	return std::make_shared<IFPolytope>(Eigen::Affine3d::Identity(), points, normals, name);
+}
+
 Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eigen::Vector3d>& p, const std::vector<Eigen::Vector3d>& n)
 {
 	dd_PolyhedraPtr poly;
@@ -451,6 +538,7 @@ Mesh lmu::createPolytope(const Eigen::Affine3d& transform, const std::vector<Eig
 		double y = CGAL::to_double(get(vpm, vi).y());
 		double z = CGAL::to_double(get(vpm, vi).z());
 		verts.row(vertexIdx++) << x, y, z;
+		std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
 	}
 
 	Eigen::MatrixXi indices(ph->size_of_facets(), 3);

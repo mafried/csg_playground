@@ -165,6 +165,9 @@ int main(int argc, char *argv[])
 	lmu::ParameterSet s(config_file);
 	
 	auto input_node_file = s.getStr("Data", "InputNodeFile", "input.json");
+	auto input_mesh_folder = s.getStr("Data", "InputMeshFolder", "");
+	auto num_input_meshes = s.getInt("Data", "NumInputMeshes", 0);
+
 	auto input_pc_file = s.getStr("Data", "InputPointCloudFile", "");
 	auto sample_cell_size = s.getDouble("Data", "SampleCellSize", 0.1);
 	auto do_decomposition = s.getBool("NodeGeneration", "UseDecomposition", true);
@@ -201,32 +204,65 @@ int main(int argc, char *argv[])
 	{
 		// Load input node for primitive parameters. 
 
-		std::cout << "load node from " << input_node_file << std::endl;
-		auto node = lmu::fromJSONFile(input_node_file);
+		auto node = lmu::opNo();
+		
+		if (num_input_meshes == 0)
+		{
+			std::cout << "load node from " << input_node_file << std::endl;
+			node = lmu::fromJSONFile(input_node_file);
+		}
+		else
+		{
+			lmu::initializePolytopeCreator();
+
+			node = lmu::opUnion();
+			for (int i = 0; i < num_input_meshes; ++i)
+			{
+				auto mesh = lmu::fromOBJFile(input_mesh_folder + "res_mesh_" + std::to_string(i)+".obj");
+				auto polytope = lmu::createPolytope(mesh, "Polytope_" + std::to_string(i));
+				if (polytope)
+				{
+					node.addChild(lmu::geometry(polytope));
+				}
+				else
+				{
+					std::cout << "ERROR: Could not create polytope" << std::endl;
+				}
+			}
+		}
+		node = lmu::to_binary_tree(node);
+
+	
+
 		lmu::writeNode(node, out_path + "input_node.gv");
+
+		auto aabb = lmu::aabb_from_node(node);
 
 		res_f << "GraphNodes= " << lmu::numNodes(node) << std::endl;
 
-		auto aabb = lmu::aabb_from_node(node);
 		Eigen::Vector3d min = aabb.c - aabb.s;
 		Eigen::Vector3d max = aabb.c + aabb.s;
 		double cell_size = (max.maxCoeff() - min.minCoeff()) / (double)num_cells;
 		std::cout << "node aabb: (" << min.transpose() << ")(" << max.transpose() << ")" << std::endl;
 		std::cout << "cell size: " << cell_size << std::endl;
+		
+		lmu::Mesh m = lmu::computeMesh(node, Eigen::Vector3i(50,50,50), min, max);
+		igl::writeOBJ(out_path + "node.obj", m.vertices, m.indices);
 
 		// Load point cloud. 
-		
+
 		auto pc = lmu::PointCloud();
 		if (!input_pc_file.empty())
 		{
 			std::cout << "load pc from " << input_pc_file << std::endl;
 			pc = lmu::readPointCloudXYZ(input_pc_file);
+			pc = lmu::to_frame(pc, min, max);
 		}
 		else
 		{
 			std::cout << "pc file is not available. Try to sample node." << std::endl;
 
-			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 0.3, 0.0, sample_cell_size * 0.5, sample_cell_size,  min, max);
+			lmu::CSGNodeSamplingParams sampling_params(sample_cell_size * 0.3, 0.0, sample_cell_size * 0.5, sample_cell_size, min, max);
 			pc = computePointCloud(node, sampling_params);
 		}
 		res_f << "Points= " << pc.rows() << std::endl;
@@ -273,15 +309,15 @@ int main(int argc, char *argv[])
 
 
 
-		t.tick(); 
+		t.tick();
 		auto initial_components = lmu::getConnectedComponents(graph);
 		timings.connected_components += t.tick();
-		
+
 		stats.num_initial_components = initial_components.size();
 
 		t.tick();
 		auto result_node = lmu::opNo();
-		
+
 		if (do_decomposition)
 		{
 			result_node = decompose(initial_components, model_sdf, ng_params, node, out_path, timings, stats);
@@ -300,10 +336,12 @@ int main(int argc, char *argv[])
 			result_node = res.node;
 			timings.ga += t.tick();
 
-			res_ga_1.close(); 
+			res_ga_1.close();
 			res_ga_2.close();
 
 		}
+
+		result_node = lmu::to_binary_tree(result_node);
 
 		timings.decomposition += t.tick();
 
@@ -316,11 +354,28 @@ int main(int argc, char *argv[])
 		res_f << "InputNodes= " << lmu::numNodes(node) << std::endl;
 		res_f << "OutputNodes= " << lmu::numNodes(result_node) << std::endl;
 
+		/*
+		std::vector<std::string> experiments = { "0_ga_dec", "1_ga_dec", "2_ga_dec", "0_ga", "1_ga", "2_ga", "0_gt", "1_gt", "2_gt" };
+
+		std::string model = "model3";
+		auto r_gt = ranker.rank(lmu::PrimitiveSelection(node));
+
+		for (int i = 0; i < experiments.size(); ++i)
+		{
+			std::ofstream outfile("C:/Projekte/dissertation_csg_synth/output/"+ experiments[i] + "/" + model + "/result.txt", std::ios_base::app);
+			auto n = lmu::fromJSONFile("C:/Projekte/dissertation_csg_synth/output/" + experiments[i] + "/"+model+"/result_node.json");
+			auto r = ranker.rank(lmu::PrimitiveSelection(n));
+		
+			outfile << "CommonFinalRank= " << r << std::endl;
+			outfile << "GroundTruthRank= " << r_gt << std::endl;
+		}
+		*/
+
 
 		lmu::writeNode(result_node, out_path + "result_node.gv");
 		lmu::toJSONFile(result_node, out_path + "result_node.json");
 		
-		lmu::Mesh result_mesh = lmu::computeMesh(result_node, Eigen::Vector3i((max.x() - min.x()) / sample_cell_size, (max.y() - min.y()) / sample_cell_size, (max.z() - min.z()) / sample_cell_size), min, max);
+		lmu::Mesh result_mesh = lmu::computeMesh(result_node, Eigen::Vector3i(100,100,100), min, max);
 		igl::writeOBJ(out_path + "result_node.obj", result_mesh.vertices, result_mesh.indices);
 
 		res_f << "Timings= " << timings.to_string() << std::endl;

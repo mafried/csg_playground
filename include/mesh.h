@@ -694,6 +694,9 @@ namespace lmu
 	std::vector<std::shared_ptr<ImplicitFunction>> fromFilePRIM(const std::string& file);
 
 	using ImplicitFunctionPtr = std::shared_ptr<ImplicitFunction>;
+
+	ImplicitFunctionPtr createPolytope(const Mesh& mesh, const std::string& name);
+
 }
 
 #endif
