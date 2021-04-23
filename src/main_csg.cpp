@@ -167,6 +167,7 @@ int main(int argc, char *argv[])
 	auto input_node_file = s.getStr("Data", "InputNodeFile", "input.json");
 	auto input_mesh_folder = s.getStr("Data", "InputMeshFolder", "");
 	auto num_input_meshes = s.getInt("Data", "NumInputMeshes", 0);
+	auto model_to_change = s.getStr("Data", "ModelToChange", "");
 
 	auto input_pc_file = s.getStr("Data", "InputPointCloudFile", "");
 	auto sample_cell_size = s.getDouble("Data", "SampleCellSize", 0.1);
@@ -352,24 +353,32 @@ int main(int argc, char *argv[])
 
 		res_f << "FinalRank= " << final_rank << std::endl;
 		res_f << "InputNodes= " << lmu::numNodes(node) << std::endl;
+		res_f << "InputNodesWithoutLeaves= " << lmu::numNodes(node, true) << std::endl;
+
 		res_f << "OutputNodes= " << lmu::numNodes(result_node) << std::endl;
+		res_f << "OutputNodesWithoutLeaves= " << lmu::numNodes(result_node, true) << std::endl;
 
-		/*
-		std::vector<std::string> experiments = { "0_ga_dec", "1_ga_dec", "2_ga_dec", "0_ga", "1_ga", "2_ga", "0_gt", "1_gt", "2_gt" };
-
-		std::string model = "model3";
 		auto r_gt = ranker.rank(lmu::PrimitiveSelection(node));
+		res_f << "GroundTruthRank= " << r_gt << std::endl;
 
-		for (int i = 0; i < experiments.size(); ++i)
+
+		if (!model_to_change.empty())
 		{
-			std::ofstream outfile("C:/Projekte/dissertation_csg_synth/output/"+ experiments[i] + "/" + model + "/result.txt", std::ios_base::app);
-			auto n = lmu::fromJSONFile("C:/Projekte/dissertation_csg_synth/output/" + experiments[i] + "/"+model+"/result_node.json");
-			auto r = ranker.rank(lmu::PrimitiveSelection(n));
-		
-			outfile << "CommonFinalRank= " << r << std::endl;
-			outfile << "GroundTruthRank= " << r_gt << std::endl;
+			std::vector<std::string> experiments = { "0_ga_size_dec", "1_ga_size_dec", "2_ga_size_dec", "0_ga_size", "1_ga_size", "2_ga_size" };
+
+			auto r_gt = ranker.rank(lmu::PrimitiveSelection(node));
+
+			for (int i = 0; i < experiments.size(); ++i)
+			{
+				std::ofstream outfile("C:/Projekte/dissertation_csg_synth/output/" + experiments[i] + "/" + model_to_change + "/result.txt", std::ios_base::app);
+				auto n = lmu::fromJSONFile("C:/Projekte/dissertation_csg_synth/output/" + experiments[i] + "/" + model_to_change + "/result_node.json");
+				auto r = ranker.rank(lmu::PrimitiveSelection(n));
+
+				outfile << "CommonFinalRank= " << r << std::endl;
+				outfile << "GroundTruthRank= " << r_gt << std::endl;
+			}
 		}
-		*/
+		
 
 
 		lmu::writeNode(result_node, out_path + "result_node.gv");
