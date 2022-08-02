@@ -635,7 +635,7 @@ int main(int argc, char *argv[])
 
 			if (source == "mesh")
 			{
-				auto mesh = lmu::to_canonical_frame(lmu::fromOBJFile(path + "mesh.obj"));
+				auto mesh = lmu::fromOBJFile(path + "mesh.obj");//lmu::to_canonical_frame(lmu::fromOBJFile(path + "mesh.obj"));
 				pc = lmu::pointCloudFromMesh(mesh, sampling_rate, sampling_rate, 0.0);
 				lmu::writePointCloud("out_pc.txt", pc);
 			}
@@ -644,7 +644,8 @@ int main(int argc, char *argv[])
 				pc = lmu::readPointCloudXYZ(path + "pc.xyz");
 			}
 
-			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Plane, lmu::ManifoldType::Sphere,lmu::ManifoldType::Cylinder });
+			lmu::Cluster cl(pc, 0, { lmu::ManifoldType::Plane });// , lmu::ManifoldType::Sphere, lmu::ManifoldType::Cylinder
+		
 			clusters = { cl };
 		}
 				
@@ -657,12 +658,12 @@ int main(int argc, char *argv[])
 		Eigen::Vector3d mc_min = merged_cluster_pc.leftCols(3).colwise().minCoeff();
 		Eigen::Vector3d mc_max = merged_cluster_pc.leftCols(3).colwise().maxCoeff();
 
-		merged_cluster_pc = lmu::to_canonical_frame(merged_cluster_pc);
+		//merged_cluster_pc = lmu::to_canonical_frame(merged_cluster_pc);
 				
-		for (auto& c : clusters)
-		{
-			c.pc = lmu::to_canonical_frame(c.pc, mc_min, mc_max);
-		}
+		//for (auto& c : clusters)
+		//{
+		//	c.pc = lmu::to_canonical_frame(c.pc, mc_min, mc_max);
+		//}
 		
 		// Check if everything went right with the pc transformation.
 		cluster_pcs.clear();
